@@ -16,26 +16,28 @@ class OptionParser (optparse.OptionParser):
         if getattr(self.values, option.dest) is None:
             self.error("%s option not supplied" % option)
 
-hapmap3 ="/data/data0/hapmap3/hapmap3map.csv"
-hapmap2 ="/data/data0/hapmap2/phased/genotypes_CEU_r21_nr_fwd_legend"
-hapmap2 = "/home/pingu/tmp/pipeline/hapmap2/genotypes_CEU_r21_nr_fwd_legend"
-hapmap3 = "/home/pingu/tmp/pipeline/hapmap3/hapmap3map.csv"
-hapmap2 = "/home/pingu/tmp/pipeline/hapmap2/all_markers.map"
-hapmap3 = "/home/pingu/tmp/pipeline/hapmap3/all_markers.map"
-
-def runCsv2(input,hapmap,outputdir,jids):
+#hapmap3 ="/data/data0/hapmap3/hapmap3map.csv"
+#hapmap2 ="/data/data0/hapmap2/phased/genotypes_CEU_r21_nr_fwd_legend"
+referencemarkers="all_markers.map"
+        
+def runCsv2(input,hapmap,outputdir,jids,logonly):
     wait=''
     if len(jids)>0:
         wait="--waitForJids '"+','.join(jids)+"'"
     outfile=input.split('/')[-1]
-    if hapmap=="hapmap2":
-        qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+hapmap2+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
-    elif hapmap=="hapmap3":
-        qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=\',\',header=T]:"+hapmap3+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
+    referencepanel=os.getenv("referencepanel_"+hapmap)
+    #print referencepanel
+    if referencepanel!=None:
+        referencepanel=referencepanel+'/'+referencemarkers
+        qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
     else:
         sys.exit("Non-existing hapmap version:"+hapmap+"\n")
-    os.system(qsubcsv2)
-    os.system("ln -s "+os.path.abspath(input+".ped")+" "+outputdir+"/"+outfile+".ped")
+    if  not logonly:
+        os.system(qsubcsv2)
+        os.system("ln -s "+os.path.abspath(input+".ped")+" "+outputdir+"/"+outfile+".ped")
+    else:
+        print qsubcsv2
+        print "ln -s "+os.path.abspath(input+".ped")+" "+outputdir+"/"+outfile+".ped"
     #print qsubcsv2
 
 ##main
@@ -68,9 +70,8 @@ else:
 specs={'type':"plink",'files':[]}
 for infile in specs_in["files"]:
     #if os.access(infile["name"]+".map",os.F_OK):
-        if (options.logonly==False):
-            runCsv2(infile["name"],options.hapmap,outputDir,jids)
-        specs["files"].append({'name' : options.output+"/"+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
+        runCsv2(infile["name"],options.hapmap,outputDir,jids,options.logonly)
+        specs["files"].append({'name' : options.output+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
     #else:
     #    print "Warning: map for chromosome "+infile["chromosome"]+" not found"
 if os.access(jidfile,os.F_OK):

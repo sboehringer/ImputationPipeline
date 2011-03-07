@@ -1,0 +1,5 @@
+
+#
+# run the pipeline on queue all.q
+#
+QSUB_QUEUE=all.q pipeline.pl imputation_qt_snptest.pipe lls_imputation.pipe

@@ -1,0 +1,76 @@
+# pipeline spec
+#	run jobs seperated by '|' sequentially and
+#	jobs separated by ',' concurrently
+#	group jobs by parentheses '(', ..., ')'
+
+#
+#	<p> input definition
+#
+
+G:PipeInput		myPlinkFilePrefix
+G:VariableFile	myCovariatesAndPhenotypes
+# Phenotypes are specified as Type:Name, where type can be
+#	Q for quantitative, B for binary
+G:Phenotypes    iq:Q,slimOfNiet:B
+# Covariables are specified as Type:Name, or simply name assuming a 
+#	quantitative phenotype
+#	Q for quantitative, F for factor
+G:Covariates	cov1,cov2:F
+# names on the right side denote column names in the PedFile
+G:HeaderMap		iid=iid,fid=fid,pid=pid,mid=mid,sex=sex
+
+#
+#	<p> pipeline specification
+#
+
+G:Name			imputation_qt_snptest
+G:imputation_qt_snptest      G:Convert | GWASimpute | G:PipelineTests
+G:Convert		InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3col
+G:PipelineTests ( Snptest | GWASsummarize, GWAStest:qtassoc | GWASsummarize )
+
+#
+#	<p> pipeline options
+#
+
+# queue used on the batch queueing system
+ENV:QSUB_QUEUE	all.q
+# directory prefix
+G:prefix		imputation
+
+#
+#	general pipe options
+#
+# referencePanel: hapmap2|hapmap3
+G:referencePanel	hapmap2b21
+ENV:referencepanel_hapmap2b21	/home/pingu/tmp/pipeline/hapmap2
+ENV:hapmap2path	/home/pingu/tmp/pipeline/hapmap2
+ENV:hapmap3path	/home/pingu/tmp/pipeline/hapmap3
+
+#
+#	<p> include pipe definitions
+#
+
+@include	input.pipe
+@include	conversion.pipe
+@include	impute.pipe
+@include	snptest.pipe
+@include	qtassoc.pipe
+@include	ccassoc.pipe
+@include	summarize.pipe
+
+#
+#	testing parameters
+#
+GWAStest:strata		~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Phenotypes
+
+# qtassoc
+qtassoc:Covariates	~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Covariates
+qtassoc:Options		--type qtassoc --varFile [header=T,sep=T]:G:VariableFile \
+					--pedFile [header=F,sep=S]:InputPlink_OUTPUT_DIR/pedfile --varNameMap G:HeaderMap \
+					--phenotypes 'STRATUM' --covariates 'qtassoc:Covariates' --qsub
+
+#
+#	summary parameters
+#
+
+GWASsummarize:Options	--qsub

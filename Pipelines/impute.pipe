@@ -1,0 +1,44 @@
+#	Pipe name:
+#		GWASimpute
+#	Creation date:
+#		Wed Feb 23 17:23:57 CET 2011
+#	Description:
+#		Use impute2 for imputation relative to a reference panel
+#	Input:
+#		3col transposed genotype files
+#	Output:
+#		3col transposed genotype files
+#	Pipe instances:
+#		No pipe instances
+
+#
+#	Pipe parameters
+#
+
+# reference panel, use global reference panel by default
+GWASimpute:referencePanel	G:referencePanel
+# effective population size
+GWASimpute:NE			11418
+# SNP buffer
+GWASimpute:BUFFER		250
+# copying states
+GWASimpute:K			42
+# number iterations
+GWASimpute:ITERATIONS	30
+# number burnin iterations (discarded iterations)
+GWASimpute:BURNIN		10
+# size of marker blocks in bps to be imputed in a single computation run
+GWASimpute:chunkSize	4e6
+# additional command line options for impute
+GWASimpute:CmdExtraOptions	
+# standard command line options for impute2
+GWASimpute:CmdOptions		-allow_large_regions
+
+#
+#	Pipe definition
+#
+GWASimpute:Options	--qsub --referencePanel GWASimpute:referencePanel --chunkSize GWASimpute:chunkSize \
+					--imputeParameters \
+					'NUMBER_NE=GWASimpute:NE;NUMBER_BUFFER=GWASimpute:BUFFER;NUMBER_K=GWASimpute:K;\
+					NUMBER_ITERATIONS=GWASimpute:ITERATIONS;NUMBER_BURNIN=GWASimpute:BURNIN;\
+					IMPUTE_CMDLINE="GWASimpute:CmdOptions GWASimpute:CmdExtraOptions";'

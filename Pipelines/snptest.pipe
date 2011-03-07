@@ -1,0 +1,44 @@
+#	Pipe name:
+#		Snptest
+#	Creation date:
+#		Thu Feb 24 11:08:02 CET 2011
+#	Description:
+#		Run snptest on 3col transposed pedfiles
+#	Pipe instances:
+#		No pipe instances
+#	Input:
+#		3col transposed pedfiles
+#	Output:
+#		space separated headed table, proprietary to snptest
+
+#
+#	Pipe parameters
+#
+
+# Phenotypes are taken from the pipe-strata which in turn
+#	are derived from the G:Phenotypes parameter
+#	remove the type qualifiers on phenotypes
+Snptest:strata		~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Phenotypes
+
+# Covariates are derived from the G:Covariates parameter, removing type qualifiers
+Snptest:Covariates	~~,~~{(.*?)(?::(?:[A-Z]))?$}~~ ~~G:Covariates
+
+# pass extra options to snptest
+Snptest:ExtraOptions	
+
+#
+#	Pipe definition
+#
+
+Snptest:cmd_isTransform	1
+Snptest:cmd_prepare		\
+	pedfile.pl --createPhenotypeFile OUTPUT_DIR/snptest_variables \
+	--phenotypes 'G:Phenotypes' --covariates 'G:Covariates' \
+	--headerMap G:HeaderMap \
+	--variableFile G:VariableFile \
+	--pedFile [header=F,sep=S]:InputPlink_OUTPUT_DIR/pedfile
+Snptest:cmd	\
+	snptest -data INPUT.gens OUTPUT_DIR/snptest_variables -o OUTPUT -pheno 'STRATUM' \
+	-method expected -frequentist 1 -hwe Snptest:ExtraOptions \
+	-cov_names Snptest:Covariates
+Snptest:outputExtension	snptest

@@ -1,0 +1,22 @@
+#	Pipe name:
+#		GWASconvertBatch
+#	Creation date:
+#		Tue Feb 22 16:28:05 CET 2011
+#	Description:
+#		This file defines default parameters for the GWASconvertBatch pipe
+#	You can use the following pipe instances
+#		GWASconvertBatch:tped to convert from ped to transposed ped
+#		GWASconvertBatch:3col to convert from transposed ped to transposed 3col
+
+#
+#	conversion parameters
+#
+
+#
+InputPlink:cmd		loaddata.py -m G:PipeInput -o OUTPUT_DIR
+# map-replace
+MapReplace:cmd		mapreplace.py --spec INPUTS --hapmap G:referencePanel -o OUTPUT_DIR
+# convert to tped format
+tped:Options		--type ped2tped --qsub
+# convert to 3column format
+3col:Options		--type tped2tped3col --qsub

@@ -29,7 +29,7 @@ def runCsv2(input,hapmap,outputdir,jids,logonly):
     #print referencepanel
     if referencepanel!=None:
         referencepanel=referencepanel+'/'+referencemarkers
-        qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
+        qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos --op 'expr=TTOP$pos = sapply(TTOP$pos, function(d)sprintf(\"%d\", d))'"
     else:
         sys.exit("Non-existing hapmap version:"+hapmap+"\n")
     if  not logonly:
@@ -71,7 +71,7 @@ specs={'type':"plink",'files':[]}
 for infile in specs_in["files"]:
     #if os.access(infile["name"]+".map",os.F_OK):
         runCsv2(infile["name"],options.hapmap,outputDir,jids,options.logonly)
-        specs["files"].append({'name' : options.output+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
+        specs["files"].append({'name' : options.output+'/'+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
     #else:
     #    print "Warning: map for chromosome "+infile["chromosome"]+" not found"
 if os.access(jidfile,os.F_OK):

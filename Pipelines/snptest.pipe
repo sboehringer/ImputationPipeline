@@ -26,19 +26,26 @@ Snptest:Covariates	~~,~~{(.*?)(?::(?:[A-Z]))?$}~~ ~~G:Covariates
 # pass extra options to snptest
 Snptest:ExtraOptions	
 
+# pedfile
+Snptest:PEDFILE	InputPlink_OUTPUT_DIR/pedfile
+Snptest:PEDFILE_prefix	[header=F,sep=S]
+
+# expected InputExtension
+Snptest:INPUT_EXT gens
+
 #
 #	Pipe definition
 #
 
 Snptest:cmd_isTransform	1
 Snptest:cmd_prepare		\
-	pedfile.pl --createPhenotypeFile OUTPUT_DIR/snptest_variables \
+	pedfile.pl --createSnptestPhenotypeFile OUTPUT_DIR/snptest_variables \
 	--phenotypes 'G:Phenotypes' --covariates 'G:Covariates' \
 	--headerMap G:HeaderMap \
 	--variableFile G:VariableFile \
-	--pedFile [header=F,sep=S]:InputPlink_OUTPUT_DIR/pedfile
+	--pedFile Snptest:PEDFILE_prefix:Snptest:PEDFILE
 Snptest:cmd	\
-	snptest -data INPUT.gens OUTPUT_DIR/snptest_variables -o OUTPUT -pheno 'STRATUM' \
+	snptest -data INPUT.Snptest:INPUT_EXT OUTPUT_DIR/snptest_variables -o OUTPUT -pheno 'STRATUM' \
 	-method expected -frequentist 1 -hwe Snptest:ExtraOptions \
 	-cov_names Snptest:Covariates
 Snptest:outputExtension	snptest

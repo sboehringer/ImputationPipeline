@@ -1,0 +1,60 @@
+#	Pipe name:
+#		qtassoc
+#	Creation date:
+#		Thu Feb 24 11:08:02 CET 2011
+#	Description:
+#		Run qtassoc on 3col transposed pedfiles
+#	Pipe instances:
+#		No pipe instances
+#	Input:
+#		3col transposed pedfiles
+#	Output:
+#		space separated headed table, proprietary to qtassoc
+
+#
+#	Pipe parameters
+#
+
+# Phenotypes are taken from the pipe-strata which in turn
+#	are derived from the G:Phenotypes parameter
+#	remove the type qualifiers on phenotypes
+qtassoc:strata		~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Phenotypes
+
+# Covariates are derived from the G:Covariates parameter, removing type qualifiers
+qtassoc:Covariates	~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Covariates
+
+# standard options for qtassoc
+qtassoc:Options	-3
+
+# pass extra options to qtassoc
+qtassoc:ExtraOptions	
+
+# Pedfile
+qtassoc:PEDFILE_prefix	[header=F,sep=S]
+qtassoc:PEDFILE	InputPlink_OUTPUT_DIR/pedfile
+
+# expected InputExtension
+qtassoc:INPUT_EXT gens
+
+# force on head node: only use for debugging
+qtassoc:synchroneous_prepare	0
+
+#
+#	Pipe definition
+#
+
+qtassoc:cmd_isTransform	1
+qtassoc:cmd_prepare		\
+	pedfile.pl --createXXAssocPhenotypeFile OUTPUT_DIR \
+	--phenotypes 'G:Phenotypes' --covariates 'G:Covariates' \
+	--headerMap G:HeaderMap \
+	--variableFile G:VariableFile \
+	--pedFile qtassoc:PEDFILE_prefix:qtassoc:PEDFILE
+qtassoc:cmd	\
+	qt_assoc_trans.py qtassoc:Options qtassoc:ExtraOptions \
+	-n STRATUM --cols OUTPUT_DIR/variables.cols -c 'qtassoc:Covariates' \
+	-p OUTPUT_DIR/variables \
+	-i OUTPUT_DIR/pedfile \
+	-j INPUT.qtassoc:INPUT_EXT \
+	-o OUTPUT
+qtassoc:outputExtension	qtassoc

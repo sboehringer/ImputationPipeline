@@ -1,0 +1,22 @@
+#
+#	General Pipeline defaults
+#Wed Mar 16 15:19:11 CET 2011
+
+# outputdir_NUMBER directories are symbolically linked into Running directories numbering
+#	each run of the pipeline
+G:RunningPrefix	R_
+# How many digits used for numbering
+G:RunningPrefixDigits	2
+
+# prefix for output directories
+G:prefix	pipeline
+# number of digits for output directory numbering
+G:digits	2
+# names on the left side denote column names in the supplied PedFile/Variable file
+#	sex is left alone due to ambiguities
+#G:HeaderMap		iid=IID,fid=FID,pid=PID,mid=MID,sex=sex,iid=Individual,fid=Family,pid=Father,mid=Mother
+G:HeaderMap		IID=iid,FID=fid,PID=pid,MID=mid,sex=sex,Individual=iid,Family=fid,Father=pid,Mother=mid
+G:referencePanel	hapmap2b22
+
+# qsub
+ENV:QSUB_LOG_DIR	diag/qsub_jobOutputs

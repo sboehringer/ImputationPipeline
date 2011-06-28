@@ -1,0 +1,27 @@
+#
+#	Pipeline defaults on host hgx
+#Wed Mar 16 15:19:11 CET 2011
+
+# universal defaults
+@include defaults_all
+
+# queue used on the batch queueing system
+ENV:QSUB_QUEUE	all.q
+
+# reference penal locations
+
+#
+#	<p> hapmap2 build 22
+#
+ENV:referencepanel_hapmap2	/home/pingu/tmp/pipeline/hapmap2
+ENV:hapmap2_genotypes		genotypes_chrNUMBER_CHR_CEU_r21_nr_fwd_phased_all_by_snp_no_mono
+# physical map
+ENV:hapmap2_legend			genotypes_chrNUMBER_CHR_CEU_r21_nr_fwd_legend_all_no_mono
+# genetic map
+ENV:hapmap2_map				genetic_map_CEU_chrNUMBER_CHR.txt
+
+ENV:referencepanel_hapmap2	/home/pingu/tmp/pipeline/hapmap2
+ENV:referencepanel_hapmap3	/home/pingu/tmp/pipeline/hapmap3
+
+# default hapmap
+G:referencePanel	hapmap2

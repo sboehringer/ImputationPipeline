@@ -1,0 +1,39 @@
+#	Pipe name:
+#		n2oneR
+#	Creation date:
+#		Wed Jun  8 15:12:37 2011
+#	Description:
+#		n2one is an abstract pipe wrapping the summary pattern for R scripts
+#	Pipe instances:
+#		to be defined by non-abstract pipe instances
+#	Input:
+#		any
+#	Output:
+#		abstract, to be defined by pipe instances
+
+#
+#	Pipe parameters
+#
+
+# file to contain R code for unifying files
+n2oneR:Rsource	
+
+# meta information to be instilled into the output file
+n2oneR:meta	{}
+
+# options to be passed to the script
+n2oneR:options	
+
+# output extension for the output file
+n2oneR:outputExtension	
+
+#
+#	Pipe definition
+#
+
+n2oneR:cmd	\
+	R.pl -- pipeN2one.R n2oneR:options \
+		--sourceFile 'n2oneR:Rsource' \
+		--outputExtension 'n2oneR:outputExtension' \
+		--meta 'n2oneR:meta' \
+		--o OUTPUT

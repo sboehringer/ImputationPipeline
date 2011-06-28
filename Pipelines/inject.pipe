@@ -1,0 +1,34 @@
+#	Pipe name:
+#		inject
+#	Creation date:
+#		Thu Mar 17 19:00:35 CET 2011
+#	Description:
+#		inject external files into pipeline specification files
+#	Pipe instances:
+#		inject3col
+#	Input:
+#		arbitrary directories
+#	Output:
+#		file specification
+
+#
+#	Pipe parameters
+#
+
+Inject:Input	G:Input
+Inject:Pattern	'.*'
+Inject:Meta		''
+Inject:FileType	'generic'
+
+#
+#	Pipe instances
+#
+
+inject3col:FileType	tped3col
+
+#
+#	Pipe definition
+#
+
+Inject:cmd		pl_inject.pl Inject:Input --pattern Inject:Pattern --meta Inject:Meta \
+	--grep-match --absolute-pathes --fileType Inject:FileType -o OUTPUT_DIR

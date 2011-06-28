@@ -1,0 +1,22 @@
+#	Pipe name:
+#		GWASsummarize
+#	Creation date:
+#		Thu Mar 17 13:11:40 CET 2011
+#	Description:
+#		concatenates files from input fileset with header to a single output file
+#	Pipe instances:
+#		no pipe instances
+#	Input:
+#		text files with header line
+#	Output:
+#		text file with header line
+
+#
+#	Pipe parameters
+#
+
+GWASsummarize:Options	--qsub
+
+#
+#	Pipe definition
+#

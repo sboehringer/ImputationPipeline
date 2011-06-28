@@ -1,0 +1,60 @@
+#	Pipe name:
+#		ccassoc
+#	Creation date:
+#		Thu Mar 17 13:11:40 CET 2011
+#	Description:
+#		Run ccassoc on 3col transposed pedfiles
+#	Pipe instances:
+#		No pipe instances
+#	Input:
+#		3col transposed pedfiles
+#	Output:
+#		space separated headed table, proprietary to ccassoc
+
+#
+#	Pipe parameters
+#
+
+# Phenotypes are taken from the pipe-strata which in turn
+#	are derived from the G:Phenotypes parameter
+#	remove the type qualifiers on phenotypes
+ccassoc:strata		~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Phenotypes
+
+# Covariates are derived from the G:Covariates parameter, removing type qualifiers
+ccassoc:Covariates	~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Covariates
+
+# standard options for ccassoc
+ccassoc:Options	-3
+
+# pass extra options to ccassoc
+ccassoc:ExtraOptions	
+
+# Pedfile
+ccassoc:PEDFILE_prefix	[header=F,sep=S]
+ccassoc:PEDFILE	InputPlink_OUTPUT_DIR/pedfile
+
+# expected InputExtension
+ccassoc:INPUT_EXT gens
+
+# force on head node: only use for debugging
+ccassoc:synchroneous_prepare	0
+
+#
+#	Pipe definition
+#
+
+ccassoc:cmd_isTransform	1
+ccassoc:cmd_prepare		\
+	pedfile.pl --createXXAssocPhenotypeFile OUTPUT_DIR \
+	--phenotypes 'G:Phenotypes' --covariates 'G:Covariates' \
+	--headerMap G:HeaderMap \
+	--variableFile G:VariableFile \
+	--pedFile ccassoc:PEDFILE_prefix:ccassoc:PEDFILE
+ccassoc:cmd	\
+	cc_assoc_trans.py ccassoc:Options ccassoc:ExtraOptions \
+	-n STRATUM --cols OUTPUT_DIR/variables.cols -c 'ccassoc:Covariates' \
+	-p OUTPUT_DIR/variables \
+	-i OUTPUT_DIR/pedfile \
+	-j INPUT.ccassoc:INPUT_EXT \
+	-o OUTPUT
+ccassoc:outputExtension	ccassoc

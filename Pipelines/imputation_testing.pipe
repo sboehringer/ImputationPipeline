@@ -1,0 +1,55 @@
+# pipeline spec
+#	run jobs seperated by '|' sequentially and
+#	jobs separated by ',' concurrently
+#	group jobs by parentheses '(', ..., ')'
+
+#
+#	<p> include pipe definitions
+#
+
+@include	defaults_ENV:HOST
+@include	input.pipe
+@include	inject.pipe
+@include	conversion.pipe
+@include	impute.pipe
+@include	snptest.pipe
+@include	qtassoc.pipe
+@include	ccassoc.pipe
+@include	summarize.pipe
+
+#
+#	<p> input definition
+#
+#Set these input options in your own specification file
+
+G:PipeInput		myPlinkFilePrefix
+G:VariableFile	myCovariatesAndPhenotypes
+# Phenotypes are specified as Type:Name, where type can be
+#	Q for quantitative, B for binary
+G:Phenotypes    iq:Q,slimOfNiet:B
+# Covariables are specified as Type:Name, or simply name assuming a 
+#	quantitative phenotype
+#	Q for quantitative, F for factor
+G:Covariates	cov1,cov2:F
+
+#
+#	<p> pipeline specification
+#
+
+G:Name			imputation_qt_snptest
+G:imputation_qt_snptest      G:Convert | GWASimpute | G:PipelineTests
+G:Convert		InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3col
+G:PipelineTests ( Snptest | GWASsummarize, qtassoc | GWASsummarize )
+
+#
+#	<p> pipeline options
+#
+
+# directory prefix
+G:prefix		imputation
+
+#
+#	general pipe options
+#
+# referencePanel: hapmap2|hapmap3
+G:referencePanel	hapmap2b22

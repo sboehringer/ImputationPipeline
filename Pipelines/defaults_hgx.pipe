@@ -1,0 +1,9 @@
+#
+#	Pipeline defaults on host hgx
+#Wed Mar 16 15:19:11 CET 2011
+
+ENV:referencepanel_hapmap2b21	/home/pingu/tmp/pipeline/hapmap2
+ENV:hapmap2path	/home/pingu/tmp/pipeline/hapmap2
+ENV:hapmap3path	/home/pingu/tmp/pipeline/hapmap3
+
+@include defaults.all

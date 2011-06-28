@@ -1,0 +1,46 @@
+#
+#	Pipeline defaults on host whale
+#Thu Mar 17 13:01:21 CET 2011
+
+# universal defaults
+@include defaults_all
+
+# queue used on the batch queueing system
+ENV:QSUB_QUEUE	default
+ENV:PIPELINE_LOG_DIR	/opt/.pipelineRuns
+
+
+#
+#	<p> installing a new hapmap version
+#
+#	NUMBER_CHR can be used in file names to indicate chromosome number in file names
+#	Produce a new all_markers.txt file from all legend files
+#	csv.pl --combineFiles './.*chr(\d+).*legend' --constant '1=$1' \
+#		-s --outputSeparator=' ' --setHeader 0=idRs,1=chr,2=pos,3=a1,4=a2 --sortNumerically \
+#		 > all_markers.txt
+#
+
+#
+#	<p> reference penal locations
+#
+
+#
+#	<p> hapmap2 build 21 (files automagically known to GWASimpute.pl)
+#
+ENV:referencepanel_hapmap2b21	/data/data0/hapmap2/phased/
+#ENV:referencepanel_hapmap2	/data/data0/hapmap2/phased/
+
+#
+#	<p> hapmap build 22, positions based on dbSNP build 36
+#
+ENV:referencepanel_hapmap2b22	/data/data0/hapmap2_r22/
+ENV:hapmap2b22_genotypes		genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_phased_by_snp
+# physical map
+ENV:hapmap2b22_legend			genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_legend_by_snp
+# genetic map
+ENV:hapmap2b22_map				genetic_map_chrNUMBER_CHR_CEU_b36.txt
+
+#
+#	<p> hapmap3
+#
+ENV:referencepanel_hapmap3	/data/data0/hapmap3/phased/

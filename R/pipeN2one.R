@@ -14,11 +14,10 @@ convertN2one = function(input, o) {
 	i = propertyFromString(readFile(input));
 	# <p> source input script
 	script = file.locate(o$source, prefixes = splitString(':', Sys.getenv('RSCRIPTS')));
+	#cat(readFile(script));
 	Log(sprintf("Sourcing script @ %s\n", script), 5);
 	source(script, chdir = T);
 	# <p> call function
-print(list.kp(i$files, 'name', do.unlist = T));
-print(is.list(i));
 	do.call(get(o$callFunction), list(i$files, o));
 }
 .globalTriggers = list(convertN2one = convertN2one);

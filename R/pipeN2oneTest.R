@@ -4,6 +4,6 @@
 
 myfunction = function(input, o) {
 	print('welcome to goldrunner');
-	#print(list.kp(input, 'name'));
+	print(list.kp(input, 'name'));
 	#print(o);
 }

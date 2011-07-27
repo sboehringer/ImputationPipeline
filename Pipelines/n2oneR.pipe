@@ -15,8 +15,11 @@
 #	Pipe parameters
 #
 
+# R.pl options
 # file to contain R code for unifying files
-n2oneR:Rsource	
+n2oneR:Rsource	myRsource.R
+# which function from myRsource.R to call
+n2oneR:function	myfunction
 
 # meta information to be instilled into the output file
 n2oneR:meta	{}
@@ -31,9 +34,11 @@ n2oneR:outputExtension
 #	Pipe definition
 #
 
+# this pipe summarizes input into a single file
+n2oneR:cmd_isSummary	1
 n2oneR:cmd	\
-	R.pl -- pipeN2one.R n2oneR:options \
-		--sourceFile 'n2oneR:Rsource' \
-		--outputExtension 'n2oneR:outputExtension' \
+	R.pl -- pipeN2one.R --convertN2one \
+		--source 'n2oneR:Rsource' \
+		--callFunction n2oneR:function \
 		--meta 'n2oneR:meta' \
-		--o OUTPUT
+		--output OUTPUT INPUT

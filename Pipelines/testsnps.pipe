@@ -1,0 +1,27 @@
+#	Pipe name:
+#		testsnps
+#	Creation date:
+#		Thu Jul 21 14:30 2011
+#	Description:
+#		perform test for SNPs
+#	Pipe instances:
+#		
+#	Input:
+#		file specification
+#	Output:
+#		file specification
+
+#
+#	Pipe parameters
+#
+
+testsnps:Input
+testsnps:PhenotypeFile	G:PhenotypeFile
+testsnps:PermNumber	G:PermNumber
+
+#
+#	Pipe definition
+#
+
+testsnps:cmd		snp-pv.pl --phenotypefile=testsnps:PhenotypeFile \
+--permNum=testsnps:PermNumber --outputDir=OUTPUT_DIR INPUTS

@@ -1,0 +1,33 @@
+#	Pipe name:
+#		impute2sqlite
+#	Creation date:
+#		Fri Jul  1 14:49:00 CEST 2011
+#	Description:
+#		impute2sqlite imports impute text files into a sqlite database
+#	Pipe instances:
+#		is an instance of n2oneR, use as n2oneR:impute2sqlite
+#	Input:
+#		any
+#	Output:
+#		abstract, to be defined by pipe instances
+
+@include	n2oneR.pipe
+
+#
+#	Pipe parameters
+#
+
+# R.pl options
+# file to contain R code for unifying files
+impute2sqlite:Rsource	impute2sqlite.R
+# which function from myRsource.R to call
+impute2sqlite:function	impute2sqlite
+
+# meta information to be instilled into the output file
+impute2sqlite:meta	{}
+
+# options to be passed to the script
+impute2sqlite:options	
+
+# output extension for the output file
+impute2sqlite:outputExtension	sqlite

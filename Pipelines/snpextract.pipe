@@ -1,0 +1,25 @@
+#	Pipe name:
+#		snpextract
+#	Creation date:
+#		Thu Jul 21 14:30 2011
+#	Description:
+#		extracts spns
+#	Pipe instances:
+#		
+#	Input:
+#		file specification
+#	Output:
+#		file specification
+
+#
+#	Pipe parameters
+#
+
+snpextract:GenotypeFile	G:GenotypeFile
+
+#
+#	Pipe definition
+#
+
+snpextract:cmd	getSNP2.pl --genotypefile=snpextract:GenotypeFile \
+	--outputDir=OUTPUT_DIR INPUTS

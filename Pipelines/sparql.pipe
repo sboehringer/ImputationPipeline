@@ -1,0 +1,25 @@
+#	Pipe name:
+#		sparql
+#	Creation date:
+#		Thu Jul 21 14:30 2011
+#	Description:
+#		make sparql queries
+#	Pipe instances:
+#		
+#	Input:
+#		file specification
+#	Output:
+#		file specification
+
+#
+#	Pipe parameters
+#
+
+sparql:Input	G:Input
+
+
+#
+#	Pipe definition
+#
+
+sparql:cmd		rdf2.pl sparql:Input --outputDir=OUTPUT_DIR

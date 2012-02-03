@@ -23,7 +23,7 @@ class OptionParser (optparse.OptionParser):
             self.error("%s option not supplied" % option)
 ##main
 parser = OptionParser()
-parser.add_option("-3", action="store_const", const=0, help="three column format")
+parser.add_option("--assocParameters", help="extra options")
 parser.add_option("-n", help="phenotype name")
 parser.add_option("--cols", help="variables.cols file (required)")
 parser.add_option("-c", help="covariate names; comma-separated")
@@ -61,7 +61,7 @@ else:
         cov=" -c "+','.join(covs)
 scriptname=sys.argv[0].split('/')[-1]
 executable=scriptname[:-3]
-command=executable+" -3 -n "+str(pheno)+cov+" -p "+options.p+" -i "+options.i+" -j "+options.j+" -o "+options.o
+command=executable+' '+options.assocParameters+" -n "+str(pheno)+cov+" -p "+options.p+" -i "+options.i+" -j "+options.j+" -o "+options.o
 sys.stderr.write(command+'\n')
 if (options.logonly==False):
     os.system(command)

@@ -16,7 +16,7 @@ class OptionParser (optparse.OptionParser):
         if getattr(self.values, option.dest) is None:
             self.error("%s option not supplied" % option)
 
-def fsplitChromosomes (prefix,outputDir,logonly):
+def fsplitChromosomes (prefix,outputDir,logonly,chrX):
     specfiles=[]
     if os.access(prefix+".ped",os.F_OK):
         inputOption="--file "
@@ -28,14 +28,19 @@ def fsplitChromosomes (prefix,outputDir,logonly):
         sys.exit("No plink input file.\n")
     #print jidfile
     pedcommand="qsub.pl --unquote --jid "+jidfile+" -- 'csv.pl -s --select 0:5 --no-header "+peddatafile+" > "+outputDir+"/pedfile'"
-    #print pedcommand
     if logonly==False:
         os.system(pedcommand)
-    for chrom in range(1,23):
-        plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr "+str(chrom)+" --recode --out "+outputDir+"/"+prefix+"_chr"+str(chrom)
+    if chrX:
+        for chrom in range(1,24):
+            plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr "+str(chrom)+" --recode --out "+outputDir+"/"+prefix+"_chr"+str(chrom)
+            if logonly==False:
+                os.system(plinkcommand)
+            specfiles.append({'name' : outputDir+"/"+prefix+"_chr"+str(chrom), 'chromosome' : str(chrom) })
+    else:
+        plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr 23 --recode --out "+outputDir+"/"+prefix+"_chr23"
         if logonly==False:
             os.system(plinkcommand)
-        specfiles.append({'name' : outputDir+"/"+prefix+"_chr"+str(chrom), 'chromosome' : str(chrom) })
+        specfiles.append({'name' : outputDir+"/"+prefix+"_chr23", 'chromosome' : "23" })
     return specfiles
 
 ##main
@@ -44,6 +49,7 @@ parser.add_option("-m", "--mapfile", default=None, help="map file prefix (requir
 parser.add_option("-o", "--output", help="output directory")
 parser.add_option("--logonly",action="store_true", default=False)
 parser.add_option("--outputSpec", default=None, help="output specification file")
+parser.add_option("--chrX",action="store_true", default=False)
 (options, args) = parser.parse_args()
 
 parser.check_required("-m")
@@ -56,7 +62,7 @@ else:
 jidfile=tempfile.mkstemp(prefix="gwasconvertbatchJids",dir="/tmp")[1]
 
 specs={'type':"plink"}
-specs['files']=fsplitChromosomes(options.mapfile,outputDir,options.logonly)
+specs['files']=fsplitChromosomes(options.mapfile,outputDir,options.logonly,options.chrX)
 if os.access(jidfile,os.F_OK):
     qidfile=open(jidfile)
     specs['jids']=qidfile.readlines()

@@ -13,10 +13,14 @@
 #
 
 #
-InputPlink:cmd		loaddata.py -m G:PipeInput -o OUTPUT_DIR
+InputPlink:Options	
+InputPlink:cmd		loaddata.py -m G:PipeInput -o OUTPUT_DIR InputPlink:Options	
 # map-replace
 MapReplace:cmd		mapreplace.py --spec INPUTS --hapmap G:referencePanel -o OUTPUT_DIR
 # convert to tped format
 tped:Options		--type ped2tped --qsub
 # convert to 3column format
 3col:Options		--type tped2tped3col --qsub
+
+
+InputPlinkX:Options	X

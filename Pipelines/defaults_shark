@@ -15,6 +15,16 @@ ENV:referencepanel_hapmap2	/usr/local/MedStat/hapmap2
 ENV:referencepanel_hapmap3	/usr/local/MedStat/hapmap3
 
 #
+# hapmap2 release 21 (chr X)
+#
+ENV:referencepanel_hapmap2	/data/MolEpi/referencePanels/hapmap2/
+ENV:hapmap2_genotypes		genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_phased_by_snp
+# physical map
+ENV:hapmap2_legend			genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_legend_by_snp
+# genetic map
+ENV:hapmap2_map				genetic_map_chrNUMBER_CHR_CEU_b36.txt
+
+#
 # hapmap2 release 22
 #
 ENV:referencepanel_hapmap2b22	/data/MolEpi/referencePanels/hapmap2_r22/

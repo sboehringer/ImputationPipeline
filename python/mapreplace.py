@@ -19,8 +19,9 @@ class OptionParser (optparse.OptionParser):
 #hapmap3 ="/data/data0/hapmap3/hapmap3map.csv"
 #hapmap2 ="/data/data0/hapmap2/phased/genotypes_CEU_r21_nr_fwd_legend"
 referencemarkers="all_markers.map"
+referencemarkers_chrX="chrX_markers.map"
         
-def runCsv2(input,hapmap,outputdir,jids,logonly):
+def runCsv2(input,hapmap,outputdir,jids,logonly,chrX):
     wait=''
     if len(jids)>0:
         wait="--waitForJids '"+','.join(jids)+"'"
@@ -28,8 +29,11 @@ def runCsv2(input,hapmap,outputdir,jids,logonly):
     referencepanel=os.getenv("referencepanel_"+hapmap)
     #print referencepanel
     if referencepanel!=None:
-        referencepanel=referencepanel+'/'+referencemarkers
-        qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos --op 'expr=TTOP$pos = sapply(TTOP$pos, function(d)sprintf(\"%d\", d))'"
+        if chrX:
+            referencepanel=referencepanel+'/'+referencemarkers_chrX
+        else:
+            referencepanel=referencepanel+'/'+referencemarkers
+        qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
     else:
         sys.exit("Non-existing hapmap version:"+hapmap+"\n")
     if  not logonly:
@@ -47,6 +51,7 @@ parser.add_option("-i", "--hapmap", default='hapmap2', help="Hapmap version (use
 parser.add_option("-o", "--output", default="./", help="output directory")
 parser.add_option("--logonly",action="store_true", default=False)
 parser.add_option("--outputSpec", default=None, help="output specification file")
+parser.add_option("--chrX",action="store_true", default=False)
 (options, args) = parser.parse_args()
 
 parser.check_required("-s")
@@ -70,8 +75,8 @@ else:
 specs={'type':"plink",'files':[]}
 for infile in specs_in["files"]:
     #if os.access(infile["name"]+".map",os.F_OK):
-        runCsv2(infile["name"],options.hapmap,outputDir,jids,options.logonly)
-        specs["files"].append({'name' : options.output+'/'+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
+        runCsv2(infile["name"],options.hapmap,outputDir,jids,options.logonly,options.chrX)
+        specs["files"].append({'name' : options.output+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
     #else:
     #    print "Warning: map for chromosome "+infile["chromosome"]+" not found"
 if os.access(jidfile,os.F_OK):

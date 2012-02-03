@@ -20,3 +20,8 @@ G:referencePanel	hapmap2b22
 
 # qsub
 ENV:QSUB_LOG_DIR	diag/qsub_jobOutputs
+
+
+# compatibility
+# copy G:PipelineInput from G:Input as to revive old convention
+G:PipelineInput	G:Input

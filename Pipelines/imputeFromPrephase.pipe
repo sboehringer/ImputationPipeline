@@ -1,0 +1,45 @@
+#	Pipe name:
+#		GWASimputeFromPrephase
+#	Creation date:
+#		Wed Nov  9 12:31:54 CET 2011
+#	Description:
+#		Use impute2 to impute genotypes from a "prephased" and a reference panel
+#		Uses GWASimpute.pl with a different cmd template
+#	Input:
+#		3col transposed genotype files
+#	Output:
+#		3col transposed genotype files
+#	Pipe instances:
+#		No pipe instances
+
+#
+#	Pipe parameters
+#
+
+# effective population size
+GWASimputeFromPrephase:NE			11418
+# SNP buffer
+GWASimputeFromPrephase:BUFFER		250
+# copying states
+GWASimputeFromPrephase:K			42
+# number iterations
+GWASimputeFromPrephase:ITERATIONS	30
+# number burnin iterations (discarded iterations)
+GWASimputeFromPrephase:BURNIN		10
+# size of marker blocks in bps to be imputed in a single computation run
+GWASimputeFromPrephase:chunkSize	4e6
+# additional command line options for impute
+GWASimputeFromPrephase:CmdExtraOptions	
+# standard command line options for impute2
+GWASimputeFromPrephase:CmdOptions	-allow_large_regions
+# optionize input
+GWASimputeFromPrephase:InputAsOptions	--genotypes,--prephased
+
+#
+#	Pipe definition
+#
+GWASimputeFromPrephase:Options	--qsub --referencePanel GWASimputeFromPrephase:referencePanel --chunkSize GWASimputeFromPrephase:chunkSize \
+					--imputeParameters \
+					'NUMBER_NE=GWASimputeFromPrephase:NE;NUMBER_BUFFER=GWASimputeFromPrephase:BUFFER;NUMBER_K=GWASimputeFromPrephase:K;\
+					NUMBER_ITERATIONS=GWASimputeFromPrephase:ITERATIONS;NUMBER_BURNIN=GWASimputeFromPrephase:BURNIN;\
+					IMPUTE_CMDLINE="GWASimputeFromPrephase:CmdOptions GWASimputeFromPrephase:CmdExtraOptions";'

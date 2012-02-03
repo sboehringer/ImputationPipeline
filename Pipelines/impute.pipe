@@ -9,7 +9,8 @@
 #	Output:
 #		3col transposed genotype files
 #	Pipe instances:
-#		No pipe instances
+#		prephasing: run a prephasing step with impute2 >= 2.1.2
+#		prephased: run imputation using prephased samples (impute2 >= 2.1.2)
 
 #
 #	Pipe parameters
@@ -42,3 +43,18 @@ GWASimpute:Options	--qsub --referencePanel GWASimpute:referencePanel --chunkSize
 					'NUMBER_NE=GWASimpute:NE;NUMBER_BUFFER=GWASimpute:BUFFER;NUMBER_K=GWASimpute:K;\
 					NUMBER_ITERATIONS=GWASimpute:ITERATIONS;NUMBER_BURNIN=GWASimpute:BURNIN;\
 					IMPUTE_CMDLINE="GWASimpute:CmdOptions GWASimpute:CmdExtraOptions";'
+
+#
+#	Pipe definition: prephasing
+#
+
+prephasing:isA	GWASimpute
+prephasing:Options	--cmdtemplate=prephase GWASimpute:Options
+
+#
+#	Pipe definition: prephased
+#
+
+prephased:isA				GWASimpute
+prephased:Options			--cmdtemplate=impute_prephased GWASimpute:Options
+prephased:InputAsOptions	--prephased-files,--genotypes

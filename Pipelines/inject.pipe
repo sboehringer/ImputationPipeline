@@ -15,20 +15,25 @@
 #	Pipe parameters
 #
 
-Inject:Input	G:Input
-Inject:Pattern	'.*'
-Inject:Meta		''
-Inject:FileType	'generic'
+#Inject:Input	G:Input
+Inject:Pattern		'.*'
+Inject:InputAsIs	1
+Inject:Meta			''
+Inject:FileType		'generic'
+Inject:Options		--pattern Inject:Pattern --meta Inject:Meta \
+					--grep-match --absolute-pathes --fileType Inject:FileType
 
 #
 #	Pipe instances
 #
 
-inject3col:FileType	tped3col
+# inject 3col files
+inject3col:FileType		tped3col
+# inject files from a different pipeline run
+injectExternal:Options	--inject-files-spec
 
 #
 #	Pipe definition
 #
 
-Inject:cmd		pl_inject.pl Inject:Input --pattern Inject:Pattern --meta Inject:Meta \
-	--grep-match --absolute-pathes --fileType Inject:FileType -o OUTPUT_DIR
+Inject:cmd		pl_inject.pl Inject:Options -o OUTPUT_DIR INPUTS

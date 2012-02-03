@@ -1,0 +1,23 @@
+#	Pipe name:
+#		Copy
+#	Creation date:
+#		Fri Nov 11 16:23:22 CET 2011
+#	Description:
+#		Copies input unaltered to output. The typical use is to duplicate any
+#		intermediate pipeline output to later pipeline stages.
+#	Pipe instances:
+#		none
+#	Input:
+#		generic
+#	Output:
+#		generic
+
+#
+#	Pipe parameters
+#
+Copy:Options
+
+#
+#	Pipe definition
+#
+Copy:cmd	pl_copy.pl Copy:Options -o OUTPUT_DIR INPUTS

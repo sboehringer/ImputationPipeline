@@ -51,10 +51,16 @@ qtassoc:cmd_prepare		\
 	--variableFile G:VariableFile \
 	--pedFile qtassoc:PEDFILE_prefix:qtassoc:PEDFILE
 qtassoc:cmd	\
-	qt_assoc_trans.py qtassoc:Options qtassoc:ExtraOptions \
+	qt_assoc_trans.py --assocParameters 'qtassoc:Options qtassoc:ExtraOptions' \
 	-n STRATUM --cols OUTPUT_DIR/variables.cols -c 'qtassoc:Covariates' \
 	-p OUTPUT_DIR/variables \
 	-i OUTPUT_DIR/pedfile \
 	-j INPUT.qtassoc:INPUT_EXT \
 	-o OUTPUT
 qtassoc:outputExtension	qtassoc
+
+#
+#	<p> X-chromosome instances
+#
+
+qtassocX:Options	-3 -x

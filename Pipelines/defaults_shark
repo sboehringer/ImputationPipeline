@@ -13,3 +13,33 @@ ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
 ENV:referencepanel_hapmap2b21	/usr/local/MedStat/hapmap2
 ENV:referencepanel_hapmap2	/usr/local/MedStat/hapmap2
 ENV:referencepanel_hapmap3	/usr/local/MedStat/hapmap3
+
+#
+# hapmap2 release 22
+#
+ENV:referencepanel_hapmap2b22	/data/MolEpi/referencePanels/hapmap2_r22/
+ENV:hapmap2b22_genotypes		genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_phased_by_snp
+# physical map
+ENV:hapmap2b22_legend			genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_legend_by_snp
+# genetic map
+ENV:hapmap2b22_map				genetic_map_chrNUMBER_CHR_CEU_b36.txt
+
+#
+# 1000 genomes jun2011
+#
+ENV:referencepanel_1000genomes  /data/MolEpi/referencePanels/ALL_1000G_phase1interim_jun2011_impute
+ENV:1000genomes_genotypes		ALL_1000G_phase1interim_jun2011_chrNUMBER_CHR_impute.hap
+# physical map
+ENV:1000genomes_legend			ALL_1000G_phase1interim_jun2011_chrNUMBER_CHR_impute.legend
+# genetic map
+ENV:1000genomes_map				genetic_map_chrNUMBER_CHR_combined_b37.txt
+
+#
+# 1000 genomes oct2011
+#
+ENV:referencepanel_1000genomes1oct  /data/MolEpi/referencePanels/ALL_1000G_phase1integrated_oct2011_impute
+ENV:1000genomes1oct_genotypes		ALL_1000G_phase1_chrNUMBER_CHR_impute.hap.gz
+# physical map
+ENV:1000genomes1oct_legend			ALL_1000G_phase1_chrNUMBER_CHR_impute.legend.gz
+# genetic map
+ENV:1000genomes1oct_map				genetic_map_chrNUMBER_CHR_combined_b37.txt

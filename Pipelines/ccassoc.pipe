@@ -51,10 +51,16 @@ ccassoc:cmd_prepare		\
 	--variableFile G:VariableFile \
 	--pedFile ccassoc:PEDFILE_prefix:ccassoc:PEDFILE
 ccassoc:cmd	\
-	cc_assoc_trans.py ccassoc:Options ccassoc:ExtraOptions \
+	cc_assoc_trans.py --assocParameters 'ccassoc:Options ccassoc:ExtraOptions' \
 	-n STRATUM --cols OUTPUT_DIR/variables.cols -c 'ccassoc:Covariates' \
 	-p OUTPUT_DIR/variables \
 	-i OUTPUT_DIR/pedfile \
 	-j INPUT.ccassoc:INPUT_EXT \
 	-o OUTPUT
 ccassoc:outputExtension	ccassoc
+
+#
+#	<p> X-chromosome instances
+#
+
+ccassocX:Options	-3 -x

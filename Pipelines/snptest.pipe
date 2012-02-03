@@ -22,6 +22,8 @@ Snptest:strata		~~,~~{(.*?)(?::(?:[A-Z]))?$}~~,~~G:Phenotypes
 
 # Covariates are derived from the G:Covariates parameter, removing type qualifiers
 Snptest:Covariates	~~,~~{(.*?)(?::(?:[A-Z]))?$}~~ ~~G:Covariates
+#Snptest:Covariates	`perl -e 'print join(",", map { s/:.*//; $_ } split(/,/, q{G:Covariates}))'`
+#Snptest:Covariates	`echo 'G:Covariates' | perl -pe '$_=join(",", map { s/:.*//; $_ } split(/,/))'`
 
 # pass extra options to snptest
 Snptest:ExtraOptions	

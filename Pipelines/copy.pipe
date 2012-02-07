@@ -6,7 +6,7 @@
 #		Copies input unaltered to output. The typical use is to duplicate any
 #		intermediate pipeline output to later pipeline stages.
 #	Pipe instances:
-#		none
+#		Union (symlink files, pass inputs by file)
 #	Input:
 #		generic
 #	Output:
@@ -21,3 +21,31 @@ Copy:Options
 #	Pipe definition
 #
 Copy:cmd	pl_copy.pl Copy:Options -o OUTPUT_DIR INPUTS
+
+
+
+#	Pipe name:
+#		Union
+#	Creation date:
+#		Fri Feb  3 15:42:19 CET 2012
+#	Description:
+#		Combine all inputs into a single output
+#	Pipe instances:
+#		none
+#	Input:
+#		generic
+#	Output:
+#		generic
+
+
+Union:isA	Copy
+#
+#	Pipe parameters
+#
+Union:Options
+Union:inputsAsFile	1
+
+#
+#	Pipe definition
+#
+Union:cmd	pl_copy.pl Union:Options --inputs INPUTS_FILE --relocate -o OUTPUT_DIR

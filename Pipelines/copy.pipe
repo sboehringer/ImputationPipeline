@@ -48,4 +48,4 @@ Union:InputsAsFile	1
 #
 #	Pipe definition
 #
-Union:cmd	pl_copy.pl Union:Options --inputs INPUTS_FILE --relocate -o OUTPUT_DIR
+Union:cmd	pl_copy.pl Union:Options --inputs INPUTS --relocate -o OUTPUT_DIR

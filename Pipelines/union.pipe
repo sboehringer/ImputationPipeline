@@ -15,7 +15,7 @@
 #	Pipe parameters
 #
 Union:Options
-Union:inputsAsFile	1
+Union:InputsAsFile	1
 
 #
 #	Pipe definition

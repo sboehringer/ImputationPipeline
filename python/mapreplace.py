@@ -76,7 +76,7 @@ specs={'type':"plink",'files':[]}
 for infile in specs_in["files"]:
     #if os.access(infile["name"]+".map",os.F_OK):
         runCsv2(infile["name"],options.hapmap,outputDir,jids,options.logonly,options.chrX)
-        specs["files"].append({'name' : options.output+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
+        specs["files"].append({'name' : options.output+'/'+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
     #else:
     #    print "Warning: map for chromosome "+infile["chromosome"]+" not found"
 if os.access(jidfile,os.F_OK):

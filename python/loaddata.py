@@ -31,16 +31,17 @@ def fsplitChromosomes (prefix,outputDir,logonly,chrX):
     if logonly==False:
         os.system(pedcommand)
     if chrX:
+        plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr 23 --recode --out "+outputDir+"/"+prefix+"_chr23"
+        if logonly==False:
+            os.system(plinkcommand)
+        specfiles.append({'name' : outputDir+"/"+prefix+"_chr23", 'chromosome' : "23" })
+        print test
+    else:
         for chrom in range(1,24):
             plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr "+str(chrom)+" --recode --out "+outputDir+"/"+prefix+"_chr"+str(chrom)
             if logonly==False:
                 os.system(plinkcommand)
             specfiles.append({'name' : outputDir+"/"+prefix+"_chr"+str(chrom), 'chromosome' : str(chrom) })
-    else:
-        plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr 23 --recode --out "+outputDir+"/"+prefix+"_chr23"
-        if logonly==False:
-            os.system(plinkcommand)
-        specfiles.append({'name' : outputDir+"/"+prefix+"_chr23", 'chromosome' : "23" })
     return specfiles
 
 ##main

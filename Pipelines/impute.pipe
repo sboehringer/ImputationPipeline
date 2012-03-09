@@ -58,3 +58,11 @@ prephasing:Options	--cmdtemplate=prephase GWASimpute:Options
 prephased:isA				GWASimpute
 prephased:Options			--cmdtemplate=impute_prephased GWASimpute:Options
 prephased:InputAsOptions	--prephased-files,--genotypes
+
+#
+#	Pipe definition: chrX
+#
+
+chrX:isA	GWASimpute
+chrX:Options	--cmdtemplate=chrX GWASimpute:Options
+

@@ -12,7 +12,7 @@ use Data::Dumper;
 $main::d = { };
 # options
 $main::o = [
-	'+createSnptestPhenotypeFile=s', '+createXXAssocPhenotypeFile=s',
+	'+createSnptestPhenotypeFile=s', '+createXXAssocPhenotypeFile=s', '+createImputeXSexFile',
 	'pedFile=s', 'phenotypeFile=s', 'phenotypes=s', 'covariates=s',
 	'variableFile|varFile=s', 'headerMap=s'
 ];
@@ -25,6 +25,8 @@ $main::helpText = <<HELP_TEXT.$TempFileNames::GeneralHelp;
 		--variableFile [header=T,sep=T]:Phenofile.txt \
 		--pedFile imputation_00/pedfile
 
+	pedfile.pl --createImputeXSexFile sex.sample \
+		--pedFile imputation_00/pedfile
 HELP_TEXT
 
 sub dictFromString { my ($str) = @_;
@@ -76,6 +78,26 @@ sub doCreateSnptestPhenotypeFile { my ($c, @files) = @_;
 	my $cmd = "csv2.pl --o /dev/null --logLevel ". firstDef($TempFileNames::__verbosity, 4). ' --'
 		." $varPrefix$c->{variableFile}"
 		." --opr 'expr=names(TTOP) = vector.replace(names(TTOP), $headerMap)'"
+		." $c->{pedFile}"
+		.' --op setHeader=fid,iid,pid,mid,sex'
+		.' --op joinOuterLeft=fid,iid'
+		.' --op addCol=missing=0'
+		.' --opr takeCol='.join(',', @outputCols)
+		." --op 'writeTable=[header=F,sep=S,append=T,file=$c->{createPhenotypeFile}]' ";
+	System($cmd, 4);
+}
+
+sub doCreateImputeXSexFile { my ($c, @files) = @_;
+	# <p> create 'sex file' header
+	my $fh = IO::File->new($c->{createImputeXSexFile}, 'w');
+		print $fh join(' ', ('ID_1', 'ID_2', 'missing', 'sex')), "\n";
+		print $fh join(' ', (('0') x 4)), "\n";
+	$fh->close();
+
+	# <p> extract columns to produce 'sex file' content
+	my @outputCols = ('fid', 'iid', 'missing', 'sex');
+	my $headerMap = unparseRdata(dictFromString($c->{headerMap}));
+	my $cmd = "csv2.pl --o /dev/null --logLevel ". firstDef($TempFileNames::__verbosity, 4). ' --'
 		." $c->{pedFile}"
 		.' --op setHeader=fid,iid,pid,mid,sex'
 		.' --op joinOuterLeft=fid,iid'

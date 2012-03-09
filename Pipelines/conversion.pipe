@@ -24,4 +24,4 @@ tped:Options		--type ped2tped --qsub
 
 
 InputPlinkX:Options	--chrX
-InputPlinkX:cmd		InputPlink:cmd InputPlinkX:Options	
+InputPlinkX:cmd		InputPlink:cmd InputPlinkX:Options

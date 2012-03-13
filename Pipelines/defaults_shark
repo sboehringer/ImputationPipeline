@@ -9,20 +9,15 @@
 ENV:QSUB_QUEUE	all.q
 ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
 
-# reference penal locations
-ENV:referencepanel_hapmap2b21	/usr/local/MedStat/hapmap2
-ENV:referencepanel_hapmap2	/usr/local/MedStat/hapmap2
-ENV:referencepanel_hapmap3	/usr/local/MedStat/hapmap3
-
 #
-# hapmap2 release 21 (chr X)
+# hapmap3 release 22 (chr X)
 #
-ENV:referencepanel_hapmap2	/data/MolEpi/referencePanels/hapmap2/
-ENV:hapmap2_genotypes		genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_phased_by_snp
+ENV:referencepanel_hapmap3	/data/MolEpi/referencePanels/hapmap3/
+ENV:hapmap3_genotypes		genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_phased_by_snp
 # physical map
-ENV:hapmap2_legend			genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_legend_by_snp
+ENV:hapmap3_legend			genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_legend_by_snp
 # genetic map
-ENV:hapmap2_map				genetic_map_chrNUMBER_CHR_CEU_b36.txt
+ENV:hapmap3_map				genetic_map_chrNUMBER_CHR_CEU_b36.txt
 
 #
 # hapmap2 release 22

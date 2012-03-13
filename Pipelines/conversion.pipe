@@ -23,4 +23,5 @@ tped:Options		--type ped2tped --qsub
 3col:Options		--type tped2tped3col --qsub
 
 
-InputPlinkX:Options	X
+InputPlinkX:Options	--chrX
+InputPlinkX:cmd		InputPlink:cmd InputPlinkX:Options

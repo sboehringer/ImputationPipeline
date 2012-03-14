@@ -64,7 +64,7 @@ qtassoc:outputExtension	qtassoc
 #
 
 qtassocX:Options	-3 -x
-qtassocX:cmd
+qtassocX:cmd \
 	qt_assoc_trans.py --assocParameters 'qtassocX:Options qtassoc:ExtraOptions' \
 	-n STRATUM --cols OUTPUT_DIR/variables.cols -c 'qtassoc:Covariates' \
 	-p OUTPUT_DIR/variables \

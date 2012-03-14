@@ -64,7 +64,7 @@ ccassoc:outputExtension	ccassoc
 #
 
 ccassocX:Options	-3 -x
-ccassocX:cmd
+ccassocX:cmd \
 	cc_assoc_trans.py --assocParameters 'ccassocX:Options ccassoc:ExtraOptions' \
 	-n STRATUM --cols OUTPUT_DIR/variables.cols -c 'ccassoc:Covariates' \
 	-p OUTPUT_DIR/variables \

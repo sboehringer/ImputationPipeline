@@ -35,7 +35,6 @@ def fsplitChromosomes (prefix,outputDir,logonly,chrX):
         if logonly==False:
             os.system(plinkcommand)
         specfiles.append({'name' : outputDir+"/"+prefix+"_chr23", 'chromosome' : "23" })
-        print test
     else:
         for chrom in range(1,23):
             plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr "+str(chrom)+" --recode --out "+outputDir+"/"+prefix+"_chr"+str(chrom)

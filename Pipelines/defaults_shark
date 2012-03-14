@@ -13,11 +13,11 @@ ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
 # hapmap3 release 22 (chr X)
 #
 ENV:referencepanel_hapmap3	/data/MolEpi/referencePanels/hapmap3/
-ENV:hapmap3_genotypes		genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_phased_by_snp
+ENV:hapmap3_genotypes		hapmap3_r2_b36_chrNUMBER_CHR.haps.gz
 # physical map
-ENV:hapmap3_legend			genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_legend_by_snp
+ENV:hapmap3_legend			hapmap3_r2_b36_chrNUMBER_CHR.legend
 # genetic map
-ENV:hapmap3_map				genetic_map_chrNUMBER_CHR_CEU_b36.txt
+ENV:hapmap3_map				genetic_map_chrNUMBER_CHR_combined_b36.txt
 
 #
 # hapmap2 release 22

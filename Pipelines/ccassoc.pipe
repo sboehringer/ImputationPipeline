@@ -64,3 +64,4 @@ ccassoc:outputExtension	ccassoc
 #
 
 ccassocX:Options	-3 -x
+ccassocX:cmd	ccassoc:cmd ccassocX:Options

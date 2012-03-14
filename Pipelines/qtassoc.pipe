@@ -64,3 +64,4 @@ qtassoc:outputExtension	qtassoc
 #
 
 qtassocX:Options	-3 -x
+qtassocX:cmd	qtassoc:cmd qtassocX:Options

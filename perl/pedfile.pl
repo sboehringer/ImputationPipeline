@@ -100,7 +100,6 @@ sub doCreateImputeXSexFile { my ($c, @files) = @_;
 	my $cmd = "csv2.pl --o /dev/null --logLevel ". firstDef($TempFileNames::__verbosity, 4). ' --'
 		." [header=F,sep=S]:$c->{pedFile}"
 		.' --op setHeader=fid,iid,pid,mid,sex,pheno'
-		.' --op joinOuterLeft=fid,iid'
 		.' --op addCol=missing=0'
 		.' --opr takeCol='.join(',', @outputCols)
 		." --op 'writeTable=[header=F,sep=S,append=T,file=$c->{createPhenotypeFile}]' ";

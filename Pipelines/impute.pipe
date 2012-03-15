@@ -64,7 +64,7 @@ prephased:InputAsOptions	--prephased-files,--genotypes
 #
 
 chrX:isA			GWASimpute
-chrX:Options		--cmdtemplate=chrX GWASimpute:Options
+chrX:Options		--cmdtemplate=chrX --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
 chrX:cmd_prepare	pedfile.pl \
 						--createImputeXSexFile OUTPUT_DIR/sex.sample \
 						--pedFile imputation_00/pedfile

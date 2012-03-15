@@ -224,6 +224,7 @@ sub imputeFiles { my ($i, $o) = @_;
 	$result = GetOptionsStandard($o,
 		'qsub!',
 		'cmdtemplate=s',	# which type of analysis to run
+		'cmdPrepare=s',
 		# input options
 		'prephased-files=s',
 		'genotypes=s',	# as alternative to a plain argument
@@ -259,6 +260,7 @@ sub imputeFiles { my ($i, $o) = @_;
 	my @files = grep { defined } (@ARGV, $o->{genotypes});
 	foreach $inp (@files) {
 		my $s = specificationFromPath($inp);
+		my @waitForJids = @{$s->{jids}};
 		my $sprp = specificationFromPath($o->{'prephased-files'});
 		# <p> defaults
 		my $outputDir = firstDef($o->{outputDir},
@@ -267,8 +269,14 @@ sub imputeFiles { my ($i, $o) = @_;
 		my $outputSpec = "$outputDir/files.spec" if (!defined($o->{outputSpec}));
 		my $to = { %$o, output => $outputDir, outputSpec => $outputSpec };
 
-		qsubActivate([grep {defined} @{$s->{jids}}, @{$sprp->{jids}}],
+		qsubActivate([grep {defined} @waitForJids, @{$sprp->{jids}}],
 			tempFileName('/tmp/gwasconvertbatchJids')) if ($to->{qsub});
+
+		if (defined($o->{cmdPrepare})) {
+ 			QSystem($o->{cmdPrepare}, 2);
+			@waitForJids = split("\n", readFile($QSub->{jidFile})) if ($o->{qsub});
+			qsubActivate([@waitForJids], tempFileName('/tmp/gwasconvertbatchJids')) if ($to->{qsub});
+		}
 
 		my $sn = imputeFiles($s, $to);
 		if (defined($to->{outputSpec})) {

@@ -98,7 +98,7 @@ sub doCreateImputeXSexFile { my ($c, @files) = @_;
 	my @outputCols = ('fid', 'iid', 'missing', 'sex');
 	my $headerMap = unparseRdata(dictFromString($c->{headerMap}));
 	my $cmd = "csv2.pl --o /dev/null --logLevel ". firstDef($TempFileNames::__verbosity, 4). ' --'
-		." $c->{pedFile}"
+		." [header=F,sep=S]:$c->{pedFile}"
 		.' --op setHeader=fid,iid,pid,mid,sex,pheno'
 		.' --op joinOuterLeft=fid,iid'
 		.' --op addCol=missing=0'

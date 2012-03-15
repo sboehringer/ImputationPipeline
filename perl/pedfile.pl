@@ -12,7 +12,7 @@ use Data::Dumper;
 $main::d = { };
 # options
 $main::o = [
-	'+createSnptestPhenotypeFile=s', '+createXXAssocPhenotypeFile=s', '+createImputeXSexFile',
+	'+createSnptestPhenotypeFile=s', '+createXXAssocPhenotypeFile=s', '+createImputeXSexFile=s',
 	'pedFile=s', 'phenotypeFile=s', 'phenotypes=s', 'covariates=s',
 	'variableFile|varFile=s', 'headerMap=s'
 ];
@@ -102,7 +102,7 @@ sub doCreateImputeXSexFile { my ($c, @files) = @_;
 		.' --op setHeader=fid,iid,pid,mid,sex,pheno'
 		.' --op addCol=missing=0'
 		.' --opr takeCol='.join(',', @outputCols)
-		." --op 'writeTable=[header=F,sep=S,append=T,file=$c->{createPhenotypeFile}]' ";
+		." --op 'writeTable=[header=F,sep=S,append=T,file=$c->{createImputeXSexFile}]' ";
 	System($cmd, 4);
 }
 

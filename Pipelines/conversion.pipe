@@ -25,3 +25,5 @@ tped:Options		--type ped2tped --qsub
 
 InputPlinkX:Options	--chrX
 InputPlinkX:cmd		InputPlink:cmd InputPlinkX:Options
+MapReplaceX:Options	--chrX
+MapReplaceX:cmd		MapReplace:cmd MapReplaceX:Options

@@ -16,7 +16,7 @@ class OptionParser (optparse.OptionParser):
         if getattr(self.values, option.dest) is None:
             self.error("%s option not supplied" % option)
 
-def fsplitChromosomes (prefix,outputDir,logonly,chrX):
+def fsplitChromosomes (prefix,outputDir,logonly,chrX,chrlist):
     specfiles=[]
     if os.access(prefix+".ped",os.F_OK):
         inputOption="--file "
@@ -25,7 +25,7 @@ def fsplitChromosomes (prefix,outputDir,logonly,chrX):
         inputOption="--bfile "
         peddatafile=prefix+".fam"
     else:
-        sys.exit("No plink input file.\n")
+        sys.exit("Error: No plink input file.\n")
     #print jidfile
     pedcommand="qsub.pl --unquote --jid "+jidfile+" -- 'csv.pl -s --select 0:5 --no-header "+peddatafile+" > "+outputDir+"/pedfile'"
     if logonly==False:
@@ -36,7 +36,7 @@ def fsplitChromosomes (prefix,outputDir,logonly,chrX):
             os.system(plinkcommand)
         specfiles.append({'name' : outputDir+"/"+prefix+"_chr23", 'chromosome' : "23" })
     else:
-        for chrom in range(1,23):
+        for chrom in chrlist:
             plinkcommand=" qsub.pl --jid "+jidfile+" -- plink "+inputOption+prefix+" --chr "+str(chrom)+" --recode --out "+outputDir+"/"+prefix+"_chr"+str(chrom)
             if logonly==False:
                 os.system(plinkcommand)
@@ -50,9 +50,39 @@ parser.add_option("-o", "--output", help="output directory")
 parser.add_option("--logonly",action="store_true", default=False)
 parser.add_option("--outputSpec", default=None, help="output specification file")
 parser.add_option("--chrX",action="store_true", default=False)
+parser.add_option("--chromosomes", default="1-22")
 (options, args) = parser.parse_args()
 
 parser.check_required("-m")
+
+chrlist=[]
+chrs=options.chromosomes.split(",")
+for i in chrs:
+	j=i.split("-")
+	if len(j)==1:
+		try:
+			if int(j[0])>0 and int(j[0])<=22:
+				if int(j[0]) not in chrlist:
+					chrlist.append(int(j[0]))
+			else:
+				print "Skipped non-existing chromosome:",j[0]
+		except ValueError:
+			print "Skipped non-existing chromosome:",j[0]
+	else:
+		try:
+			if int(j[0])>0 and int(j[1])<=22 and int(j[1])>int(j[0]):
+				for k in range(int(j[0]),int(j[1])+1):
+					if int(k) not in chrlist:
+						chrlist.append(int(k))
+			else:
+				print "Skipped non-existing chromosome range:",i
+		except ValueError:
+			print "Skipped non-existing chromosome range:",i
+
+if not options.chrX:
+	print "Chromosomes to be analyzed:", chrlist
+else:
+	print "Chromosome to be analyzed: chr X"
 if options.output:
     outputDir=options.output
     if not (os.access(outputDir,os.F_OK)):
@@ -62,7 +92,10 @@ else:
 jidfile=tempfile.mkstemp(prefix="gwasconvertbatchJids",dir="/tmp")[1]
 
 specs={'type':"plink"}
-specs['files']=fsplitChromosomes(options.mapfile,outputDir,options.logonly,options.chrX)
+if len(chrlist)>0 or options.chrX:
+	specs['files']=fsplitChromosomes(options.mapfile,outputDir,options.logonly,options.chrX,chrlist)
+else:
+	sys.exit("Error: No chromosomes to run.\n")
 if os.access(jidfile,os.F_OK):
     qidfile=open(jidfile)
     specs['jids']=qidfile.readlines()

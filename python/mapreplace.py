@@ -28,8 +28,8 @@ def runCsv2(input,hapmap,outputdir,jids,logonly,chrX,chromosome):
         wait="--waitForJids '"+','.join(jids)+"'"
     outfile=input.split('/')[-1]
     referencedir=os.getenv("referencepanel_"+hapmap)
-    #print referencepanel
-    if referencepanel!=None:
+    #print referencedir
+    if referencedir!=None:
         if chrX:
             referencepanel=referencedir+'/'+referencemarkers_chrX
         else:

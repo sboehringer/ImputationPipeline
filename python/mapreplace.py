@@ -20,22 +20,25 @@ class OptionParser (optparse.OptionParser):
 #hapmap2 ="/data/data0/hapmap2/phased/genotypes_CEU_r21_nr_fwd_legend"
 referencemarkers="all_markers.map"
 referencemarkers_chrX="chrX_markers.map"
+referencemarkers_chr="_markers.map"
         
-def runCsv2(input,hapmap,outputdir,jids,logonly,chrX):
+def runCsv2(input,hapmap,outputdir,jids,logonly,chrX,chromosome):
     wait=''
     if len(jids)>0:
         wait="--waitForJids '"+','.join(jids)+"'"
     outfile=input.split('/')[-1]
-    referencepanel=os.getenv("referencepanel_"+hapmap)
+    referencedir=os.getenv("referencepanel_"+hapmap)
     #print referencepanel
     if referencepanel!=None:
         if chrX:
-            referencepanel=referencepanel+'/'+referencemarkers_chrX
+            referencepanel=referencedir+'/'+referencemarkers_chrX
         else:
-            referencepanel=referencepanel+'/'+referencemarkers
+            referencepanel=referencedir+"/chr"chromosome+referencemarkers_chr
+            if not (os.access(referencepanel,os.F_OK)):
+            	referencepanel=referencedir+'/'+referencemarkers
         qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft=idRs --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
     else:
-        sys.exit("Non-existing hapmap version:"+hapmap+"\n")
+        sys.exit("Non-existing reference panel version:"+hapmap+"\n")
     if  not logonly:
         os.system(qsubcsv2)
         os.system("ln -s "+os.path.abspath(input+".ped")+" "+outputdir+"/"+outfile+".ped")
@@ -75,7 +78,7 @@ else:
 specs={'type':"plink",'files':[]}
 for infile in specs_in["files"]:
     #if os.access(infile["name"]+".map",os.F_OK):
-        runCsv2(infile["name"],options.hapmap,outputDir,jids,options.logonly,options.chrX)
+        runCsv2(infile["name"],options.hapmap,outputDir,jids,options.logonly,options.chrX,infile["chromosome"])
         specs["files"].append({'name' : options.output+'/'+infile["name"].split('/')[-1], 'chromosome' : infile["chromosome"] })
     #else:
     #    print "Warning: map for chromosome "+infile["chromosome"]+" not found"

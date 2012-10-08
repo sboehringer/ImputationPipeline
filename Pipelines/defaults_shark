@@ -48,3 +48,13 @@ ENV:1000genomes1oct_genotypes		ALL_1000G_phase1_chrNUMBER_CHR_impute.hap.gz
 ENV:1000genomes1oct_legend			ALL_1000G_phase1_chrNUMBER_CHR_impute.legend.gz
 # genetic map
 ENV:1000genomes1oct_map				genetic_map_chrNUMBER_CHR_combined_b37.txt
+
+#
+# 1000 genomes v3
+#
+ENV:referencepanel_1000genomesv3 /data/MolEpi/referencePanels/ALL_1000G_phase1integrated_v3_impute_macGT1
+ENV:1000genomesv3_genotypes		ALL_1000G_phase1_chrNUMBER_CHR_impute_macGT1.hap.gz
+# physical map
+ENV:1000genomesv3_legend			ALL_1000G_phase1_chrNUMBER_CHR_impute_macGT1.legend.gz
+# genetic map
+ENV:1000genomesv3_map				genetic_map_chrNUMBER_CHR_combined_b37.txt

@@ -6,7 +6,7 @@
 @include defaults_all
 
 # queue used on the batch queueing system
-ENV:QSUB_QUEUE	all.q
+ENV:QSUB_QUEUE	all.q,MolEpi_HighMem.q
 ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
 
 #

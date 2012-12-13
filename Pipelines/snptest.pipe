@@ -14,6 +14,7 @@
 #
 #	Pipe parameters
 #
+# This pipe now uses snptest v2.4.1 (changed by Quinta 13-12-2012)
 
 # Phenotypes are taken from the pipe-strata which in turn
 #	are derived from the G:Phenotypes parameter
@@ -47,7 +48,7 @@ Snptest:cmd_prepare		\
 	--variableFile G:VariableFile \
 	--pedFile Snptest:PEDFILE_prefix:Snptest:PEDFILE
 Snptest:cmd	\
-	snptest -data INPUT.Snptest:INPUT_EXT OUTPUT_DIR/snptest_variables -o OUTPUT -pheno 'STRATUM' \
+	snptest_v2.4.1 -data INPUT.Snptest:INPUT_EXT OUTPUT_DIR/snptest_variables -o OUTPUT -pheno 'STRATUM' \
 	-method expected -frequentist 1 -hwe Snptest:ExtraOptions \
 	-cov_names Snptest:Covariates
 Snptest:outputExtension	snptest

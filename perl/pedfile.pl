@@ -62,13 +62,15 @@ sub doCreateSnptestPhenotypeFile { my ($c, @files) = @_;
 	Log(join(' ', @cols));
 	Log(join(' ', @types));
 	# <p> write header
-	my $fh = IO::File->new($c->{createSnptestPhenotypeFile}, 'w');
+	my $outputFile = $c->{createSnptestPhenotypeFile};
+	my $fh = IO::File->new($outputFile}, 'w');
 #		say $fh join(' ', @cols);
 #		say $fh join(' ', @types);
 		print $fh join(' ', @cols), "\n";
 		print $fh join(' ', @types), "\n";
 	$fh->close();
 
+	Log($outputFile);
 	# <p> join files together to produce 'sample file' content
 	my @outputCols = ('fid', 'iid', 'missing',
 		(map { $_->{name} } @covariates), (map { $_->{name} } @phenotypes));
@@ -83,7 +85,7 @@ sub doCreateSnptestPhenotypeFile { my ($c, @files) = @_;
 		.' --op joinOuterLeft=fid,iid'
 		.' --op addCol=missing=0'
 		.' --opr takeCol='.join(',', @outputCols)
-		." --op 'writeTable=[header=F,sep=S,append=T,file=$c->{createPhenotypeFile}]' ";
+		." --op 'writeTable=[header=F,sep=S,append=T,file=$outputFile]' ";
 	System($cmd, 4);
 }
 

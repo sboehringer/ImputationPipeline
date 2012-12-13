@@ -63,7 +63,7 @@ sub doCreateSnptestPhenotypeFile { my ($c, @files) = @_;
 	Log(join(' ', @types));
 	# <p> write header
 	my $outputFile = $c->{createSnptestPhenotypeFile};
-	my $fh = IO::File->new($outputFile}, 'w');
+	my $fh = IO::File->new($outputFile, 'w');
 #		say $fh join(' ', @cols);
 #		say $fh join(' ', @types);
 		print $fh join(' ', @cols), "\n";

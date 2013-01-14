@@ -68,3 +68,25 @@ chrX:Options		--cmdtemplate=chrX --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Opti
 chrX:cmd_prepare	pedfile.pl \
 						--createImputeXSexFile OUTPUT_DIR/sex.sample \
 						--pedFile imputation_00/pedfile
+
+#
+#	Pipe definition: prephasing chrX
+#
+
+chrX_prephasing:isA	GWASimpute
+chrX_prephasing:Options	--cmdtemplate=chrX_prephase --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
+chrX_prephasing:cmd_prepare	pedfile.pl \
+						--createImputeXSexFile OUTPUT_DIR/sex.sample \
+						--pedFile imputation_00/pedfile
+
+#
+#	Pipe definition: prephased
+#
+
+chrX_prephased:isA		GWASimpute
+chrX_prephased:Options		--cmdtemplate=chrX_impute_prephased --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
+chrX_prephased:InputAsOptions	--prephased-files,--genotypes
+chrX_prephased:cmd_prepare	pedfile.pl \
+						--createImputeXSexFile OUTPUT_DIR/sex.sample \
+						--pedFile imputation_00/pedfile
+

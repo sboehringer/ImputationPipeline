@@ -56,9 +56,9 @@ my %cmdTemplates = (
 	'impute' => $IMPUTATION_CMD22,
 	'prephase' => $IMPUTATION_CMD_PREPHASE22,
 	'impute_prephased' => $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE22,
-	'chrX' => $IMPUTATION_CMD_CHRX
+	'chrX' => $IMPUTATION_CMD_CHRX,
 	'chrX_prephase' => $IMPUTATION_CMD_PREPHASE_CHRX,
-	'chrX_impute_prephased' => $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE_CHRX,
+	'chrX_impute_prephased' => $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE_CHRX
 );
 
 

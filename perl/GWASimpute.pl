@@ -42,10 +42,10 @@ my $IMPUTATION_CMD_CHRX =
 'impute22 -pgs_miss IMPUTE_CMDLINE -chrX -h HAP_FILE -l LEGEND_FILE -m MAP_FILE -g GENOTYPE_FILE -o OUTPUT_DIR/OUTPUT_FILE -sample_g OUTPUT_DIR/sex.sample -Ne NUMBER_NE -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN -align_by_maf_g -int NUMBER_START NUMBER_STOP';
 
 my $IMPUTATION_CMD_PREPHASE_CHRX =
-'impute22 IMPUTE_CMDLINE -chrX -m MAP_FILE -g GENOTYPE_FILE -o OUTPUT_DIR/OUTPUT_FILE_prephase -Ne NUMBER_NE -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN -align_by_maf_g -int NUMBER_START NUMBER_STOP -phase -include_buffer_in_output -stage_one -hap_samp_dir OUTPUT_DIR';
+'impute22 IMPUTE_CMDLINE -chrX -m MAP_FILE -g GENOTYPE_FILE -o OUTPUT_DIR/OUTPUT_FILE_prephase -sample_g OUTPUT_DIR/sex.sample -Ne NUMBER_NE -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN -align_by_maf_g -int NUMBER_START NUMBER_STOP -phase -include_buffer_in_output -stage_one -hap_samp_dir OUTPUT_DIR';
 
 my $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE_CHRX =
-'impute22 IMPUTE_CMDLINE -pgs_miss -chrX -h HAP_FILE -l LEGEND_FILE -m MAP_FILE -g GENOTYPE_FILE -o OUTPUT_DIR/OUTPUT_FILE -Ne NUMBER_NE -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN -align_by_maf_g -int NUMBER_START NUMBER_STOP -stage_two -hap_samp_dir PREPHASED_DIR';
+'impute22 IMPUTE_CMDLINE -pgs_miss -chrX -h HAP_FILE -l LEGEND_FILE -m MAP_FILE -g GENOTYPE_FILE -o OUTPUT_DIR/OUTPUT_FILE -sample_g OUTPUT_DIR/sex.sample -Ne NUMBER_NE -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN -align_by_maf_g -int NUMBER_START NUMBER_STOP -stage_two -hap_samp_dir PREPHASED_DIR';
 
 my %cmdTemplates21 = (
 	'impute' => $IMPUTATION_CMD21,

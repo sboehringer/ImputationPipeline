@@ -58,3 +58,13 @@ ENV:1000genomesv3_genotypes		ALL_1000G_phase1integrated_v3_chrNUMBER_CHR_impute_
 ENV:1000genomesv3_legend			ALL_1000G_phase1integrated_v3_chrNUMBER_CHR_impute_macGT1.legend.gz
 # genetic map
 ENV:1000genomesv3_map				genetic_map_chrNUMBER_CHR_combined_b37.txt
+
+#
+# gonl release4
+#
+ENV:referencepanel_gonl4 /data/MolEpi/referencePanels/gonl_release4
+ENV:gonl4_genotypes		chrNUMBER_CHR.hap.gz
+# physical map
+ENV:gonl4_legend			chrNUMBER_CHR.legend.gz
+# genetic map
+ENV:gonl4_map				genetic_map_chrNUMBER_CHR_combined_b37.txt

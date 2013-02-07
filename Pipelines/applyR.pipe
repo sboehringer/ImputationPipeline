@@ -1,0 +1,47 @@
+#	Pipe name:
+#		applyR
+#	Creation date:
+#		Wed Feb  6 11:22:20 2013
+#	Description:
+#		applyR is an abstract pipe allowing application of R scripts to files
+#	Pipe instances:
+#		to be defined by non-abstract pipe instances
+#	Input:
+#		any
+#	Output:
+#		abstract, to be defined by pipe instances
+
+#
+#	Pipe parameters
+#
+
+applyR:cmd_isTransform	1
+
+# R.pl options
+# file to contain R code for unifying files
+applyR:Rsource	myRsource.R
+# which function from myRsource.R to call
+applyR:function	myfunction
+
+# meta information to be instilled into the output file
+applyR:meta	{}
+
+# options to be passed to the script
+applyR:options	
+
+# output extension for the output file
+applyR:outputExtension	
+
+#
+#	Pipe definition
+#
+
+# this pipe summarizes input into a single file
+applyR:cmd_isSummary	1
+applyR:cmd	\
+	R.pl -- pipeApplyR.R --applyFunction \
+		--source 'applyR:Rsource' \
+		--callFunction applyR:function \
+		--meta 'applyR:meta' \
+		--output OUTPUT INPUT \
+		applyR:options

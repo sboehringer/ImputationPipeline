@@ -11,15 +11,15 @@ source('RgenericAll.R');
 
 applyFunction = function(input, o) {
 	# <p> source input script
-	script = file.locate(o$source, prefixes = c(
-		getwd(), splitString(':', Sys.getenv('RSCRIPTS'))
-	));
+	prefixes = c(getwd(), splitString(':', Sys.getenv('RSCRIPTS')));
+	script = file.locate(o$source, prefixes = prefixes);
 	#cat(readFile(script));
-	Log(sprintf("Sourcing script @ %s\n", script), 1);
+	Log(sprintf("Sourcing script @ %s\n", script), 3);
 	source(script, chdir = T);
 	# <p> call function
 	args = .List(o, min_ = c('source', 'args', 'callFunction', 'applyFunction', 'meta', 'output'));
 	functionArgs = c(list(input = o$args, output = o$output), args);
-	do.call(get(o$callFunction), functionArgs);
+	Log(sprintf("Calling function %s [exists: %d]\n", o$callFunction, exists(o$callFunction)), 3);
+	do.call(get(o$callFunction), c(functionArgs, list(prefixes = prefixes)));
 }
 .globalTriggers = list(applyFunction = applyFunction);

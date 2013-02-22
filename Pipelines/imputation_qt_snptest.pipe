@@ -22,8 +22,13 @@
 #
 #Set these input options in your own specification file
 
-G:PipeInput		myPlinkFilePrefix
-G:VariableFile	myCovariatesAndPhenotypes
+G:PipeInput				__must_be_specified__
+# prefix of plink file
+G:PipeInput_example		LLS_Offspring_Partnerschr21
+G:VariableFile			__must_be_specified__
+# text file read as in the specification
+G:VariableFile_example	[HEADER=T,SEP=T,HEADERMAP=IID:iid;FID:fid]:Phenofile.txt
+
 # Phenotypes are specified as Type:Name, where type can be
 #	Q for quantitative, B for binary
 G:Phenotypes    iq:Q,slimOfNiet:B

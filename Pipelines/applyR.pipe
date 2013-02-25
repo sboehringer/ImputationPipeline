@@ -39,7 +39,7 @@ applyR:outputExtension
 
 # this pipe summarizes input into a single file
 applyR:cmd	\
-	R.pl -- pipeApplyR.R --applyFunction \
+	R.pl --no-quiet --loglevel 5 -- pipeApplyR.R --applyFunction \
 		--source 'applyR:Rsource' \
 		--callFunction applyR:function \
 		--output OUTPUT INPUT \

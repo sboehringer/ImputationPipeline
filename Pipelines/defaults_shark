@@ -8,6 +8,7 @@
 # queue used on the batch queueing system
 ENV:QSUB_QUEUE	all.q
 ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
+ENV:RSCRIPTS			$RSCRIPTS:/usr/local/MedStat/pipeline/R:/usr/local/MedStat/Rprivate
 
 #
 # hapmap3 release 22 (chr X)

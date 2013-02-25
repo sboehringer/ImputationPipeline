@@ -81,9 +81,11 @@ applyLmPerSnp:extraOptions		--formula1 'applyLmPerSnp:formula1' --formula0 'appl
 #	Instance: perform cox-regression per SNP
 #
 
-applyRcox:isa				applyRperSnp
-applyRcox:formula1			__must_be_specified__
-applyRcox:formula1_example	Surv(time, event) ~ MARKER + age + sex
-applyRcox:formula0			__must_be_specified__
-applyRcox:formula0_example	Surv(time, event) ~ age + sex
-applyRcox:extraOptions		--formula1 'applyRcox:formula1' --formula0 'applyRcox:formula0'
+applyCoxPerSnp:isa				applyRperSnp
+applyCoxPerSnp:RfunctionSource	testCoxPerSnp.R
+applyCoxPerSnp:RfunctionName	testCoxPerSnp
+applyCoxPerSnp:formula1			__must_be_specified__
+applyCoxPerSnp:formula1_example	Surv(time, event) ~ MARKER + age + sex
+applyCoxPerSnp:formula0			__must_be_specified__
+applyCoxPerSnp:formula0_example	Surv(time, event) ~ age + sex
+applyCoxPerSnp:extraOptions		--formula1 'applyCoxPerSnp:formula1' --formula0 'applyCoxPerSnp:formula0'

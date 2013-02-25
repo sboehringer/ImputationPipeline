@@ -1,0 +1,89 @@
+#	Pipe name:
+#		applyR
+#	Creation date:
+#		Wed Feb  6 11:22:20 2013
+#	Description:
+#		applyR is an abstract pipe allowing application of R scripts to files
+#	Pipe instances:
+#		to be defined by non-abstract pipe instances
+#	Input:
+#		any
+#	Output:
+#		abstract, to be defined by pipe instances
+
+#
+#	Pipe parameters
+#
+
+applyR:cmd_isTransform	1
+applyR:cmd_isSummary	0
+
+applyR:Rsource			__must_be_specified__
+applyR:Rsource_example	myRsource.R
+# which function from myRsource.R to call
+applyR:function			__must_be_specified__
+applyR:function_example	myFunctionName
+
+# meta information to be instilled into the output file
+applyR:meta	{}
+
+# options to be passed to the script
+applyR:options	
+
+# output extension for the output file
+applyR:outputExtension	
+
+#
+#	Pipe definition
+#
+
+# this pipe summarizes input into a single file
+applyR:cmd	\
+	R.pl -- pipeApplyR.R --applyFunction \
+		--source 'applyR:Rsource' \
+		--callFunction applyR:function \
+		--output OUTPUT INPUT \
+		applyR:options
+
+
+#
+#	Pipe Instance: apply function per SNP
+#
+
+applyRperSnp:isa				applyR
+applyRperSnp:function			pipeRmethod
+applyRperSnp:Rsource			pipeRmethod.R
+applyRperSnp:RfunctionSource	__must_be_specified__
+applyRperSnp:RfunctionName		__must_be_specified__
+applyRperSnp:pedFile			[HEADER=F,NAMES=fid;iid;pid;mid;sex;y,SEP=S]:InputPlink_OUTPUT_DIR/pedfile
+applyRperSnp:variableFile		G:VariableFile
+applyRperSnp:options			--pedFile 'applyRperSnp:pedFile' --variableFile 'applyRperSnp:variableFile' \
+	--RfunctionName applyRperSnp:RfunctionName \
+	--RfunctionSource applyRperSnp:RfunctionSource \
+	applyRperSnp:extraOptions
+applyRperSnp:extraOptions	
+
+#
+#	Pipe Instance: perform linear regression per SNP
+#
+
+applyLmPerSnp:isa				applyRperSnp
+applyLmPerSnp:RfunctionSource	testLmPerSnp.R
+applyLmPerSnp:RfunctionName		testLmPerSnp
+applyLmPerSnp:formula1			__must_be_specified__
+applyLmPerSnp:formula1_example	BMI ~ MARKER_dosage + Age + Sex
+applyLmPerSnp:formula0			__must_be_specified__
+applyLmPerSnp:formula0_example	BMI ~ Age + Sex
+applyLmPerSnp:extraOptions		--formula1 'applyLmPerSnp:formula1' --formula0 'applyLmPerSnp:formula0' \
+	--writeAsTable 1 --digits 6
+
+#
+#	Instance: perform cox-regression per SNP
+#
+
+applyRcox:isa				applyRperSnp
+applyRcox:formula1			__must_be_specified__
+applyRcox:formula1_example	Surv(time, event) ~ MARKER + age + sex
+applyRcox:formula0			__must_be_specified__
+applyRcox:formula0_example	Surv(time, event) ~ age + sex
+applyRcox:extraOptions		--formula1 'applyRcox:formula1' --formula0 'applyRcox:formula0'

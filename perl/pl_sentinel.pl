@@ -18,12 +18,12 @@ $main::o = [
 ];
 $main::usage = 'pipeline_dir';
 $main::helpText = <<'HELP_TEXT'.$TempFileNames::GeneralHelp;
-	Internal pipeline command to wait on all jobs in a pipeline step and
+	Internal pipeline command to wait for all jobs in a pipeline step and
 	to gather job information from that step
 	
 	Options:
 	--waitForJids id1,id2,...	wait for specified jids
-	--wrap	qsub pl_sentinel.pl to wait for jobs in dir
+	--wrap	qsub pl_sentinel.pl to wait for jobs in the specified step
 
 	Examples:
 	# qsub

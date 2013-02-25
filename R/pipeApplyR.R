@@ -6,7 +6,7 @@
 #cd ~/tmp/pipeline/test_imputation
 #RSCRIPTS=~/src/pipeline/R R.pl -- pipeN2one.R --applyFunction --source pipeN2oneTest.R --callFunction myfunction imputation_04/files.spec
 
-source('RgenericAll.R');
+#source('RgenericAll.R');
 
 
 applyFunction = function(input, o) {

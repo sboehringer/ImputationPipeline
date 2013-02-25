@@ -8,6 +8,8 @@ testCoxPerSnp = function(data, formula1, formula0, snp, ...) {
 	m1 = coxph(formula1, data = data);
 	m0 = coxph(formula0, data = data);
 
+print(m1);
+print(m0);
 	r = as.list(c(
 		coefficients(m0),
 		sqrt(diag(m0$var)),
@@ -22,6 +24,7 @@ testCoxPerSnp = function(data, formula1, formula0, snp, ...) {
 		paste('sd1', names(coefficients(m1)), sep = '.'),
 		'P-value'
 	);
+print(r);
 	r
 }
 

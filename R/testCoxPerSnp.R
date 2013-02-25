@@ -3,7 +3,7 @@
 #Fri Feb 22 17:14:40 CET 2013
 #
 #	Author: Stefan Boehringer
-
+library(survival)
 testCoxPerSnp = function(data, formula1, formula0, snp, ...) {
 	m1 = coxph(formula1, data = data);
 	m0 = coxph(formula0, data = data);

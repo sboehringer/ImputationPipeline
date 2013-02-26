@@ -8,8 +8,8 @@
 #source('../../RgenericAll.R');
 
 
-#pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = F) {
-pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = F, digits = NULL, ...,
+#pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
+pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS'))) {
 	# <p> create data frame w/o genotypes
 	vars <- readTable(variableFile)

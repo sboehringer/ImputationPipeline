@@ -5,8 +5,8 @@
 #	Author: Stefan Boehringer
 library(survival)
 testCoxPerSnp = function(data, formula1, formula0, snp, ...) {
-	m1 = coxph(formula1, data = data);
-	m0 = coxph(formula0, data = data);
+	m1 = coxph(as.formula(formula1), data = data);
+	m0 = coxph(as.formula(formula0), data = data);
 
 print(m1);
 print(m0);

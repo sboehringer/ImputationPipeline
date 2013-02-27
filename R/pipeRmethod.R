@@ -22,7 +22,8 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		Log(sprintf("Input file '%s' does not exist\n", genotypeFile), 2);
 		return(NULL);
 	}
-	gens = read.table(genotypeFile);
+	classes<-c("character","character","integer","character","character",rep("numeric",nrow(ped)*3));
+	gens = read.table(genotypeFile, comment.char = "", colClasses = classes); #specify column classes decreases memory usage
 	Log(sprintf('#SNPs:%d file:%s', nrow(gens), genotypeFile), 3);
 	
 	# <p> source input script

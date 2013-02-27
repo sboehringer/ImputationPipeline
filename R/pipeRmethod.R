@@ -92,8 +92,9 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		sink();
 
 		# <p> write output
-		Log(sprintf('Writing table (%d, %d) to "%s".', dim(t0)[1], dim(t0)[2], output), 5);
-		write.csv(t0, file = output, quote = F);
+		Log(sprintf('Writing table (%d, %d) to "%s".', dim(t0)[1], dim(t0)[2], output), 3);
+		t1<-data.frame(sapply(t0,function(x) unlist(x))) #columns in t0 are lists and cannot be written
+		write.csv(t1, file = output, quote = F);
 
 # 		if (!is.null(digits)) {
 # 			options(digits = digitsOld);

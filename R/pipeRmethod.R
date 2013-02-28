@@ -38,9 +38,9 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	#N = 100;
 	Tfile = file(genotypeFile, "r")
 	r = lapply(1:N, function(i) {
-		firstcols = scan(Tfile,what=character(0),n=5)
+		firstcols = scan(Tfile, what=character(0), n=5, quiet=T)
 		snpname = firstcols[2]
-		genos<-scan(Tfile,what=numeric(0),n=ids*3)
+		genos<-scan(Tfile, what=numeric(0), n=ids*3, quiet=T)
 		# <p> read impute file format <A>
 		#genos <- gens[i, 6:ncol(gens)];
 		genoarray <- t(array(unlist(genos), dim = c(3, length(genos)/3)))
@@ -57,6 +57,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 			do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), list(...)))
 			#do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), formula0=formula0, formula1=formula1))
 		);
+		if (i %% 500) Log(sprintf('Processed %d snps', i), 3);
 		if (class(r) == 'try-error') r = NA;
 		r = c(snpname,r);
 		names(r)[1] = "snpname";

@@ -10,11 +10,6 @@ print(summary(m1));
 	m0 = coxph(as.formula(formula0), data = data);
 print(summary(m0));
 
-<<<<<<< HEAD
-	#print(m1);
-	#print(m0);
-=======
->>>>>>> 32f3b8f44182f0789dc6ab1a2feddbfb4b973b94
 	r = as.list(c(
 		coefficients(m0),
 		sqrt(diag(m0$var)),
@@ -29,10 +24,6 @@ print(summary(m0));
 		paste('sd1', names(coefficients(m1)), sep = '.'),
 		'P-value'
 	);
-<<<<<<< HEAD
-	#print(r);
-=======
->>>>>>> 32f3b8f44182f0789dc6ab1a2feddbfb4b973b94
 	r
 }
 

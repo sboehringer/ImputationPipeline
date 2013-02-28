@@ -5,11 +5,13 @@
 #	Author: Stefan Boehringer
 library(survival)
 testCoxPerSnp = function(data, formula1, formula0, snp, ...) {
+print(data$sex);
+print(data[1:20, ]);
 	m1 = coxph(as.formula(formula1), data = data);
+print(summary(m1));
 	m0 = coxph(as.formula(formula0), data = data);
+print(summary(m0));
 
-	#print(m1);
-	#print(m0);
 	r = as.list(c(
 		coefficients(m0),
 		sqrt(diag(m0$var)),
@@ -24,7 +26,7 @@ testCoxPerSnp = function(data, formula1, formula0, snp, ...) {
 		paste('sd1', names(coefficients(m1)), sep = '.'),
 		'P-value'
 	);
-	#print(r);
+	print(r);
 	r
 }
 

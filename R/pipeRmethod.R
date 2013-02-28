@@ -14,7 +14,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	# <p> create data frame w/o genotypes
 	vars <- readTable(variableFile)
 	ped <- readTable(pedFile)
-	peddata = Merge(vars, ped, sort = F, all.y = T);
+	peddata = Merge(vars, ped, sort = F, all.y = T, by = c("fid","iid"));
 	ids <- nrow(ped)
 	# <p> read genotypes <A> expect impute format
 	genotypeFile = sprintf('%s.gens', input);

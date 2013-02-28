@@ -26,7 +26,6 @@ print(summary(m0));
 		paste('sd1', names(coefficients(m1)), sep = '.'),
 		'P-value'
 	);
-	print(r);
 	r
 }
 

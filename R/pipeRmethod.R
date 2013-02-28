@@ -15,16 +15,18 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	vars <- readTable(variableFile)
 	ped <- readTable(pedFile)
 	peddata = Merge(vars, ped, sort = F, all.y = T);
-
+	ids <- nrow(ped)
 	# <p> read genotypes <A> expect impute format
 	genotypeFile = sprintf('%s.gens', input);
+	genotypeInfofile = sprintf('%s.gens_info', input);
+	N = length(readLines(genotypeInfofile)) - 1;
 	if (!file.exists(genotypeFile)) {
 		Log(sprintf("Input file '%s' does not exist\n", genotypeFile), 2);
 		return(NULL);
 	}
-	classes<-c("character","character","integer","character","character",rep("numeric",nrow(ped)*3));
-	gens = read.table(genotypeFile, comment.char = "", colClasses = classes); #specify column classes decreases memory usage
-	Log(sprintf('#SNPs:%d file:%s', nrow(gens), genotypeFile), 3);
+	#classes<-c("character","character","integer","character","character",rep("numeric",ids*3));
+	#gens = read.table(genotypeFile, comment.char = "", colClasses = classes, nrows = N); #specify column classes decreases memory usage
+	Log(sprintf('#SNPs:%d file:%s', N, genotypeFile), 3);
 	
 	# <p> source input script
 	script = file.locate(RfunctionSource, prefixes = prefixes);
@@ -32,16 +34,19 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	#cat(readFile(script));
 	Log(sprintf("Sourcing script @ %s\n", script), 5);
 	source(script, chdir = T);
-	N = nrow(gens);
+	#N = nrow(gens);
 	#N = 100;
+	Tfile = file(genotypeFile, "r")
 	r = lapply(1:N, function(i) {
-
+		firstcols = scan(Tfile,what=character(0),n=5)
+		snpname = firstcols[2]
+		genos<-scan(Tfile,what=numeric(0),n=ids*3)
 		# <p> read impute file format <A>
-		genos <- gens[i, 6:ncol(gens)];
+		#genos <- gens[i, 6:ncol(gens)];
 		genoarray <- t(array(unlist(genos), dim = c(3, length(genos)/3)))
 
 		# <p> create data frame
-		snpname = gens[i,2];
+		#snpname = gens[i,2];
 		colnames(genoarray) <- paste('MARKER', c("AA", "AB", "BB"), sep = "_")
 		dosage = genoarray %*% 0:2;
 		datframe <- data.frame(peddata, genoarray, MARKER_dosage = dosage)
@@ -50,11 +55,15 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		Log(sprintf('Calling %s for snp %s', RfunctionName, snpname), 5);
 		r = try(
 			do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), list(...)))
+			#do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), formula0=formula0, formula1=formula1))
 		);
 		if (class(r) == 'try-error') r = NA;
+		r = c(snpname,r);
+		names(r)[1] = "snpname";
 		r
 	});
-	names(r) = gens[1:N, 2];
+	close(Tfile);
+	#names(r) = gens[1:N, 2];
 
 	if (writeAsTable) {
 		# <p> check return values
@@ -95,7 +104,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		# <p> write output
 		Log(sprintf('Writing table (%d, %d) to "%s".', dim(t0)[1], dim(t0)[2], output), 3);
 		t1<-data.frame(sapply(t0,function(x) unlist(x))) #columns in t0 are lists and cannot be written
-		write.csv(t1, file = output, quote = F);
+		write.csv(t1, file = output, quote = F, row.names = F);
 
 # 		if (!is.null(digits)) {
 # 			options(digits = digitsOld);

@@ -98,9 +98,9 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 # 			options(digits = digits);
 # 			options(scipen = 1);
 		}
-		sink(stderr());
-			print(head(t0));
-		sink();
+#		sink(stderr());
+#			print(head(t0));
+#		sink();
 
 		# <p> write output
 		Log(sprintf('Writing table (%d, %d) to "%s".', dim(t0)[1], dim(t0)[2], output), 3);

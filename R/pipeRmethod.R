@@ -57,7 +57,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 			do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), list(...)))
 			#do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), formula0=formula0, formula1=formula1))
 		);
-		if (i %% 500) Log(sprintf('Processed %d snps', i), 3);
+		if (i %% 500 == 1) Log(sprintf('Processed %d snps', i), 3);
 		if (class(r) == 'try-error') r = NA;
 		r = c(snpname,r);
 		names(r)[1] = "snpname";

@@ -84,7 +84,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 
 		# <p> regularize table
 		t0 = t(sapply(r, function(e) {
-			if (length(e) < l2) c(e[1],rep(NA, 27)) else e
+			if (length(e) < l2) c(e[1],rep(NA, l2-1)) else e
 		}));
 		t0 = data.frame(t0);
 		names(t0) = n0;

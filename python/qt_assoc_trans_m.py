@@ -74,14 +74,21 @@ else:
         cov=" -c "+','.join(covs)
 
 scriptname=sys.argv[0].split('/')[-1]
-executable=scriptname[:-3]
+executable=scriptname[:-5]
+i=0
+n=options.o.rfind('/')
+outdir=options.o[:n]
+outfile=options.o[n+1:]
+n=outfile.rfind('.')
 for pheno in phenos:
     try: 
-        os.makedirs(options.o+'/'+pheno)
+        os.makedirs(outdir+'/'+phenotypes[i])
     except OSError:
-        if not os.path.isdir(options.o+'/'+pheno):
+        if not os.path.isdir(outdir+'/'+phenotypes[i]):
             raise
-    command=executable+' '+options.assocParameters+" -n "+str(pheno)+cov+" -p "+options.p+" -i "+options.i+" -j "+options.j+" -o "+options.o+'/'+pheno+'/'
+    outfilen=outfile[:n]+'-'+phenotypes[i]+outfile[n:] #add phenotype to filename
+    command=executable+' '+options.assocParameters+" -n "+str(pheno)+cov+" -p "+options.p+" -i "+options.i+" -j "+options.j+" -o "+outdir+'/'+phenotypes[i]+'/'+outfilen
     sys.stderr.write(command+'\n')
     if (options.logonly==False):
         os.system(command)
+    i+=1

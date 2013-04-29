@@ -75,12 +75,18 @@ else:
 
 scriptname=sys.argv[0].split('/')[-1]
 executable=scriptname[:-5]
+ckptfile=options.o+".ckpt"
 i=0
+if os.path.exists(ckptfile): #check if we had a restart
+	ckpt=open(ckptfile)
+	i=int(ckpt.read().strip())
+	ckpt.close()
+	print "restarted at", i
 n=options.o.rfind('/')
 outdir=options.o[:n]
 outfile=options.o[n+1:]
 n=outfile.rfind('.')
-for pheno in phenos:
+for pheno in phenos[i:]:
     try: 
         os.makedirs(outdir+'/'+phenotypes[i])
     except OSError:
@@ -91,4 +97,6 @@ for pheno in phenos:
     sys.stderr.write(command+'\n')
     if (options.logonly==False):
         os.system(command)
+        os.system("echo "+str(i+1)+" > "+ckptfile) #write checkpointing file in one line
     i+=1
+os.remove(ckptfile) #cleanup

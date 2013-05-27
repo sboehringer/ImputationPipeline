@@ -37,7 +37,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	#N = nrow(gens);
 	#N = 100;
 	Tfile = file(genotypeFile, "r")
-	Ifile = file(genotypeInfoFile, "r")
+	Ifile = file(genotypeInfofile, "r")
 	r = lapply(1:N, function(i) {
 		firstcols = scan(Tfile, what=character(0), n=5, quiet=T)
 		infocols = scan(Ifile, what=character(0), n=10, quiet=T)

@@ -1,0 +1,25 @@
+Process GWAS output: select SNPs, create plots, calculate lambda
+================================================================
+
+These scripts process the output of a GWAS run on multiple phenotypes. They select SNPs based on QC criteria (MAF,
+R2T, p-value cutoff for significant SNPs) and calculate the lambda inflation factor on the selected set. The 
+selected sets per phenotype can be automatedly fed to the plot script described in plots_large_sets/howto_gnuplot.txt
+paragraph 'b' to create manhattan and qq plots.
+
+Step 1: Select and lambda; selectsign_qc_assoc_output_lambda_parallel.py
+Takes the qt_assoc (or cc_assoc using selectsign_qc_ccassoc_output_lambda_parallel.py) output and creates 3 output files:
+1. <infile>-sorted	all SNPs with R2T and MAF above the criteria
+2. <infile>_lambda.txt	lambda inflation factor
+3. <infile>_selected_pval1e-6.txt	all SNPs with R2T and MAF above the criteria and p-value below cutoff; sorted by p-value
+The criteria and cutoff can be set in lines 16-18 of the script. Current settings: MAF>1%, R2T>40%, p-value<1e-6.
+Running this script can be automated for multiple phenotypes using run_select_old.sh (for the 'old' pipeline) or 
+run_select.sh (for the new pipeline running multiple phenotypes per job; creates different output directories).
+
+Step 2: concatenate output step 1; join_selected_lambdas.py
+This script puts the output of step 1 for all phenotypes in two files: one for the lambdas and one for the selected
+significant SNPs. Output file names can be set in lines 5 and 6.
+
+Step 3: create plots; manhattan_epacts_old.sh or manhattan_epacts.sh
+Automates creating manhattan and qq plots using epacts-plot2 for multiple phenotypes ran by the old or new pipeline
+respectively.
+

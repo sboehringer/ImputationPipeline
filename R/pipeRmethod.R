@@ -27,7 +27,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	#classes<-c("character","character","integer","character","character",rep("numeric",ids*3));
 	#gens = read.table(genotypeFile, comment.char = "", colClasses = classes, nrows = N); #specify column classes decreases memory usage
 	Log(sprintf('#SNPs:%d file:%s', N, genotypeFile), 3);
-	
+	chromosome<-strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1]
 	# <p> source input script
 	script = file.locate(RfunctionSource, prefixes = prefixes);
 
@@ -37,9 +37,13 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	#N = nrow(gens);
 	#N = 100;
 	Tfile = file(genotypeFile, "r")
+	Ifile = file(genotypeInfoFile, "r")
 	r = lapply(1:N, function(i) {
 		firstcols = scan(Tfile, what=character(0), n=5, quiet=T)
+		infocols = scan(Ifile, what=character(0), n=10, quiet=T)
 		snpname = firstcols[2]
+		snpinfo = firstcols[3:5]
+		snpinfo2 = infocols[4:5]
 		genos<-scan(Tfile, what=numeric(0), n=ids*3, quiet=T)
 		# <p> read impute file format <A>
 		#genos <- gens[i, 6:ncol(gens)];
@@ -59,8 +63,8 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		);
 		if (i %% 500 == 1) Log(sprintf('Processed %d snps', i), 3);
 		if (class(r) == 'try-error') r = NA;
-		r = c(snpname,r);
-		names(r)[1] = "snpname";
+		r = c(snpname,chromosome,snpinfo,snpinfo2,r);
+		names(r)[1:7] = c("snpname","chr","position","A0","A1","allele_freq","impute_info");
 		r
 	});
 	close(Tfile);

@@ -10,7 +10,8 @@
 
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
-	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')), by = NULL){
+	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
+	by = NULL, do_debug = F){
 	# <p> create data frame w/o genotypes
 	vars <- readTable(variableFile);
 	ped <- readTable(pedFile);
@@ -57,7 +58,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		colnames(genoarray) <- paste('MARKER', c("AA", "AB", "BB"), sep = "_")
 		dosage = genoarray %*% 0:2;
 		datframe <- data.frame(peddata, genoarray, MARKER_dosage = dosage)
-print(head(datframe));
+		if (do_debug) print(head(datframe));
 		
 		# <p> call function
 		Log(sprintf('Calling %s for snp %s', RfunctionName, snpname), 5);

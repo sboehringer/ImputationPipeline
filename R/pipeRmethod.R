@@ -57,7 +57,8 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		colnames(genoarray) <- paste('MARKER', c("AA", "AB", "BB"), sep = "_")
 		dosage = genoarray %*% 0:2;
 		datframe <- data.frame(peddata, genoarray, MARKER_dosage = dosage)
-
+print(head(datframe));
+		
 		# <p> call function
 		Log(sprintf('Calling %s for snp %s', RfunctionName, snpname), 5);
 		r = try(

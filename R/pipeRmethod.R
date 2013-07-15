@@ -10,11 +10,13 @@
 
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
-	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS'))) {
+	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')), by = NULL){
 	# <p> create data frame w/o genotypes
-	vars <- readTable(variableFile)
-	ped <- readTable(pedFile)
-	peddata = Merge(vars, ped, sort = F, all.y = T, by = c("fid","iid"));
+	vars <- readTable(variableFile);
+	ped <- readTable(pedFile);
+	# merge by 'id' and 'iid' or 'iid' alone
+	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
+	peddata = Merge(vars, ped, sort = F, all.y = T, by = by);
 	ids <- nrow(ped)
 	# <p> read genotypes <A> expect impute format
 	genotypeFile = sprintf('%s.gens', input);

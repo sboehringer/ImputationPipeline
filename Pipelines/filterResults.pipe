@@ -18,13 +18,20 @@
 # filter P.values to be smaller than threshold
 filterResults:p_value	1e-2
 
+# options to be passed to the script
+filterResults:options	
+
+# output extension for the output file
+filterResults:outputExtension	
+
 #
 #	Pipe definition
 #
 
 filterResults:cmd_isTransform	1
+filterResults:cmd_isSummary		0
 filterResults:cmd	\
 	csv.pl --selectRowsByExpression 'P.value < filterResults:p_value && all(map { $_ ne "NA" } @_)' \
-	-o OUTPUT INPUT ; \
+	-o OUTPUT INPUTS ; \
 	csv.pl --selectRowsByExpression 'all(map { $_ ne "NA" } @_)' -o OUPUT.pvalues --select snpname,P.values \
-	-o OUTPUT INPUT
+	-o OUTPUT INPUTS

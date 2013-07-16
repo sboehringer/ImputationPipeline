@@ -1,0 +1,30 @@
+#	Pipe name:
+#		filterResults
+#	Creation date:
+#		Tue Jul 16 14:24:45 CEST 2013
+#	Description:
+#		Filter csv-files such as from applyR
+#	Pipe instances:
+#		No pipe instances
+#	Input:
+#		csv-file
+#	Output:
+#		csv-file
+
+#
+#	Pipe parameters
+#
+
+# filter P.values to be smaller than threshold
+filterResults:p_value	1e-2
+
+#
+#	Pipe definition
+#
+
+filterResults:cmd_isTransform	1
+filterResults:cmd	\
+	csv.pl --selectRowsByExpression 'P.value < filterResults:p_value && all(map { $_ ne "NA" } @_)' \
+	-o OUTPUT INPUT ; \
+	csv.pl --selectRowsByExpression 'all(map { $_ ne "NA" } @_)' -o OUPUT.pvalues --select snpname,P.values \
+	-o OUTPUT INPUT

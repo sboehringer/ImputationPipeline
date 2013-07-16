@@ -66,10 +66,10 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 			do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), list(...)))
 			#do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), formula0=formula0, formula1=formula1))
 		);
-		if (i %% 500 == 1) Log(sprintf('Processed %d snps', i), 3);
+		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
 		if (class(r) == 'try-error') r = NA;
-		r = c(snpname,chromosome,snpinfo,snpinfo2,r);
-		names(r)[1:7] = c("snpname","chr","position","A0","A1","allele_freq","impute_info");
+		r = c(snpname, chromosome, snpinfo, snpinfo2, r);
+		names(r)[1:7] = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
 		r
 	});
 	close(Tfile);

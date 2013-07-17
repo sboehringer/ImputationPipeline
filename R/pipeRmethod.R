@@ -13,12 +13,12 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
 	by = NULL, do_debug = F){
 	# <p> create data frame w/o genotypes
-	vars <- readTable(variableFile);
-	ped <- readTable(pedFile);
+	vars = readTable(variableFile);
+	ped = readTable(pedFile);
+	Nids = nrow(ped);
 	# merge by 'id' and 'iid' or 'iid' alone
 	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
 	peddata = Merge(vars, ped, sort = F, all.y = T, by = by);
-	ids <- nrow(ped)
 	# <p> read genotypes <A> expect impute format
 	genotypeFile = sprintf('%s.gens', input);
 	genotypeInfofile = sprintf('%s.gens_info', input);
@@ -27,7 +27,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		Log(sprintf("Input file '%s' does not exist\n", genotypeFile), 2);
 		return(NULL);
 	}
-	#classes<-c("character","character","integer","character","character",rep("numeric",ids*3));
+	#classes<-c("character","character","integer","character","character",rep("numeric",Nids*3));
 	#gens = read.table(genotypeFile, comment.char = "", colClasses = classes, nrows = N); #specify column classes decreases memory usage
 	Log(sprintf('#SNPs:%d file:%s', N, genotypeFile), 3);
 	chromosome<-strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1]
@@ -43,28 +43,30 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	Ifile = file(genotypeInfofile, "r")
 	infocols = scan(Ifile, what=character(0), n=10, quiet=T) #discard header
 	r = lapply(1:N, function(i) {
-		firstcols = scan(Tfile, what=character(0), n=5, quiet=T)
-		infocols = scan(Ifile, what=character(0), n=10, quiet=T)
-		snpname = firstcols[2]
-		snpinfo = firstcols[3:5]
-		snpinfo2 = infocols[4:5]
-		genos<-scan(Tfile, what=numeric(0), n=ids*3, quiet=T)
+		firstcols = scan(Tfile, what = character(0), n = 5, quiet=T)
+		infocols = scan(Ifile, what = character(0), n = 10, quiet=T)
+		snpname = firstcols[2];
+		snpinfo = firstcols[3:5];
+		snpinfo2 = infocols[4:5];
+		genos = scan(Tfile, what=numeric(0), n = 3 * Nids, quiet=T)
 		# <p> read impute file format <A>
 		#genos <- gens[i, 6:ncol(gens)];
-		genoarray <- t(array(unlist(genos), dim = c(3, length(genos)/3)))
-
+		genoarray = t(array(unlist(genos), dim = c(3, length(genos)/3)));
 		# <p> create data frame
 		#snpname = gens[i,2];
-		colnames(genoarray) <- paste('MARKER', c("AA", "AB", "BB"), sep = "_")
+		colnames(genoarray) = paste('MARKER', c("AA", "AB", "BB"), sep = "_");
 		dosage = genoarray %*% 0:2;
-		datframe <- data.frame(peddata, genoarray, MARKER_dosage = dosage)
-		if (do_debug) print(head(datframe));
+		dataGts = data.frame(ped[, by], genoarray, MARKER_dosage = dosage);
+
+		# <p> merge to produce output
+		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);
+		if (do_debug) print(head(data));
 		
 		# <p> call function
 		Log(sprintf('Calling %s for snp %s', RfunctionName, snpname), 5);
 		r = try(
-			do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), list(...)))
-			#do.call(get(RfunctionName), c(list(data = datframe, snp = snpname), formula0=formula0, formula1=formula1))
+			do.call(get(RfunctionName), c(list(data = data, snp = snpname), list(...)))
+			#do.call(get(RfunctionName), c(list(data = data, snp = snpname), formula0=formula0, formula1=formula1))
 		);
 		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
 		if (class(r) == 'try-error') r = NA;

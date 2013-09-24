@@ -14,7 +14,9 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	by = NULL, do_debug = F){
 	# <p> create data frame w/o genotypes
 	vars = readTable(variableFile);
+	Log(sprintf("Read variable file '%s' with columns: [%s]\n", variableFile, join(names(vars), ' ')), 2);
 	ped = readTable(pedFile);
+	Log(sprintf("Read ped file '%s' with columns: [%s]\n", pedFile, join(names(ped), ' ')), 2);
 	Nids = nrow(ped);
 	# merge by 'id' and 'iid' or 'iid' alone
 	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));

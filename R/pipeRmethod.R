@@ -13,10 +13,12 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
 	by = NULL, do_debug = F){
 	# <p> create data frame w/o genotypes
+	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);
-	Log(sprintf("Read variable file '%s' with columns: [%s]\n", variableFile, join(names(vars), ' ')), 2);
+	Log(sprintf("... read columns: [%s]", join(names(vars), ' ')), 2);
+	Log(sprintf("Trying to read ped file '%s'", pedFile), 2);
 	ped = readTable(pedFile);
-	Log(sprintf("Read ped file '%s' with columns: [%s]\n", pedFile, join(names(ped), ' ')), 2);
+	Log(sprintf("... read columns: [%s]", join(names(ped), ' ')), 2);
 	Nids = nrow(ped);
 	# merge by 'id' and 'iid' or 'iid' alone
 	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
@@ -26,7 +28,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	genotypeInfofile = sprintf('%s.gens_info', input);
 	N = length(readLines(genotypeInfofile)) - 1;
 	if (!file.exists(genotypeFile)) {
-		Log(sprintf("Input file '%s' does not exist\n", genotypeFile), 2);
+		Log(sprintf("Input file '%s' does not exist", genotypeFile), 2);
 		return(NULL);
 	}
 	#classes<-c("character","character","integer","character","character",rep("numeric",Nids*3));

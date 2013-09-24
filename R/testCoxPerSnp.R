@@ -8,12 +8,20 @@ testCoxPerSnp = function(data, formula1, formula0, snp, ...) {
 	m1 = coxph(as.formula(formula1), data = data);
 	m0 = coxph(as.formula(formula0), data = data);
 
+	# can we calculate an anova, or was GEE used?
+	p.value = if ('cluster' %in% all.vars(as.formula(formula1), functions = T)) {
+		v = setdiff(all.vars(as.formula(formula1)), all.vars(as.formula(formula0)));
+		summary(m1)$coefficients[v, 'Pr(>|z|)']
+	} else {
+		anova(m0, m1)[2, 'P(>|Chi|)']
+	}
+
 	r = as.list(c(
 		coefficients(m0),
 		sqrt(diag(m0$var)),
 		coefficients(m1),
 		sqrt(diag(m1$var)),
-		anova(m0, m1)[2, 'P(>|Chi|)']
+		p.value
 	));
 	names(r) = c(
 		paste('beta0', names(coefficients(m0)), sep = '.'),

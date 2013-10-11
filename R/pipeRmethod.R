@@ -20,9 +20,11 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	ped = readTable(pedFile);
 	Log(sprintf("... read columns: [%s]", join(names(ped), ' ')), 2);
 	Nids = nrow(ped);
-	# merge by 'id' and 'iid' or 'iid' alone
+
+	# <p> merge by 'id' and 'iid' or 'iid' alone
 	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
 	peddata = Merge(vars, ped, sort = F, all.y = T, by = by);
+
 	# <p> read genotypes <A> expect impute format
 	genotypeFile = sprintf('%s.gens', input);
 	genotypeInfofile = sprintf('%s.gens_info', input);
@@ -34,7 +36,8 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	#classes<-c("character","character","integer","character","character",rep("numeric",Nids*3));
 	#gens = read.table(genotypeFile, comment.char = "", colClasses = classes, nrows = N); #specify column classes decreases memory usage
 	Log(sprintf('#SNPs:%d file:%s', N, genotypeFile), 3);
-	chromosome<-strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1]
+	chromosome = strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1];
+
 	# <p> source input script
 	script = file.locate(RfunctionSource, prefixes = prefixes);
 

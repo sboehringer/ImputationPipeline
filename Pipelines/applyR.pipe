@@ -76,6 +76,7 @@ applyLmPerSnp:formula0			__must_be_specified__
 applyLmPerSnp:formula0_example	BMI ~ Age + Sex
 applyLmPerSnp:extraOptions		--formula1 'applyLmPerSnp:formula1' --formula0 'applyLmPerSnp:formula0' \
 	--writeAsTable 1 --digits 6
+applyLmPerSnp:meta				{ formula0 = "applyLmPerSnp:formula0"; formula1 = "applyLmPerSnp:formula1"; }
 
 #
 #	Instance: perform cox-regression per SNP
@@ -89,3 +90,4 @@ applyCoxPerSnp:formula1_example	Surv(time, event) ~ MARKER + age + sex
 applyCoxPerSnp:formula0			__must_be_specified__
 applyCoxPerSnp:formula0_example	Surv(time, event) ~ age + sex
 applyCoxPerSnp:extraOptions		--formula1 'applyCoxPerSnp:formula1' --formula0 'applyCoxPerSnp:formula0'
+applyCoxPerSnp:meta				{ formula0 = "applyCoxPerSnp:formula0"; formula1 = "applyCoxPerSnp:formula1"; }

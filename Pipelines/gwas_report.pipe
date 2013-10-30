@@ -1,0 +1,34 @@
+#	Pipe name:
+#		gwasReport
+#	Creation date:
+#		Tue Oct 29 17:41:47 CET 2013
+#	Description:
+#		create plots / pdf report for imputed gwas data based on the R-filter pipes
+#	Pipe instances:
+#		-
+#	Input:
+#		applyLmPerSnp, applyCoxPerSnp
+#	Output:
+#		various
+
+#
+#	Pipe parameters
+#
+
+gwasReport:cmd_isTransform	1
+gwasReport:cmd_isSummary	0
+
+# options to be passed to the script
+gwasReport:options	
+
+# output extension for the output file
+gwasReport:outputExtension	
+
+#
+#	Pipe definition
+#
+
+gwasReport:cmd	\
+	R.pl --no-quiet --loglevel 5 -- gwas/gwas_imputation_script.R --summarizeGwas \
+		--output OUTPUT INPUT --meta FILE_META \
+		gwasReport:options

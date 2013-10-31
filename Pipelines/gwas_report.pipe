@@ -17,6 +17,7 @@
 
 gwasReport:cmd_isTransform	1
 gwasReport:cmd_isSummary	0
+gwasReport:ENV_ADD_QSUB_OPTIONS	 --memory 16G
 
 # options to be passed to the script
 gwasReport:options	

@@ -33,7 +33,7 @@ filterResults:outputExtension
 
 filterResults:cmd_isTransform	1
 filterResults:cmd_isSummary		0
-filterResults:rowExpression		P.value < filterResults:p_value && allele_freq >= filterResults:maf && allele_freq >= (1 - filterResults:maf) && filterResults:r2 <= impute_info && all(map { $_ ne "NA" } @_)
+filterResults:rowExpression		P.value < filterResults:p_value && allele_freq >= filterResults:maf && allele_freq <= (1 - filterResults:maf) && filterResults:r2 <= impute_info && all(map { $_ ne "NA" } @_)
 filterResults:cmd	\
 	csv.pl --selectRowsByExpression 'filterResults:rowExpression' -o OUTPUT INPUT ; \
 	csv.pl --selectRowsByExpression 'filterResults:rowExpression' --select snpname,P.value -o OUTPUT.pvalues INPUT

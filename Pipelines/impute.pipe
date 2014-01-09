@@ -48,14 +48,14 @@ GWASimpute:Options	--qsub --referencePanel GWASimpute:referencePanel --chunkSize
 #	Pipe definition: prephasing
 #
 
-prephasing:isA	GWASimpute
+prephasing:isa	GWASimpute
 prephasing:Options	--cmdtemplate=prephase GWASimpute:Options
 
 #
 #	Pipe definition: prephased
 #
 
-prephased:isA				GWASimpute
+prephased:isa				GWASimpute
 prephased:Options			--cmdtemplate=impute_prephased GWASimpute:Options
 prephased:InputAsOptions	--prephased-files,--genotypes
 
@@ -63,7 +63,7 @@ prephased:InputAsOptions	--prephased-files,--genotypes
 #	Pipe definition: chrX
 #
 
-chrX:isA			GWASimpute
+chrX:isa			GWASimpute
 chrX:Options		--cmdtemplate=chrX --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
 chrX:cmd_prepare	pedfile.pl \
 						--createImputeXSexFile OUTPUT_DIR/sex.sample \
@@ -73,7 +73,7 @@ chrX:cmd_prepare	pedfile.pl \
 #	Pipe definition: prephasing chrX
 #
 
-chrX_prephasing:isA	GWASimpute
+chrX_prephasing:isa	GWASimpute
 chrX_prephasing:Options	--cmdtemplate=chrX_prephase --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
 chrX_prephasing:cmd_prepare	pedfile.pl \
 						--createImputeXSexFile OUTPUT_DIR/sex.sample \
@@ -83,7 +83,7 @@ chrX_prephasing:cmd_prepare	pedfile.pl \
 #	Pipe definition: prephased
 #
 
-chrX_prephased:isA		GWASimpute
+chrX_prephased:isa		GWASimpute
 chrX_prephased:Options		--cmdtemplate=chrX_impute_prephased --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
 chrX_prephased:InputAsOptions	--prephased-files,--genotypes
 chrX_prephased:cmd_prepare	pedfile.pl \

@@ -42,21 +42,23 @@ GWASimpute:Options	--qsub --referencePanel GWASimpute:referencePanel --chunkSize
 					--imputeParameters \
 					'NUMBER_NE=GWASimpute:NE;NUMBER_BUFFER=GWASimpute:BUFFER;NUMBER_K=GWASimpute:K;\
 					NUMBER_ITERATIONS=GWASimpute:ITERATIONS;NUMBER_BURNIN=GWASimpute:BURNIN;\
-					IMPUTE_CMDLINE="GWASimpute:CmdOptions GWASimpute:CmdExtraOptions";'
+					IMPUTE_CMDLINE="GWASimpute:CmdOptions GWASimpute:CmdExtraOptions";' \
+					GWASimpute:ExtraOptions
+GWASimpute:ExtraOptions
 
 #
 #	Pipe definition: prephasing
 #
 
 prephasing:isa	GWASimpute
-prephasing:Options	--cmdtemplate=prephase GWASimpute:Options
+prephasing:ExtraOptions	--cmdtemplate=prephase
 
 #
 #	Pipe definition: prephased
 #
 
 prephased:isa				GWASimpute
-prephased:Options			--cmdtemplate=impute_prephased GWASimpute:Options
+prephased:ExtraOptions		--cmdtemplate=impute_prephased
 prephased:InputAsOptions	--prephased-files,--genotypes
 
 #
@@ -64,7 +66,7 @@ prephased:InputAsOptions	--prephased-files,--genotypes
 #
 
 chrX:isa			GWASimpute
-chrX:Options		--cmdtemplate=chrX --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
+chrX:ExtraOptions	--cmdtemplate=chrX --cmdPrepare 'chrX:cmd_prepare'
 chrX:cmd_prepare	pedfile.pl \
 						--createImputeXSexFile OUTPUT_DIR/sex.sample \
 						--pedFile imputation_00/pedfile
@@ -74,7 +76,7 @@ chrX:cmd_prepare	pedfile.pl \
 #
 
 chrX_prephasing:isa	GWASimpute
-chrX_prephasing:Options	--cmdtemplate=chrX_prephase --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
+chrX_prephasing:ExtraOptions	--cmdtemplate=chrX_prephase --cmdPrepare 'chrX:cmd_prepare'
 chrX_prephasing:cmd_prepare	pedfile.pl \
 						--createImputeXSexFile OUTPUT_DIR/sex.sample \
 						--pedFile imputation_00/pedfile
@@ -84,7 +86,7 @@ chrX_prephasing:cmd_prepare	pedfile.pl \
 #
 
 chrX_prephased:isa		GWASimpute
-chrX_prephased:Options		--cmdtemplate=chrX_impute_prephased --cmdPrepare 'chrX:cmd_prepare' GWASimpute:Options
+chrX_prephased:ExtraOptions		--cmdtemplate=chrX_impute_prephased --cmdPrepare 'chrX:cmd_prepare'
 chrX_prephased:InputAsOptions	--prephased-files,--genotypes
 chrX_prephased:cmd_prepare	pedfile.pl \
 						--createImputeXSexFile OUTPUT_DIR/sex.sample \

@@ -79,6 +79,24 @@ applyLmPerSnp:extraOptions		--formula1 'applyLmPerSnp:formula1' --formula0 'appl
 applyLmPerSnp:meta				{ formula0 = "applyLmPerSnp:formula0"; formula1 = "applyLmPerSnp:formula1"; }
 
 #
+#	Pipe Instance: perform logistic regression per SNP
+#
+
+applyLogisticPerSnp:isa					applyRperSnp
+applyLogisticPerSnp:RfunctionSource		testLogisticPerSnp.R
+applyLogisticPerSnp:RfunctionName		testLogisticPerSnp
+applyLogisticPerSnp:formula1			__must_be_specified__
+applyLogisticPerSnp:formula1_example	KRAS ~ MARKER_dosage + Age + Sex
+applyLogisticPerSnp:formula0			__must_be_specified__
+applyLogisticPerSnp:formula0_example	KRAS ~ Age + Sex
+applyLogisticPerSnp:extraOptions		--formula1 'applyLogisticPerSnp:formula1' \
+	--formula0 'applyLogisticPerSnp:formula0' --writeAsTable 1 --digits 6
+applyLogisticPerSnp:meta				{ \
+	formula0 = "applyLogisticPerSnp:formula0"; \
+	formula1 = "applyLogisticPerSnp:formula1"; \
+	}
+
+#
 #	Instance: perform cox-regression per SNP
 #
 

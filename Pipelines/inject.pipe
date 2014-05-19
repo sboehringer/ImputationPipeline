@@ -37,3 +37,9 @@ injectExternal:Options	--inject-files-spec
 #
 
 Inject:cmd		pl_inject.pl Inject:Options -o OUTPUT_DIR INPUTS
+
+#	Example 1
+# Inject imputed files -> better use copy
+#Inject:Pattern  '.*(?=.gens)'
+#Inject:Meta             ''
+#Inject:FileType 'generic'

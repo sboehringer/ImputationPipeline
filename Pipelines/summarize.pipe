@@ -29,4 +29,4 @@ GWASsummarize:cmd		GWASsummarize.pl GWASsummarize:Options --outputDir OUTPUT_DIR
 #
 
 SummarizeImputation:isa				GWASsummarize
-SummarizeImputation:ExtraOptions	--no-header
+SummarizeImputation:ExtraOptions	--no-header --extension .gens

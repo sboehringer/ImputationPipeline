@@ -26,6 +26,7 @@ HELP_TEXT
 
 	extends 'PipelineFileset';
 	has 'header', is => 'ro', isa => 'Int', default => 1;
+	has 'extension', is => 'ro';
 
 	sub system { my ($self, $cmd, $logLevel, %opts) = @_;
 		$self->SUPER::system(join("\n", @$cmd), $logLevel,
@@ -37,9 +38,10 @@ HELP_TEXT
 		my $outputPath = $self->outputDir. '/'. $sp->{base};
 
 		my @cmds = map {
-			sprintf('tail -n +%d %s %s %s',
+			sprintf('tail -n +%d %s%s %s %s',
 				($self->{header}? !!$_ + 1: 1),
-				$self->spec->{files}[$_]{name}, $_? '>>': '>', $outputPath)
+				$self->spec->{files}[$_]{name}, $self->{extension},
+				$_? '>>': '>', $outputPath)
 		} 0..$#{$self->spec->{files}};
 
 		return ({
@@ -58,6 +60,7 @@ HELP_TEXT
 		'qsub!',
 		# intput options
 		'strata=s',
+		'extension=s',
 		# other output options
 		'header!',
 		'outputPrefix|outputDir|output|o=s'
@@ -75,7 +78,8 @@ HELP_TEXT
 	Log(Dumper($o));
 	foreach my $inp (@files) {
 		my $p = PipelineSummarizer->new(
-			specPath => $inp, %$o, useQsub => $o->{qsub}, header => int($o->{header})
+			specPath => $inp, %$o, useQsub => $o->{qsub},
+			header => int($o->{header}), extension => $o->{extension}
 		);
 		$p->run();
 	}

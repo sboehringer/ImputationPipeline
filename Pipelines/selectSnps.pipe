@@ -1,0 +1,33 @@
+#	Pipe name:
+#		selectSnps
+#	Creation date:
+#		Tue May 27 16:04:23 CEST 2014
+#	Description:
+#		filter csv-type files based on column for values (intended for SNPs mainly)
+#	Pipe instances:
+#		no pipe instances
+#	Input:
+#		text files without header line
+#	Output:
+#		text file without header line
+
+#
+#	Pipe parameters
+#
+
+selectSnps:cmd_isTransform	1
+selectSnps:cmd_isSummary	0
+
+selectSnps:separator		' '
+selectSnps:ExtraOptions
+selectSnps:Options			selectSnps:ExtraOptions
+selectSnps:strata			__must_be_specified__
+selectSnps:strata_example	snpList1.txt,snpList2.txt
+
+#
+#	Pipe definition
+#
+
+selectSnps:cmd	csv.pl --selectRowsByFile col1,STRATUM --separator=selectSnps:separator \
+	INPUT --output OUTPUT selectSnps:Options
+

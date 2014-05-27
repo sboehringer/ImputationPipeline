@@ -26,7 +26,7 @@ HELP_TEXT
 
 	extends 'PipelineFileset';
 	has 'header', is => 'ro', isa => 'Int', default => 1;
-	has 'extension', is => 'ro';
+	has 'extensions', is => 'ro';
 
 	sub system { my ($self, $cmd, $logLevel, %opts) = @_;
 		$self->SUPER::system(join("\n", @$cmd), $logLevel,
@@ -37,17 +37,21 @@ HELP_TEXT
 		my $sp = splitPathDict($f->{name});
 		my $outputPath = $self->outputDir. '/'. $sp->{base};
 
-		my @cmds = map {
-			sprintf('tail -n +%d %s%s %s %s',
-				($self->{header}? !!$_ + 1: 1),
-				$self->spec->{files}[$_]{name}, $self->{extension},
-				$_? '>>': '>', $outputPath)
-		} 0..$#{$self->spec->{files}};
-
-		return ({
-			cmd => [@cmds],
-			file => { %$f, name => $self->outputDir.'/'.$sp->{base} }
-		});
+		my @files = map { my $extension = $_;
+			my $output = "$outputPath$extension";
+			my @cmds = map {
+				sprintf('tail -n +%d %s%s %s %s',
+					($self->{header}? !!$_ + 1: 1),
+					$self->spec->{files}[$_]{name}, $extension,
+					$_? '>>': '>', $output)
+			} 0..$#{$self->spec->{files}};
+			my $file = {
+				cmd => [@cmds],
+				file => { %$f, name => $output }
+			};
+			$file
+		} @{$self->extensions};
+		return @files;
 	}
 	no Moose;
 }
@@ -60,7 +64,7 @@ HELP_TEXT
 		'qsub!',
 		# intput options
 		'strata=s',
-		'extension=s',
+		'extension=s', 'extensions=s',
 		# other output options
 		'header!',
 		'filespec!',
@@ -77,10 +81,13 @@ HELP_TEXT
 
 	my @files = @ARGV;
 	Log(Dumper($o));
+	my $extensions = defined($o->{extensions})
+		? [split(/;/, $o->{extensions}]
+		: (defined($o->{extension})? [$o->{extension}]: ['']);
 	foreach my $inp (@files) {
 		my $p = PipelineSummarizer->new(
 			specPath => $inp, %$o, useQsub => $o->{qsub},
-			header => int($o->{header}), extension => $o->{extension}, writefilespec => $o->{filespec}
+			header => int($o->{header}), extensions => $extensions, writefilespec => $o->{filespec}
 		);
 		$p->run();
 	}

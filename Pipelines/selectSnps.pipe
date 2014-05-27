@@ -23,11 +23,13 @@ selectSnps:ExtraOptions
 selectSnps:Options			selectSnps:ExtraOptions
 selectSnps:strata			__must_be_specified__
 selectSnps:strata_example	snpList1.txt,snpList2.txt
+# select from imputed files
+selectSnps:extension		.gens
 
 #
 #	Pipe definition
 #
 
 selectSnps:cmd	csv.pl --selectRowsByFile col1,STRATUM --separator=selectSnps:separator \
-	INPUT --output OUTPUT selectSnps:Options
+	INPUTselectSnps:extension --output OUTPUT selectSnps:Options
 

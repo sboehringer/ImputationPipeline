@@ -17,7 +17,7 @@
 
 GWASsummarize:ExtraOptions
 GWASsummarize:Options	--qsub GWASsummarize:ExtraOptions
-GWASsummarize:cmd		GWASsummarize.pl GWASsummarize:Options GWASsummarize:ExtraOptions --outputDir OUTPUT_DIR INPUTS
+GWASsummarize:cmd		GWASsummarize.pl GWASsummarize:Options --outputDir OUTPUT_DIR INPUTS
 
 #
 #	Pipe definition

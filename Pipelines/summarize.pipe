@@ -34,4 +34,4 @@ SummarizeImputation:ExtraOptions	--no-header --extension .gens
 SummarizeImpute2select:isa			GWASsummarize
 SummarizeImpute2select:ExtraOptions	--no-header --extension ''
 SummarizeImpute2select:cmd		\
-	GWASsummarize.pl --qsub --no-header --extensions ';_info' --outputDir OUTPUT_DIR INPUTS
+	GWASsummarize.pl --qsub --headers ';H' --extensions ';_info' --outputDir OUTPUT_DIR INPUTS

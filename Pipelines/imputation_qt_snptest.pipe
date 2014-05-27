@@ -16,6 +16,7 @@
 @include	qtassoc.pipe
 @include	ccassoc.pipe
 @include	summarize.pipe
+@include	selectSnps.pipe
 
 #
 #	<p> input definition
@@ -48,7 +49,10 @@ G:Convert		InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3c
 G:PipelineTests ( Snptest | GWASsummarize, qtassoc | GWASsummarize )
 
 # imputation only
-G:imputation      G:Convert | GWASimpute | SummarizeImputation
+G:imputation      G:Convert | GWASimpute
+
+# imputation + snp-extraction
+G:imputation      G:Convert | GWASimpute | selectSnps | SummarizeImputation
 
 #
 #	<p> pipeline options

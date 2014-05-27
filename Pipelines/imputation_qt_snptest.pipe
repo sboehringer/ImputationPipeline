@@ -53,6 +53,8 @@ G:imputation      G:Convert | GWASimpute
 
 # imputation + snp-extraction
 G:imputation      G:Convert | GWASimpute | selectSnps | SummarizeImputation
+SummarizeImputation:ExtraOptions	--no-header --extension ''
+	
 
 #
 #	<p> pipeline options

@@ -41,10 +41,14 @@ G:Covariates	cov1,cov2:F
 #	<p> pipeline specification
 #
 
+# imputation + testing
 G:Name			imputation_qt_snptest
 G:imputation_qt_snptest      G:Convert | GWASimpute | G:PipelineTests
 G:Convert		InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3col
 G:PipelineTests ( Snptest | GWASsummarize, qtassoc | GWASsummarize )
+
+# imputation only
+G:imputation      G:Convert | GWASimpute
 
 #
 #	<p> pipeline options

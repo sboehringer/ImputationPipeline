@@ -54,7 +54,7 @@ HELP_TEXT
 
 #main $#ARGV @ARGV %ENV
 #	initLog(2);
-	my $o = { strata => '' };
+	my $o = { strata => '', filespec => 1 };
 	my $result = GetOptionsStandard($o,
 		# System
 		'qsub!',
@@ -63,6 +63,7 @@ HELP_TEXT
 		'extension=s',
 		# other output options
 		'header!',
+		'filespec!',
 		'outputPrefix|outputDir|output|o=s'
 	);
 	if ($o->{help} || !$result) {
@@ -79,7 +80,7 @@ HELP_TEXT
 	foreach my $inp (@files) {
 		my $p = PipelineSummarizer->new(
 			specPath => $inp, %$o, useQsub => $o->{qsub},
-			header => int($o->{header}), extension => $o->{extension}
+			header => int($o->{header}), extension => $o->{extension}, writefilespec => $o->{filespec}
 		);
 		$p->run();
 	}

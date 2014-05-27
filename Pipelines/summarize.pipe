@@ -30,3 +30,9 @@ GWASsummarize:cmd		GWASsummarize.pl GWASsummarize:Options --outputDir OUTPUT_DIR
 
 SummarizeImputation:isa				GWASsummarize
 SummarizeImputation:ExtraOptions	--no-header --extension .gens
+
+SummarizeImpute2select:isa			GWASsummarize
+SummarizeImpute2select:ExtraOptions	--no-header --extension ''
+SummarizeImpute2select:cmd		\
+	GWASsummarize.pl --no-header --extension '' --outputDir OUTPUT_DIR INPUTS ; \
+	GWASsummarize.pl --no-header --extension '_info' --outputDir OUTPUT_DIR INPUTS --nofilespec

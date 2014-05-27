@@ -34,3 +34,14 @@ selectSnps:extension		.gens
 selectSnps:cmd	csv.pl --no-header --selectRowsByFile 1,STRATUM --separator=selectSnps:separator \
 	INPUTselectSnps:extension --output OUTPUT selectSnps:Options
 
+
+#
+#	pipe instances
+#
+
+selectSnpsImpute2:isa	selectSnps
+selectSnpsImpute2:cmd	\
+	csv.pl --no-header --selectRowsByFile 1,STRATUM --separator=selectSnps:separator \
+		INPUT.gens --output OUTPUT selectSnpsImpute2:Options ; \
+	csv.pl --header --selectRowsByFile 1,STRATUM --separator=selectSnps:separator \
+		INPUT.gens_info --output OUTPUT_info selectSnpsImpute2:Options

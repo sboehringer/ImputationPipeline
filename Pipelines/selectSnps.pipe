@@ -30,6 +30,7 @@ selectSnps:extension		.gens
 #	Pipe definition
 #
 
-selectSnps:cmd	csv.pl --selectRowsByFile col1,STRATUM --separator=selectSnps:separator \
+# column 1 contains SNP name for impute2 output files
+selectSnps:cmd	csv.pl --no-header --selectRowsByFile 1,STRATUM --separator=selectSnps:separator \
 	INPUTselectSnps:extension --output OUTPUT selectSnps:Options
 

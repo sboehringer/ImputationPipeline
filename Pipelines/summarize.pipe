@@ -15,8 +15,17 @@
 #	Pipe parameters
 #
 
-GWASsummarize:Options	--qsub
+GWASsummarize:ExtraOptions
+GWASsummarize:Options	--qsub GWASsummarize:ExtraOptions
 
 #
 #	Pipe definition
 #
+
+
+#
+#	Instances
+#
+
+SummarizeImputation:isa				GWASsummarize
+SummarizeImputation:ExtraOptions	--no-header

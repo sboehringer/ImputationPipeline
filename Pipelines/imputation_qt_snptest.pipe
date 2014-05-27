@@ -48,7 +48,7 @@ G:Convert		InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3c
 G:PipelineTests ( Snptest | GWASsummarize, qtassoc | GWASsummarize )
 
 # imputation only
-G:imputation      G:Convert | GWASimpute
+G:imputation      G:Convert | GWASimpute | SummarizeImputation
 
 #
 #	<p> pipeline options

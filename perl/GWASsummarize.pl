@@ -82,7 +82,7 @@ HELP_TEXT
 	my @files = @ARGV;
 	Log(Dumper($o));
 	my $extensions = defined($o->{extensions})
-		? [split(/;/, $o->{extensions}]
+		? [split(/;/, $o->{extensions})]
 		: (defined($o->{extension})? [$o->{extension}]: ['']);
 	foreach my $inp (@files) {
 		my $p = PipelineSummarizer->new(

@@ -25,7 +25,7 @@ HELP_TEXT
 	use TempFileNames;
 
 	extends 'PipelineFileset';
-	has 'header', is => 'ro', isa => 'Int', default => 1;
+	has 'headers', is => 'ro';
 	has 'extensions', is => 'ro';
 
 	sub system { my ($self, $cmd, $logLevel, %opts) = @_;
@@ -37,7 +37,9 @@ HELP_TEXT
 		my $sp = splitPathDict($f->{name});
 		my $outputPath = $self->outputDir. '/'. $sp->{base};
 
-		my @files = map { my $extension = $_;
+		my @files = map {
+			my $extension = $self->extensions->[$_];
+			my $header = $self->headers->[$_];
 			my $output = "$outputPath$extension";
 			my @cmds = map {
 				sprintf('tail -n +%d %s%s %s %s',
@@ -50,7 +52,7 @@ HELP_TEXT
 				file => { %$f, name => $output }
 			};
 			$file
-		} @{$self->extensions};
+		} 0..$#{$self->extensions};
 		return @files;
 	}
 	no Moose;
@@ -66,7 +68,7 @@ HELP_TEXT
 		'strata=s',
 		'extension=s', 'extensions=s',
 		# other output options
-		'header!',
+		'header!', 'headers=s',
 		'filespec!',
 		'outputPrefix|outputDir|output|o=s'
 	);
@@ -84,10 +86,13 @@ HELP_TEXT
 	my $extensions = defined($o->{extensions})
 		? [split(/;/, $o->{extensions})]
 		: (defined($o->{extension})? [$o->{extension}]: ['']);
+	my $headers = defined($o->{headers})
+		? [map { $_ ne '' } split(/;/, $o->{headers})]
+		: (defined($o->{header})? [$o->{header}]: [0]);
 	foreach my $inp (@files) {
 		my $p = PipelineSummarizer->new(
 			specPath => $inp, %$o, useQsub => $o->{qsub},
-			header => int($o->{header}), extensions => $extensions, writefilespec => $o->{filespec}
+			headers => $headers, extensions => $extensions, writefilespec => $o->{filespec}
 		);
 		$p->run();
 	}

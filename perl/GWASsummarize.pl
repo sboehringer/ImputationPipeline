@@ -16,8 +16,8 @@ my $helpText = <<HELP_TEXT;
 	# files do not have header lines
 	GWASsummarize.pl ~/tmp/gwas_test/input.pipe --no-header --qsub --outputDir gwas_05
 	# debug
-	GWASsummarize.pl imputation_01/files.spec --outputDir gwas_05 --doLogOnly --no-qsub --header
-	GWASsummarize.pl imputation_01/files.spec --headers '-+' --extensions ';_info' --outputDir gwas_05 --doLogOnly --no-qsub --header
+	GWASsummarize.pl imputation_01/files.spec --outputDir gwas_05 --doLogOnly --no-qsub --header  --loglevel 5
+	GWASsummarize.pl imputation_01/files.spec --headers '-+' --extensions ';_info' --outputDir gwas_05 --doLogOnly --no-qsub --header --loglevel 5
 
 $TempFileNames::GeneralHelp
 HELP_TEXT
@@ -47,7 +47,7 @@ HELP_TEXT
 			my $output = "$outputPath$extension";
 			my @cmds = map {
 				sprintf('tail -n +%d %s%s %s %s',
-					($self->{header}? !!$_ + 1: 1),
+					($header? !!$_ + 1: 1),
 					$self->spec->{files}[$_]{name}, $extension,
 					$_? '>>': '>', $output)
 			} 0..$#{$self->spec->{files}};
@@ -91,8 +91,12 @@ HELP_TEXT
 		? [split(/;/, $o->{extensions})]
 		: (defined($o->{extension})? [$o->{extension}]: ['']);
 	my $headers = defined($o->{headers})
-		? [map { $_ ne '-' } split(//, $o->{headers})]
+		? [map { int($_ ne '-') } split(//, $o->{headers})]
 		: (defined($o->{header})? [$o->{header}]: [0]);
+
+	Log('Extensions: '. join(':', @$extensions), 5);
+	Log('Headers: '. join(':', @$headers), 5);
+
 	foreach my $inp (@files) {
 		my $p = PipelineSummarizer->new(
 			specPath => $inp, %$o, useQsub => $o->{qsub},

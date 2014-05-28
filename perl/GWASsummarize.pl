@@ -7,6 +7,9 @@ use Data::Dumper;
 
 my $helpText = <<HELP_TEXT;
 	Options:
+	--header=s	do files have headers
+	--extensions=s	ext1;ext2;...: extensions of files to summarize
+	--headers=s	[+-]+: indicate files for which extensions do have headers
 
 	Example:
 	GWASsummarize.pl ~/tmp/gwas_test/input.pipe --qsub --outputDir gwas_05
@@ -14,6 +17,7 @@ my $helpText = <<HELP_TEXT;
 	GWASsummarize.pl ~/tmp/gwas_test/input.pipe --no-header --qsub --outputDir gwas_05
 	# debug
 	GWASsummarize.pl imputation_01/files.spec --outputDir gwas_05 --doLogOnly --no-qsub --header
+	GWASsummarize.pl imputation_01/files.spec --headers '-+' --extensions ';_info' --outputDir gwas_05 --doLogOnly --no-qsub --header
 
 $TempFileNames::GeneralHelp
 HELP_TEXT
@@ -87,7 +91,7 @@ HELP_TEXT
 		? [split(/;/, $o->{extensions})]
 		: (defined($o->{extension})? [$o->{extension}]: ['']);
 	my $headers = defined($o->{headers})
-		? [map { $_ ne '' } split(/;/, $o->{headers})]
+		? [map { $_ ne '-' } split(//, $o->{headers})]
 		: (defined($o->{header})? [$o->{header}]: [0]);
 	foreach my $inp (@files) {
 		my $p = PipelineSummarizer->new(

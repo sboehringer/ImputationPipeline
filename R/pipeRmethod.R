@@ -23,6 +23,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 
 	# <p> merge by 'id' and 'iid' or 'iid' alone
 	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
+	Logs('pipeRmethod: merging by: %{by}s' join(by, ', '), logLevel = 4);
 	peddata = Merge(vars, ped, sort = F, all.y = T, by = by);
 
 	# <p> read genotypes <A> expect impute format

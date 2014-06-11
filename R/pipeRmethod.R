@@ -29,6 +29,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	# <p> read genotypes <A> expect impute format
 	genotypeFile = sprintf('%s.gens', input);
 	genotypeInfofile = sprintf('%s.gens_info', input);
+	Logs("... Probing [%s] for number of lines.", genotypeInfofile, logLevel = 2);
 	N = length(readLines(genotypeInfofile)) - 1;
 	if (!file.exists(genotypeFile)) {
 		Log(sprintf("Input file '%s' does not exist", genotypeFile), 2);

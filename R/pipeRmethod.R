@@ -29,7 +29,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	# <p> read genotypes <A> expect impute format
 	genotypeFile = sprintf('%s.gens', input);
 	genotypeInfofile = sprintf('%s.gens_info', input);
-	Logs("... Probing [%s] for number of lines.", genotypeInfofile, logLevel = 2);
+	Logs("... Probing [%{genotypeInfofile}s] for number of lines.", logLevel = 2);
 	N = length(readLines(genotypeInfofile)) - 1;
 	if (!file.exists(genotypeFile)) {
 		Log(sprintf("Input file '%s' does not exist", genotypeFile), 2);
@@ -65,7 +65,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		#snpname = gens[i,2];
 		colnames(genoarray) = paste('MARKER', c("AA", "AB", "BB"), sep = "_");
 		dosage = genoarray %*% 0:2;
-		dataGts = data.frame(ped[, by], genoarray, MARKER_dosage = dosage);
+		dataGts = data.frame(ped[, by, drop = F], genoarray, MARKER_dosage = dosage);
 
 		# <p> merge to produce output
 		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);

@@ -65,7 +65,9 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		#snpname = gens[i,2];
 		colnames(genoarray) = paste('MARKER', c("AA", "AB", "BB"), sep = "_");
 		dosage = genoarray %*% 0:2;
-		dataGts = data.frame(ped[, by, drop = F], genoarray, MARKER_dosage = dosage);
+		#dataGts = data.frame(ped[, by, drop = F], genoarray, MARKER_dosage = dosage);
+		# <N> merge full ped data frame as sex might be referred to (as well as fid)
+		dataGts = data.frame(ped, genoarray, MARKER_dosage = dosage);
 
 		# <p> merge to produce output
 		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);

@@ -8,7 +8,7 @@
 # queue used on the batch queueing system
 ENV:QSUB_QUEUE	all.q
 ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
-ENV:RSCRIPTS			$RSCRIPTS:$HOME/src/pipeline/R:$HOME/src/Rprivate:$HOME/src/Rscripts
+ENV:RSCRIPTS			$RSCRIPTS:$HOME/src/pipeline_development/R:$HOME/src/Rprivate:$HOME/src/Rscripts
 ENV:RINCLUDES			RgenericAll.R
 
 #

@@ -1,0 +1,14 @@
+#
+#	How to set up your development environment
+#
+
+- Checkout development branch into ~/src/pipeline_development
+- populate Rscripts/Rprivate/scripts/privatePerl in ~/src
+- modify .bashrc adding
+cat >> ~/.bashrc <<DEV_CONFIG
+export HOST_PIPELINE=${HOST}_development
+. /usr/local/MedStat/profiles/medstat_development
+DEV_CONFIG
+
+-  ~/src/pipeline_development/Pipelines/defaults_$HOST_development contains definitions for development environment. <!> cave: these definitions assume the folder layout above
+

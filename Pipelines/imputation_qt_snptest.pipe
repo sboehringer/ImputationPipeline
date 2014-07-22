@@ -52,7 +52,7 @@ G:PipelineTests ( Snptest | GWASsummarize, qtassoc | GWASsummarize )
 G:imputation      G:Convert | GWASimpute
 
 # imputation + snp-extraction
-G:imputation      G:Convert | GWASimpute | selectSnpsImpute2 | SummarizeImpute2select
+G:imputation_sel  G:Convert | GWASimpute | selectSnpsImpute2 | SummarizeImpute2select
 	
 
 #

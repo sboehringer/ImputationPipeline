@@ -17,6 +17,10 @@
 @include	ccassoc.pipe
 @include	summarize.pipe
 @include	selectSnps.pipe
+@include	copy.pipe
+@include	applyR.pipe
+@include	filterResults.pipe
+@include	gwas_report.pipe
 
 #
 #	<p> input definition

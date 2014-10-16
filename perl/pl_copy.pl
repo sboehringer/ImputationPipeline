@@ -41,7 +41,7 @@ sub copyFiles { my ($c, @files) = @_;
 	# <p> all input locations
 	push(@files, grep {$_ ne '' } split(/\n/, readFile($c->{inputs}))) if (defined($c->{inputs}));
 	# <p> make sure that inputs have resolved symlink, ie. they contain the run-folder component
-	@files = map {
+	@files = map sub {
 		my $sp = splitPathDict($_);
 		return $_ if (! -l $sp->{dir});
 		my $l = readlink($sp->{dir});

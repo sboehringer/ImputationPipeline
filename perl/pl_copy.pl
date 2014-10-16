@@ -42,10 +42,10 @@ sub copyFiles { my ($c, @files) = @_;
 	push(@files, grep {$_ ne '' } split(/\n/, readFile($c->{inputs}))) if (defined($c->{inputs}));
 	# <p> make sure that inputs have resolved symlink, ie. they contain the run-folder component
 	@files = map {
-		my $sp = splitPathName($_);
+		my $sp = splitPathDict($_);
 		return $_ if (! -l $sp->{dir});
 		my $l = readlink($sp->{dir});
-		return $l if (!splitPathName($l)->{isRelative});
+		return $l if (!splitPathDict($l)->{isRelative});
 		return join('/', splice($sp->{dirComponents}, 0, -1), $l, $sp->{file});
 	} @files;
 

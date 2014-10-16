@@ -32,11 +32,22 @@ $main::helpText = <<'HELP_TEXT'.$TempFileNames::GeneralHelp;
 
 HELP_TEXT
 
+sub resolveLink { my ($path) = @_;
+}
+
 sub copyFiles { my ($c, @files) = @_;
 	# <p> initialization
 	my $outputDir = $c->{outputDir};
 	# <p> all input locations
 	push(@files, grep {$_ ne '' } split(/\n/, readFile($c->{inputs}))) if (defined($c->{inputs}));
+	# <p> make sure that inputs have resolved symlink, ie. they contain the run-folder component
+	@files = map {
+		my $sp = splitPathName($_);
+		return $_ if (! -l $sp->{dir});
+		my $l = readlink($sp->{dir});
+		return $l if (!splitPathName($l)->{isRelative});
+		return join('/', splice($sp->{dirComponents}, 0, -1), $l, $sp->{file});
+	} @files;
 
 	# <p> aggregate all files
 	#my $spec0 = propertyFromString(readFile($files[0]));
@@ -46,16 +57,18 @@ sub copyFiles { my ($c, @files) = @_;
 		my @sp = map {
 			my %f = %{$_};
 			my $sp = splitPathDict($f{name});
-			# <A> components of file.spec and name path overlap by conention by one dir component
+			# <A> components of file.spec and name path overlap by conention by two dir components
+			#	run-folder, pipeline stage
 			my $r = { %f,
 				name =>  $sp->{isRelative}
-					? join('/', splice(splitPathDict($files[$i])->{dirComponents}, 0, -1)). "/$f{name}"
+					? join('/', splice(splitPathDict($files[$i])->{dirComponents}, 0, -2)). "/$f{name}"
 					: $f{name}
 			};
 			$r
 		} @{$specs[$i]->{files}};
 		@sp;
-	} 0..$#specs;	my @jids = map { @{$_->{jids}} } @specs;	# propagate dependencies
+	} 0..$#specs;
+	my @jids = map { @{$_->{jids}} } @specs;	# propagate dependencies
 	# <N><i> check for uniform file type -> change to generic if not the case
 
 	# <p> relocate

@@ -22,6 +22,15 @@ Copy:Options
 #
 Copy:cmd	pl_copy.pl Copy:Options -o OUTPUT_DIR INPUTS
 
+#
+#	Example
+#
+
+#G:Name				Pipeline_sel
+#G:Pipeline_sel		Copy | G:PipelineTests
+#G:Input			/data/mydir/R_06/imputation_04
+#Copy:Options		--absolute-pathes
+
 
 
 #	Pipe name:

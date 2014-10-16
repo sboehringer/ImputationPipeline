@@ -1,0 +1,20 @@
+#
+#	Dependencies of components of the pipeline framework
+#
+
+#
+# gwasReport
+#
+
+- lualatex
+- fontspec.sty
+
+export REMOTE_HOST=shark
+ssh $REMOTE_HOST 'mkdir --parents texmf/tex/latex texmf/tex/xelatex'
+( cd /usr/share/texmf/tex/latex ; scp -r \
+	fontspec xcolor l3kernel l3packages tipa \
+	$REMOTE_HOST:texmf/tex/latex )
+( cd /usr/share/texmf/tex/xelatex ; scp -r \
+	xunicode \
+	$REMOTE_HOST:texmf/tex/xelatex )
+ssh $REMOTE_HOST 'texconfig rehash ; texhash texmf'

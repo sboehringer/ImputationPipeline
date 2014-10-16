@@ -39,9 +39,11 @@ selectSnps:cmd	csv.pl --no-header --selectRowsByFile 1,STRATUM --separator=selec
 #	pipe instances
 #
 
-selectSnpsImpute2:isa	selectSnps
+selectSnpsImpute2:isa				selectSnps
+selectSnpsImpute2:strata			__must_be_specified__
+selectSnpsImpute2:strata_example	snpList1.txt,snpList2.txt
 selectSnpsImpute2:cmd	\
-	csv.pl --no-header --selectRowsByFile 1,STRATUM --separator=selectSnps:separator \
+	csv.pl --no-header --selectRowsByFile 1,STRATUM --separator=selectSnpsImpute2:separator \
 		INPUT.gens --output OUTPUT selectSnpsImpute2:Options ; \
-	csv.pl --header --selectRowsByFile 1,STRATUM --separator=selectSnps:separator \
+	csv.pl --header --selectRowsByFile 1,STRATUM --separator=selectSnpsImpute2:separator \
 		INPUT.gens_info --output OUTPUT_info selectSnpsImpute2:Options

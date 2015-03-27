@@ -32,12 +32,12 @@ def runCsv2(input,hapmap,outputdir,jids,logonly,chrX,chromosome):
     if referencedir!=None:
         if chrX:
             referencepanel=referencedir+'/'+referencemarkers_chrX
-            qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft=idRs --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
+            qsubcsv2="qsub.pl --memory 8G "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft=idRs --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
         else:
             referencepanel=referencedir+"/chr"+chromosome+referencemarkers_chr
             if not (os.access(referencepanel,os.F_OK)):
             	referencepanel=referencedir+'/'+referencemarkers
-            qsubcsv2="qsub.pl "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft=idRs,chr --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
+            qsubcsv2="qsub.pl --memory 8G "+wait+" --jid "+jidfile+" -- csv2.pl --no-outputHeader --sepo T --o "+outputdir+"/"+outfile+".map -- [sep=S,header=T]:"+referencepanel+" [sep=T,header=F]:"+input+".map --op setHeader=chr,idRs,map,pos0 --op joinOuterLeft=idRs,chr --op expr='TTOP$pos[is.na(TTOP$pos)] = TTOP$pos0[is.na(TTOP$pos)]' --op project=chr,idRs,map,pos"
     else:
         sys.exit("Non-existing reference panel version:"+hapmap+"\n")
     if  not logonly:

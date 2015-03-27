@@ -7,14 +7,16 @@ use TempFileNames;
 use Set;
 use Statistics::R;
 use Data::Dumper;
+use IO::File;
 
 # default options
 $main::d = { };
 # options
 $main::o = [
 	'+createSnptestPhenotypeFile=s', '+createXXAssocPhenotypeFile=s', '+createImputeXSexFile=s',
+	'+iid2unique',
 	'pedFile=s', 'phenotypeFile=s', 'phenotypes=s', 'covariates=s',
-	'variableFile|varFile=s', 'headerMap=s'
+	'variableFile|varFile=s', 'headerMap=s', 'output=s'
 ];
 $main::usage = '';
 $main::helpText = <<HELP_TEXT.$TempFileNames::GeneralHelp;
@@ -27,6 +29,8 @@ $main::helpText = <<HELP_TEXT.$TempFileNames::GeneralHelp;
 
 	pedfile.pl --createImputeXSexFile sex.sample \
 		--pedFile imputation_00/pedfile
+	# make sure iid field contains unique values
+	pedfile.pl --iid2unique --pedFile imputation_00/pedfile --output pedfile-new
 HELP_TEXT
 
 sub dictFromString { my ($str) = @_;
@@ -44,10 +48,26 @@ sub typedList { my ($str, $defaultType) = @_;
 	return @vars;
 }
 
+# first two columns: fid, iid
+# concatenate values
+sub doIid2unique { my ($c) = @_;
+	my $ped = new IO::File;
+	my $o = new IO::File;
+	die "could not open $c->{pedFile}" if (!$ped->open("< $c->{pedFile}"));
+	die "could not open $c->{output}" if (!$o->open("> $c->{output}"));
+	while (my $l = <$ped>) {
+		my @els = split(/ /, $l);
+		$els[1] = $els[0].$els[1];
+		print $o join(' ', @els). "\n";
+    }
+    $o->close();
+    $ped->close();
+}
+
 # covariate types
-%main::covTypeMap = ( 'C' => 'C', 'F' => 'D' );
+my %covTypeMap = ( 'C' => 'C', 'F' => 'D' );
 # response types
-%main::resTypeMap = ( 'Q' => 'P', 'B' => 'B' );
+my %resTypeMap = ( 'Q' => 'P', 'B' => 'B' );
 sub doCreateSnptestPhenotypeFile { my ($c, @files) = @_;
 	# <p> create 'sample file' header
 	my @covariates = typedList($c->{covariates}, 'C');
@@ -57,8 +77,8 @@ sub doCreateSnptestPhenotypeFile { my ($c, @files) = @_;
 	my @cols = ('ID_1', 'ID_2', 'missing',
 		(map { $_->{name} } @covariates), (map { $_->{name} } @phenotypes));
 	my @types = (('0') x 3,
-		(map { $main::covTypeMap{$_->{type}} } @covariates),
-		(map { $main::resTypeMap{$_->{type}} } @phenotypes));
+		(map { $covTypeMap{$_->{type}} } @covariates),
+		(map { $resTypeMap{$_->{type}} } @phenotypes));
 	Log(join(' ', @cols));
 	Log(join(' ', @types));
 	# <p> write header

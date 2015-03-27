@@ -4,5 +4,11 @@
 
 #	prephasing methods for ensuing imputation
 
+# shapeit needs unique iids
+#pedfile.pl --iid2unique --pedFile LLS_Offspring_Partnerschr21_chr21.ped --output chr21.ped
+#cd ~/tmp/pipeline/shapeit ; shapeit --input-ped LLS_Offspring_Partnerschr21_chr21 -M ~/tmp/pipeline/hapmap2/genetic_map_CEU_chr21.txt -O LLS_Offspring_Partnerschr21_chr21
 
-shapeit:
+shapeit:cmd_isTransform	1
+shapeit:cmd	\
+	shapeit -M ENV:G:referencePanel_map_total --input-ped INPUT -O OUTPUT
+shapeit:outputExtension	phased

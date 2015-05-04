@@ -57,6 +57,7 @@ G:referencePanel	hapmap2
 #
 
 # general definition
+Prephased:Convert				InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3col
 Prephased:imputationPrephased	G:Convert | Prephased:impute
 Prephased:impute				( Prephased:Prephaser, Copy ) | GWASimpute:prephased
 Prephased:Prephaser				__must_be_specified__
@@ -72,4 +73,7 @@ PrephasedImpute:Prephaser	GWASimpute:prephasing
 # use with
 #G:Name							PrephasedShapeit:imputationPrephased
 PrephasedShapeit:isa			Prephased
+PrephasedShapeit:Convert		InputPlink | MapReplace
+Prephased:impute				( Prephased:Prephaser, GWASconvertBatch:tped | GWASconvertBatch:3col ) \
+								| GWASimpute:prephased
 PrephasedShapeit:Prephaser		Shapeit

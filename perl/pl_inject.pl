@@ -44,8 +44,8 @@ HELP_TEXT
 sub injectFilesFromDir { my ($c, $dir) = @_;
 	# <p> grep
 	my @files = grep { $_ =~ m{$c->{pattern}} } sort { $a cmp $b } dirList($dir);
-	@files = map { "$dir/$_" } @files if ($c->{'absolute-pathes'});
 	@files =  map { $_ =~ m{$c->{pattern}}; $& } @files if ($c->{'grep-match'});
+	@files = map { "$dir/$_" } @files if ($c->{'absolute-pathes'});
 	@files =  unique(@files) if ($c->{unique});
 
 	# <p> make spec

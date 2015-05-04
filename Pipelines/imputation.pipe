@@ -1,0 +1,75 @@
+# pipeline spec
+#	run jobs seperated by '|' sequentially and
+#	jobs separated by ',' concurrently
+#	group jobs by parentheses '(', ..., ')'
+
+#
+#	<p> include pipe definitions
+#
+
+@include	defaults_ENV:HOST
+#@include	input.pipe
+@include	inject.pipe
+@include	conversion.pipe
+@include	impute.pipe
+@include	summarize.pipe
+@include	selectSnps.pipe
+@include	copy.pipe
+@include	prephasing.pipe
+
+#
+#	<p> input definition
+#
+#Set these input options in your own specification file
+
+G:PipeInput				__must_be_specified__
+# prefix of plink file
+G:PipeInput_example		LLS_Offspring_Partnerschr21
+
+#
+#	<p> pipeline specification
+#
+
+# imputation + testing
+G:Name			imputation
+G:imputation	G:Convert | GWASimpute
+G:Convert		InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3col
+
+# imputation + snp-extraction
+G:imputation_sel  G:Convert | GWASimpute | selectSnpsImpute2 | SummarizeImpute2select
+	
+
+#
+#	<p> pipeline options
+#
+
+# directory prefix
+G:prefix		imputation
+
+#
+#	general pipe options
+#
+# referencePanel: hapmap2|hapmap3
+G:referencePanel	hapmap2
+
+#
+#	<p> prephased imputation
+#
+
+# general definition
+Prephased:imputationPrephased	G:Convert | Prephased:impute
+Prephased:impute				( Prephased:Prephaser, Copy ) | GWASimpute:prephased
+Prephased:Prephaser				__must_be_specified__
+Prephased:Prephaser_example		GWASimpute:prephasing
+
+# use impute for prephasing
+# use with
+#G:Name						PrephasedImpute:imputationPrephased
+PrephasedImpute:isa			Prephased
+PrephasedImpute:Prephaser	GWASimpute:prephasing
+
+# use Shapeit for prephasing
+# use with
+#G:Name							PrephasedShapeit:imputationPrephased
+PrephasedShapeit:isa			Prephased
+PrephasedShapeit:Prephaser		Shapeit

@@ -21,7 +21,8 @@ Inject:InputAsIs	1
 Inject:Meta			''
 Inject:FileType		'generic'
 Inject:Options		--pattern Inject:Pattern --meta Inject:Meta \
-					--grep-match --absolute-pathes --fileType Inject:FileType
+					--grep-match --absolute-pathes --fileType Inject:FileType Inject:ExtraOptions
+Inject:ExtraOptions
 
 #
 #	Pipe instances

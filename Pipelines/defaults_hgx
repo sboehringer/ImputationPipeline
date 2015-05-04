@@ -20,6 +20,7 @@ ENV:hapmap2_genotypes		genotypes_chrNUMBER_CHR_CEU_r21_nr_fwd_phased_all_by_snp_
 ENV:hapmap2_legend			genotypes_chrNUMBER_CHR_CEU_r21_nr_fwd_legend_all_no_mono
 # genetic map
 ENV:hapmap2_map				genetic_map_CEU_chrNUMBER_CHR.txt
+ENV:hapmap2_mapMeta			genetic_map_CEU_chrMETA:chromosome.txt
 
 ENV:referencepanel_hapmap2	/home/pingu/tmp/pipeline/hapmap2
 ENV:referencepanel_hapmap3	/home/pingu/tmp/pipeline/hapmap3

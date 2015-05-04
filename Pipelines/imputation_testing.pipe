@@ -8,7 +8,7 @@
 #
 
 @include	defaults_ENV:HOST
-@include	input.pipe
+#@include	input.pipe
 @include	inject.pipe
 @include	conversion.pipe
 @include	impute.pipe
@@ -16,6 +16,7 @@
 @include	qtassoc.pipe
 @include	ccassoc.pipe
 @include	summarize.pipe
+@include	prephasing.pipe
 
 #
 #	<p> input definition

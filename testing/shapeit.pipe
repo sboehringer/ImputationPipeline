@@ -1,0 +1,30 @@
+#
+#	shapeit.pipe
+#Wed Apr 29 17:45:31 CEST 2015
+
+#
+# tests shapeit by running prephasing on a one-chromosome test-set
+#
+
+@include	imputation.pipe
+
+#
+#	<p> pipeline definition
+#
+
+# expect data set in parallel folder
+G:Name				testShapeit
+G:Input				../shapeit
+G:referencePanel	hapmap2b22
+G:testShapeit		Inject | PrephasedShapeit:impute
+G:referencePanel	hapmap2
+
+#
+#	<p> Options
+#
+
+# inject files
+Inject:Pattern		"chr(\\d+)"
+Inject:Meta			'chromosome = $1;'
+Inject:FileType		'ped'
+Inject:ExtraOptions	--absolute-pathes

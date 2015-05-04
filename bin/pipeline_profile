@@ -1,5 +1,6 @@
 #!/bin/sh
 
+export PIPELINEBASE=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/../
 export HOST=`hostname`
 export HOSTSUFFIX=`echo $PIPELINEBASE | perl -ne "@a = ((m{(_.*)})); print @a"`
 export HOST_PIPELINE="$HOST$HOSTSUFFIX"

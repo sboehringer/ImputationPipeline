@@ -6,7 +6,8 @@
 
 @include	imputation.pipe
 
-G:Name					PrephasedShapeit:imputationPrephased
+G:Name					Shapeit
+G:Shapeit				PrephasedShapeit:imputationPrephased
 G:PipeInput				__must_be_specified__
 # prefix of binary plink file
 G:PipeInput_example		Prefix_binary_plink_file

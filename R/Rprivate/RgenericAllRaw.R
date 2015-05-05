@@ -1245,6 +1245,17 @@ vector.embed = function(v, idcs, e, idcsResult = T) {
 	r[idcs] = e;
 	r
 }
+# set values at idcs
+vector.assign = function(v, idcs, e) {
+	v[idcs] = e;
+	v
+}
+matrix.assign = function(m, idcs, e, byrow = T) {
+	if (byrow)
+		m[idcs, ] = e else
+		m[, idcs] = e
+	m
+}
 
 vectorIdcs = function(v, f, ..., not = F) {
 	r = sapply(v, f, ...);
@@ -1427,7 +1438,7 @@ data.frame.types = function(df, numeric = c(), character = c(), factor = c(), in
 # as of 13.11.2014 <!>: sapply -> simplify_
 #' Create data frames with more options than \code{data.frame}
 Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
-	as_numeric = NULL, as_character = NULL, as_factor = NULL,
+	as_numeric = NULL, as_character = NULL, as_factor = NULL, as_integer = NULL,
 	row.names = NA, valueMap = NULL, Df_as_is = TRUE, simplify_ = FALSE,
 	deep_simplify_ = FALSE, t_ = FALSE, unlist_cols = F, transf_log = NULL, transf_m1 = NULL) {
 	#r = as.data.frame(df0);
@@ -1451,6 +1462,10 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	if (!is.null(as_numeric)) {
 		dfn = apply(r[, as_numeric, drop = F], 2, function(col)as.numeric(avu(col)));
 		r[, as_numeric] = dfn;
+	}
+	if (!is.null(as_integer)) {
+		dfn = apply(r[, as_integer, drop = F], 2, function(col)as.integer(avu(col)));
+		r[, as_integer] = dfn;
 	}
 	if (!is.null(as_character)) {
 		dfn = apply(r[, as_character, drop = F], 2, function(col)as.character(avu(col)));
@@ -1911,6 +1926,27 @@ iterateModels_raw = function(modelList, models, f = function(...)list(...), ...,
 	r
 }
 
+# <i> refactor iterateModels to use iterateModels_prepare
+iterateModels_prepare = function(modelList, .constraint = NULL,
+	callWithList = F, restrictArgs = T, selectIdcs = NULL, .first.constant = T) {
+	modelSize = lapply(modelList, function(m)1:length(m));
+	models = merge.multi.list(modelSize, .first.constant = .first.constant);
+
+	# <p> handle constraints
+	selC = if (is.null(.constraint)) T else
+		unlist(iterateModels_raw(modelList, models, f = .constraint,
+			lapply__ = lapply, callWithList = callWithList, restrictArgs = restrictArgs, ...));
+	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
+	#	apply constraints
+	models = models[selC & selI, , drop = F];
+	r = list(
+		modelsRaw = models,
+		selection = selC & selI,
+		models = models
+	);
+	r
+}
+
 iterateModels = function(modelList, f = function(...)list(...), ...,
 	.constraint = NULL, .clRunLocal = T, .resultsOnly = F, .unlist = 0,
 	lapply__ = Lapply, callWithList = F, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
@@ -1950,6 +1986,7 @@ iterateModelsExpand = function(modelList, .constraint = NULL) {
 	);
 	r
 }
+
 
 # reverse effect of .retern.lists = T
 #	list.to.df(merge.multi.list(..., .return.lists = T)) === merge.multi.list(..., .return.lists = F)

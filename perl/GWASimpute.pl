@@ -12,6 +12,8 @@ use PropertyList;
 $helpText = <<HELP_TEXT;
 	Options:
 	--cmdtemplate impute|prephase|impute_prephased|chrX|chrX_prephase|chrX_impute_prephased
+	# is prephasing done per chromosome or per chunk
+	--prephasing-per-chromosome
 
 $TempFileNames::GeneralHelp
 HELP_TEXT
@@ -47,6 +49,13 @@ my $IMPUTATION_CMD_PREPHASE_CHRX =
 my $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE_CHRX =
 'impute22 IMPUTE_CMDLINE -pgs_miss -chrX -h HAP_FILE -l LEGEND_FILE -m MAP_FILE -g GENOTYPE_FILE -o OUTPUT_DIR/OUTPUT_FILE -sample_g OUTPUT_DIR/sex.sample -Ne NUMBER_NE -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN -align_by_maf_g -int NUMBER_START NUMBER_STOP -stage_two -hap_samp_dir PREPHASED_DIR';
 
+my $IMPUTATION_CMD_IMPUTE_SHAPEIT = 'impute22'
+.' -use_prephased_g -known_haps_g PREPHASED_DIR/PREPHASED_FILE.haps'
+.' -h HAP_FILE -l LEGEND_FILE -m MAP_FILE'
+.' -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN'
+.' -align_by_maf_g -int NUMBER_START NUMBER_STOP'
+.' -o OUTPUT_DIR/OUTPUT_FILE';
+
 my %cmdTemplates21 = (
 	'impute' => $IMPUTATION_CMD21,
 	'prephase' => $IMPUTATION_CMD_PREPHASE21,
@@ -58,7 +67,8 @@ my %cmdTemplates = (
 	'impute_prephased' => $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE22,
 	'chrX' => $IMPUTATION_CMD_CHRX,
 	'chrX_prephase' => $IMPUTATION_CMD_PREPHASE_CHRX,
-	'chrX_impute_prephased' => $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE_CHRX
+	'chrX_impute_prephased' => $IMPUTATION_CMD_IMPUTE_FROM_PREPHASE_CHRX,
+	'impute_shapeit' => $IMPUTATION_CMD_IMPUTE_SHAPEIT
 );
 
 
@@ -187,21 +197,28 @@ sub createImputationBatch { my ($i, $o) = @_;
 			OUTPUT_DIR => $o->{output},
 			OUTPUT_FILE => "$sp->{base}_imputed-NUMBER_CHUNK.gens",
 			HAPMAP_DIR => firstDef($o->{referencePanelDir}, $refFiles->{REFDIR}),
-			NUMBER_CHR => $f->{chromosome}
+			NUMBER_CHR => $f->{chromosome},
+			PREPHASED_DIR => splitPathDict($o->{'prephased-files'})->{dir}
 		);
+		my $prephased = $o->{'prephasing-per-chromosome'}
+			? splitPathDict(defined($prp)? $prp->{files}[$_]{name}: ''): undef;
 #		Log($cmd);
 		my @cmds = map {
 			my $chunk = $_;
-			my $prephased = splitPathDict(defined($prp)? $prp->{files}[$prpI++]{name}: '');
+			# prephasing was done per chunk
+			$prephased = splitPathDict(defined($prp)? $prp->{files}[$prpI++]{name}: '')
+				if (!$o->{'prephasing-per-chromosome'});
 			my $cmd = mergeDictToString({%pars,
 				NUMBER_START => ($chunk - 1) * $chunkSize + 1,
 				NUMBER_STOP => $chunk * $chunkSize,	NUMBER_CHUNK => $chunk,
-				PREPHASED_DIR => $prephased->{dir}, PREPHASED_FILE => $prephased->{path}
+				PREPHASED_FILE => $prephased->{path}
 				}, $pars{CMD}, {iterate => 'yes'});
 			{
 				cmd => $cmd,
 				file => { %$f,
 					name => "$o->{output}/$sp->{base}_imputed-$chunk",
+					chunkNo => $chunk,
+					chunkSize => $chunkSize,
 					orig => $f->{name}
 				}
 			}
@@ -248,7 +265,9 @@ sub imputeFiles { my ($i, $o) = @_;
 		'referencePanel=s',
 		# imputation arguments
 		'imputeParameters=s',
-		'chunkSize=s'
+		'chunkSize=s',
+
+		'prephasing-per-chromosome'
 	);
 	if ($o->{help} || !$result) {
 		printf("USAGE: %s [--referencePanel hapmap2b21|hapmap2b22|hapmap3] [--output|o outputDir] input.spec\n"

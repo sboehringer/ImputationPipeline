@@ -38,6 +38,7 @@ GWASimpute:CmdOptions		-allow_large_regions
 #
 #	Pipe definition
 #
+GWASimpute:cmd		GWASimpute.pl GWASimpute:Options INPUTS
 GWASimpute:Options	--qsub --referencePanel GWASimpute:referencePanel --chunkSize GWASimpute:chunkSize \
 					--imputeParameters \
 					'NUMBER_NE=GWASimpute:NE;NUMBER_BUFFER=GWASimpute:BUFFER;NUMBER_K=GWASimpute:K;\
@@ -50,7 +51,7 @@ GWASimpute:ExtraOptions
 #	Pipe definition: prephasing
 #
 
-prephasing:isa	GWASimpute
+prephasing:isa			GWASimpute
 prephasing:ExtraOptions	--cmdtemplate=prephase
 
 #
@@ -60,6 +61,13 @@ prephasing:ExtraOptions	--cmdtemplate=prephase
 prephased:isa				GWASimpute
 prephased:ExtraOptions		--cmdtemplate=impute_prephased
 prephased:InputAsOptions	--prephased-files,--genotypes
+
+#
+#	prephased:shapeit
+#
+
+prephasedShapeit:isa			prephased
+prephasedShapeit:ExtraOptions	--cmdtemplate=impute_shapeit --prephasing-per-chromosome
 
 #
 #	Pipe definition: chrX

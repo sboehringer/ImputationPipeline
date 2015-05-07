@@ -1,6 +1,0 @@
-Using the pipeline.
-Add the following lines to your ~/.bashrc
-
-export PIPELINEBASE=path_to_pipeline_folder
-. $PIPELINEBASE/bin/pipeline_profile
-

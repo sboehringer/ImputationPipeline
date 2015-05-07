@@ -38,7 +38,7 @@ GWASimpute:CmdOptions		-allow_large_regions
 #
 #	Pipe definition
 #
-GWASimpute:cmd		GWASimpute.pl GWASimpute:Options INPUTS
+GWASimpute:cmd		GWASimpute.pl GWASimpute:Options INPUTS --o OUTPUT_DIR
 GWASimpute:Options	--qsub --referencePanel GWASimpute:referencePanel --chunkSize GWASimpute:chunkSize \
 					--imputeParameters \
 					'NUMBER_NE=GWASimpute:NE;NUMBER_BUFFER=GWASimpute:BUFFER;NUMBER_K=GWASimpute:K;\

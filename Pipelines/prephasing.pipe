@@ -13,5 +13,5 @@ Shapeit:ENV_ADD_QSUB_OPTIONS	--Ncpu Shapeit:Nthreads
 Shapeit:cmd_isTransform	1
 Shapeit:cmd	\
 	shapeit --input-ped INPUT.ped INPUT.map --input-map ENV:referencepanel_G:referencePanel/ENV:G:referencePanel_mapMeta -O OUTPUT \
-	--threads Shapeit:Nthreads
+	--thread Shapeit:Nthreads
 Shapeit:outputExtension	phased

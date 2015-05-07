@@ -11,7 +11,7 @@ This is an internal project developed at Medical Statistics and Bioinformatics (
  * Quinta Helmer
  * Joris Deelen
  * Ramin Monajemi
- * Mathijs Moed
+ * Matthijs Moed
 
 Using the pipeline
 --------------------

@@ -8,7 +8,10 @@
 #pedfile.pl --iid2unique --pedFile LLS_Offspring_Partnerschr21_chr21.ped --output chr21.ped
 #cd ~/tmp/pipeline/shapeit ; shapeit --input-ped LLS_Offspring_Partnerschr21_chr21 -M ~/tmp/pipeline/hapmap2/genetic_map_CEU_chr21.txt -O LLS_Offspring_Partnerschr21_chr21
 
+Shapeit:Nthreads				4
+Shapeit:ENV_ADD_QSUB_OPTIONS	--Ncpu Shapeit:Nthreads
 Shapeit:cmd_isTransform	1
 Shapeit:cmd	\
-	shapeit --input-ped INPUT.ped INPUT.map --input-map ENV:referencepanel_G:referencePanel/ENV:G:referencePanel_mapMeta -O OUTPUT
+	shapeit --input-ped INPUT.ped INPUT.map --input-map ENV:referencepanel_G:referencePanel/ENV:G:referencePanel_mapMeta -O OUTPUT \
+	--threads Shapeit:Nthreads
 Shapeit:outputExtension	phased

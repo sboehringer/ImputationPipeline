@@ -16,16 +16,24 @@ This is an internal project developed at Medical Statistics and Bioinformatics (
 Using the pipeline
 --------------------
 
+Log into shark.
+```
+git clone https://git.lumc.nl/s.boehringer/ImputationPipeline.git pipeline
+```
+
 Add the following lines to your ~/.bashrc
 
 ```
-. path_to_pipeline_folder/pipeline_profile
-```
-
-If you clone into your home folder you can add the following to your .bashrc to use the pipeline
-```
 . ~/pipeline/bin/pipeline_profile
 ```
+
+If you clone to a different folder adapt the lines above. After this you can use the pipeline. 
+```
+pipeline.pl --help
+pipeline.pl mypipeline.pipe
+```
+Inspect the templates subfolder for example or get personal help.
+
 
 Getting Help
 --------------------

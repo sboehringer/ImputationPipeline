@@ -21,7 +21,7 @@ Log into shark.
 git clone https://git.lumc.nl/s.boehringer/ImputationPipeline.git pipeline
 ```
 
-Add the following lines to your ~/.bashrc
+Add the following line to your ~/.bashrc and re-login.
 
 ```
 . ~/pipeline/bin/pipeline_profile

@@ -1,1 +1,1 @@
-../perl/qsub.pl
+../src/perl/qsub.pl

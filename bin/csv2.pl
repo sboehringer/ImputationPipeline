@@ -1,1 +1,1 @@
-../perl/csv2.pl
+../src/perl/csv2.pl

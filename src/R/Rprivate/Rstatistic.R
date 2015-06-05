@@ -323,7 +323,7 @@ lhMapperFunctions = function(s) {
 
 #' Build wrapper function around likelihood
 #'
-#' @par template parameter specification used as template (usually richest parametrization tb reduced
+#' @param template parameter specification used as template (usually richest parametrization tb reduced
 #'	for other hypotheses)
 lhPreparePars = function(pars, defaults = lhSpecificationDefaults$default, spec = lhSpecificationDefault,
 	template = pars) {
@@ -1387,6 +1387,15 @@ quantileData = function(d, p) {
 	q
 }
 
+quantileReference = function(reference, direction = 2, center = TRUE) {
+	if (is.matrix(reference) && center) {
+		refC =  matrixCenter(reference, direction);
+		reference = matrixDeCenter(refC$matrix, mean(refC$center), direction);
+	}
+	ref = na.omit(as.vector(as.matrix(reference)));
+	ref
+}
+
 #' Quantile normalization of frame/matrix with respect to reference distribution
 #'
 #' Distribution to be normalized are represented as columns or rows of a matrix/data frame.
@@ -1400,15 +1409,17 @@ quantileData = function(d, p) {
 #' @examples
 #' d = sapply(1:20, rnorm(1e4));
 #' dNorm = quantileNormalization(as.vector(d), d)
-quantileNormalization = function(reference, data, direction = 2) {
-	dN = apply(data, direction, function(d)quantile(reference, probs = rank(d, ties = 'average')/length(d)));
-	if (direction == 1) dN = t(dN);
-	dimnames(dN) = dimnames(data);
-	dN
-}
-quantileNormalization = function(reference, data, direction = 2) {
-	ref = as.vector(as.matrix(reference));
-	dN = apply(data, direction, function(d)quantile(ref, probs = rank(d, ties = 'average')/length(d)));
+quantileNormalization = function(reference, data, direction = 2,
+	impute = TRUE, ties = 'random', center = TRUE, referenceDirection = direction) {
+	ref = quantileReference(reference, referenceDirection, center);
+	if (impute) mns = apply(data, 3 - direction, median, na.rm = T);
+	dN = apply(data, direction, function(d) {
+		d0 = d;
+		if (impute) d[is.na(d0)] = mns[is.na(d0)];
+		r = quantile(ref, probs = rank(d, na.last = 'keep', ties = ties)/length(na.omit(d)))
+		if (impute) r[is.na(d0)] = NA;
+		r
+	});
 	if (direction == 1) dN = t(dN);
 	dimnames(dN) = dimnames(data);
 	dN

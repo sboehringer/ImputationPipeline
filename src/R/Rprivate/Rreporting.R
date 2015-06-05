@@ -165,7 +165,7 @@ report.data.frame.toString = function(df = NULL,
 	})
 }
 
-report.figure.table = function(figures, cols = 2, width = 1/cols - 0.05, patterns = latex, captions = NULL)
+report.figure.tableSingle = function(figures, cols = 2, width = 1/cols - 0.05, patterns = latex, captions = NULL)
 	with(patterns, with(figureTable, {
 
 	figs = sapply(1:length(figures), function(i){
@@ -175,6 +175,19 @@ report.figure.table = function(figures, cols = 2, width = 1/cols - 0.05, pattern
 	table = formatTable(rows, cols = cols);
 	table
 }))
+report.figure.table = function(figures, cols = 2, width = 1/cols - 0.05, patterns = latex,
+	captions = NULL, maxRows = 5) with(patterns, {
+	NfiguresPerPage = maxRows * cols;
+	Nfigures = ceiling(ceiling(length(figures)/cols) / maxRows);
+	if (Nfigures > 1) {
+		tables = sapply(1:Nfigures, function(i) {
+			Is = ((i - 1)*NfiguresPerPage + 1): min((i*NfiguresPerPage), length(figures));
+			report.figure.tableSingle(figures[Is], cols, width, patterns, captions[Is])
+		});
+		join(tables, "\n")
+	} else report.figure.tableSingle(figures, cols, width, patterns, captions)
+})
+
 
 #
 #	<p> Rreporter (base on S4 methods)

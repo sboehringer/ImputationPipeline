@@ -181,6 +181,23 @@ plot_adjacent = function(fts, factor, N = ncol(fts)) {
 	});
 }
 
+plot_grid_pdf = function(plots, file, nrow, ncol, NperPage, byrow = T, mapper = NULL,
+	pdfOptions = list(paper = 'a4')) {
+	Nplots = length(plots);
+	if (missing(nrow)) nrow = NperPage / ncol;
+	if (missing(ncol)) ncol = NperPage / nrow;
+	if (missing(NperPage)) NperPage = ncol * nrow;
+	Npages = ceiling(Nplots / NperPage);
+
+	do.call(pdf, c(list(file = file), pdfOptions));
+	sapply(1:Npages, function(i) {
+		Istrt = (i - 1) * NperPage + 1;
+		Istop = min(i * NperPage, Nplots);
+		plot_grid(plots[Istrt:Istop], nrow, ncol, byrow = byrow, mapper = mapper);
+	});
+	dev.off();
+}
+
 #
 #	<p> Kaplan-Meier with ggplot
 #
@@ -353,6 +370,44 @@ histogram_overlayed = function(data, f1,
 
 	# <p> final formatting
 	p = p + ggtitle(title) + xlab(x_lab);
+	p
+
+}
+
+#'@param data:	data frame or list
+histograms_alpha = function(data, palette = histogram_colors, log10 = F,
+	x_lab = '', title = 'histogram', alpha = .3, origin = NULL, binwidth = NULL, relative = FALSE,
+	textsize = 20) {
+	# <p> preparation
+	N = length(as.list(data));
+	columns = names(data);
+	mx = max(unlist(as.list(data)), na.rm = T);
+	mn = min(unlist(as.list(data)), na.rm = T);
+
+	# <p>  create legend using pseudo data (shifted out of view)
+	dp = Df(x = rep(2*mx + 2, N), y = rep(0, N), group = columns);
+	p = ggplot(dp, aes(x = x)) +
+		geom_rect(data = dp, aes(xmin = x, xmax = x + .01, ymin = y, ymax = y + .01, fill = group)) +
+		scale_fill_manual(name = dp$group, values = palette);
+
+	# <p> histograms
+	for (i in 1:N) {
+		col = columns[i];
+		dfH = data.frame(x = data[[col]]);
+		p = p + if (relative)
+			geom_histogram(data = dfH, aes(y=..count../sum(..count..)),
+				fill = palette[i], alpha = alpha, binwidth = binwidth, origin = origin
+			) else
+			geom_histogram(data = dfH, fill = palette[i], alpha = alpha, binwidth = binwidth, origin = origin)
+	}
+
+	# <p> log transform
+	if (log10) p = p + scale_y_continuous(trans = 'log10') + coord_cartesian(ylim = c(1, mx));
+
+	# <p> final formatting
+	p = p + coord_cartesian(xlim = c(mn - 1, mx + 1)) + ggtitle(title) + xlab(x_lab) + theme_bw() +
+		theme(text = element_text(size = textsize));
+	if (relative) p = p + ylab('percentage');
 	p
 
 }

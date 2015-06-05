@@ -1,1 +1,1 @@
-../perl/pipeline.pl
+../src/perl/pipeline.pl

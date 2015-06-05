@@ -1,1 +1,1 @@
-../perl/GWASconvert.pl
+../src/perl/GWASconvert.pl

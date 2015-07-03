@@ -1,1 +1,1 @@
-../perl/GWASimpute.pl
+../src/perl/GWASimpute.pl

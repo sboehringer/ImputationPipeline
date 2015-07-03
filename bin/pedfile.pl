@@ -1,1 +1,1 @@
-../perl/pedfile.pl
+../src/perl/pedfile.pl

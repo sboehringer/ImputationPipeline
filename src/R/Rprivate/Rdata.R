@@ -272,6 +272,11 @@ splitString = function(re, str, ..., simplify = T) {
 	l
 }
 quoteString = function(s)sprintf('"%s"', s)
+trimString = function(s) {
+	sapply(s, function(e)
+		if (is.na(e)) NA else FetchRegexpr('^\\s*(.*?)\\s*$', e, captures = T)
+	)
+}
 
 mergeDictToString = function(d, s, valueMapper = function(s)
 	ifelse(is.na(d[[n]]), '{\\bf Value missing}', d[[n]]),
@@ -425,7 +430,7 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 	dictDf = Df_(dictDf, as_character = unique(keys[types == 's']));
 	
 	# <p> conversion <i>: new function
-	colsQ = typesRaw == 'Q';
+	colsQ = keys[typesRaw == 'Q'];
 	dictDf[, colsQ] = apply(dictDf[, colsQ, drop = F], 2, qs);
 
 	s = sapply(1:nrow(dictDf), function(i) {
@@ -875,7 +880,7 @@ list.kpr = function(l, keyPath, do.unlist = F, template = NULL,
 # <!> interface change: unlist -> do.unlist (Wed Sep 29 18:16:05 2010)
 # test: test existance instead of returning value
 list.kp = function(l, keyPath, do.unlist = F, template = NULL, null2na = F, test = F) {
-	r = list.kpr(l, sprintf("*$%s", keyPath), do.unlist = do.unlist, template, null2na, test = test);
+	r = list.kpr(l, sprintf("*$%s", keyPath), do.unlist = do.unlist, template, null2na = null2na, test = test);
 	r
 }
 
@@ -923,6 +928,18 @@ nlapply = function(ns, f, ...) {
 	names(r) = ns;
 	r
 }
+ilapply = function(l, f, ...) {
+	r = lapply(1:length(l), function(i)f(l[[i]], i, ...));
+	if (!is.null(names(l))) names(r) = names(l);
+	r
+}
+kvlapply = function(l, f, ...) {
+	ns = names(l);
+	r = lapply(1:length(l), function(i)f(ns[i], l[[i]], ...));
+	names(r) = ns;
+	r
+}
+
 # USE.NAMES logic reversed for sapply
 sapplyn = function(l, f, ...)sapply(l, f, ..., USE.NAMES = F);
 list.with.names = function(..., .key = 'name') {
@@ -1236,8 +1253,9 @@ vector.embed = function(v, idcs, e, idcsResult = T) {
 	r
 }
 # set values at idcs
-vector.assign = function(v, idcs, e) {
+vector.assign = function(v, idcs, e, na.rm = 0) {
 	v[idcs] = e;
+	if (!is.na(na.rm)) v[is.na(v)] = na.rm;
 	v
 }
 matrix.assign = function(m, idcs, e, byrow = T) {
@@ -1465,7 +1483,7 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 		# <N> does not work
 		#dfn = apply(r[, as_factor, drop = F], 2, function(col)as.factor(col));
 		#r[, as_factor] = dfn;
-		for (f in as_factor)r[[f]] = as.factor(r[[f]]);
+		for (f in as_factor) r[, f] = as.factor(r[[f]]);
 	}
 	#
 	#	<p> transformations
@@ -1501,10 +1519,15 @@ Dfselect = function(data, l, na.rm = nif) {
 }
 
 
-List_ = .List = function(l, min_ = NULL, rm.null = F, names_ = NULL, null2na = F, simplify_ = F) {
+List_ = .List = function(l, min_ = NULL, sel_ = NULL,
+	rm.null = F, names_ = NULL, null2na = F, simplify_ = F) {
 	if (!is.null(min_)) {
 		i = which.indeces(min_, names(l));
 		if (length(i) > 0) l = l[-i];
+	}
+	if (!is.null(sel_)) {
+		i = which.indeces(sel_, names(l));
+		if (length(i) > 0) l = l[i];
 	}
 	if (rm.null) {
 		remove = -which(sapply(l, is.null));
@@ -1523,6 +1546,12 @@ List = function(..., min_ = NULL, envir = parent.frame(), names_ = NULL) {
 	.List(l, min_ = min_, names_ = names_);
 }
 
+Unlist = function(l, ..., null2na_ = FALSE) {
+	if (null2na_) l[sapply(l, is.null)] = NA;
+	unlist(l, ...)
+}
+
+last = function(v)(v[length(v)])
 pop = function(v)(v[-length(v)])
 # differences between successive elements, first diff is first element with start
 vectorLag = function(v, start = 0)pop(c(v, start) - c(start, v))
@@ -1735,11 +1764,20 @@ niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
 # }
 meanMatrices = function(d) {
 	dm = dim(d[[1]]);
+	good = sapply(d, function(m)(length(dim(m)) == 2 && all(dim(m) == dm)));
+	if (any(!good)) warning('meanMatrices: malformed/incompatible matrices in list, ignored');
+	d = d[good];
 	m0 = sapply(d, function(e)avu(e));
 	m1 = apply(m0, 1, mean, na.rm = T);
 	r = matrix(m1, ncol = dm[2], dimnames = dimnames(d[[1]]));
 	r
 }
+meanMatrices_test = function() {
+	m = list(matrix(1:4, ncol = 2), matrix(5:8, ncol = 2));
+	if (!all(meanMatrices(m) == matrix(3:6, ncol = 2))) stop('meanMatrix test failed');
+	if (!all(meanMatrices(c(m, list())) == matrix(3:6, ncol = 2))) stop('meanMatrix test failed');
+}
+
 meanVectors = function(d) {
 	ns = names(d[[1]]);
 	mn = apply(as.matrix(sapply(d, function(e)e)), 1, mean, na.rm = T);
@@ -1757,6 +1795,18 @@ meanStructure = function(l) {
 	});
 	r
 }
+
+matrixCenter = function(m, direction = 2, centerBy = median) {
+	center = apply(m, direction, centerBy, na.rm = T);
+	m = if (direction == 1) (m - center) else t(t(m) - center);
+	list(matrix = m, center = center)
+}
+
+matrixDeCenter = function(m, center, direction = 2) {
+	m = if (direction == 1) t(t(m) + center) else (m + center);
+	m
+}
+
 
 #
 #	<p> combinatorial functions

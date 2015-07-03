@@ -323,7 +323,7 @@ lhMapperFunctions = function(s) {
 
 #' Build wrapper function around likelihood
 #'
-#' @par template parameter specification used as template (usually richest parametrization tb reduced
+#' @param template parameter specification used as template (usually richest parametrization tb reduced
 #'	for other hypotheses)
 lhPreparePars = function(pars, defaults = lhSpecificationDefaults$default, spec = lhSpecificationDefault,
 	template = pars) {
@@ -1235,15 +1235,16 @@ cv_test_glm = function(model, formula, data, ...) {
 # cv_test = function(model, data, argsFrom...)
 
 crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list(),
-	data, cv_fold = 20, cv_repeats = 1, ..., lapply__ = lapply, align_order = TRUE) {
+	data, cv_fold = 20, cv_repeats = 1, ..., parallel = F, align_order = TRUE) {
+	if (!parallel) Lapply = lapply;
 	N = dim(data)[1];
 	r = with(cv_prepare(data = data, ...), {
-		lapply__(1:cv_repeats, function(i) {
+		Lapply(1:cv_repeats, function(i, ...) {
 			perm = Sample(1:N, N);
 			# compute partitions
 			parts = splitListEls(perm, cv_fold, returnElements = T);
 			o = order(unlist(parts));
-			r = lapply__(parts, function(part, cv_train, cv_test, data, cv_repeats, ...) {
+			r = Lapply(parts, function(part, cv_train, cv_test, data, cv_repeats, ...) {
 				d0 = data[-part, , drop = F];
 				d1 = data[part, , drop = F];
 				model = cv_train(..., data = d0);
@@ -1263,7 +1264,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 				r[o, ]
 			} else r;
 			r
-	})});
+	}, ...)});
 	r
 }
 
@@ -1387,6 +1388,15 @@ quantileData = function(d, p) {
 	q
 }
 
+quantileReference = function(reference, direction = 2, center = TRUE) {
+	if (is.matrix(reference) && center) {
+		refC =  matrixCenter(reference, direction);
+		reference = matrixDeCenter(refC$matrix, mean(refC$center), direction);
+	}
+	ref = na.omit(as.vector(as.matrix(reference)));
+	ref
+}
+
 #' Quantile normalization of frame/matrix with respect to reference distribution
 #'
 #' Distribution to be normalized are represented as columns or rows of a matrix/data frame.
@@ -1400,15 +1410,17 @@ quantileData = function(d, p) {
 #' @examples
 #' d = sapply(1:20, rnorm(1e4));
 #' dNorm = quantileNormalization(as.vector(d), d)
-quantileNormalization = function(reference, data, direction = 2) {
-	dN = apply(data, direction, function(d)quantile(reference, probs = rank(d, ties = 'average')/length(d)));
-	if (direction == 1) dN = t(dN);
-	dimnames(dN) = dimnames(data);
-	dN
-}
-quantileNormalization = function(reference, data, direction = 2) {
-	ref = as.vector(as.matrix(reference));
-	dN = apply(data, direction, function(d)quantile(ref, probs = rank(d, ties = 'average')/length(d)));
+quantileNormalization = function(reference, data, direction = 2,
+	impute = TRUE, ties = 'random', center = TRUE, referenceDirection = direction) {
+	ref = quantileReference(reference, referenceDirection, center);
+	if (impute) mns = apply(data, 3 - direction, median, na.rm = T);
+	dN = apply(data, direction, function(d) {
+		d0 = d;
+		if (impute) d[is.na(d0)] = mns[is.na(d0)];
+		r = quantile(ref, probs = rank(d, na.last = 'keep', ties = ties)/length(na.omit(d)))
+		if (impute) r[is.na(d0)] = NA;
+		r
+	});
 	if (direction == 1) dN = t(dN);
 	dimnames(dN) = dimnames(data);
 	dN

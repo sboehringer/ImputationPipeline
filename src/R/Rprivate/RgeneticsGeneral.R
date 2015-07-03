@@ -1318,13 +1318,15 @@ extractGenotypes2 = function(d0, snps = NULL, missing = '0', snps_re = 'rs.*') {
 #' @param snps_re_prefix regular expression to detect two-column format
 #' @gtRe regular expression to extract alleles from genotype character string, e.g. '([ATCG])/([ATCG])'
 extractGenotypes = function(d0, snps = NULL, missing = '',
-	snps_re = '^rs\\d+', snps_re_name = snps_re, snps_re_prefix = '^%s_', gtRe = NULL, gtSplit = '\\s*') {
+	snps_re = '^rs\\d+', snps_re_name = snps_re, snps_re_prefix = '^%s_', gtRe = NULL, gtSplit = '\\s*',
+	trimGts = F, snpsExclude = NULL) {
 	# define SNPs
 	ns = names(d0);
 	if (is.null(snps))
 		snps = unique(sapply(ns[which.indeces(snps_re, ns, regex = T, ignore.case = T)],
 			function(s)fetchRegexpr(snps_re_name, s, ignore.case = T)[1]
 		));
+	snps = setdiff(snps, snpsExclude);
 	# one column format
 	snps1 = sapply(snps, function(s)length(which(s == ns)) == 1);
 	# two column format
@@ -1332,20 +1334,22 @@ extractGenotypes = function(d0, snps = NULL, missing = '',
 		length(which.indeces(sprintf(snps_re_prefix, s), ns, regex = T, ignore.case = T)) == 2
 	);
 	# unspecified
-	if (length(snps[!snps1 & !snps2]) > 0)
-		stop(sprintf("Format for SNPs %s undetected.", paste(snps[!snps1 | !snps2], collapse = ", ")));
-		
+	if (length(snps[!snps1 & !snps2]) > 0) {
+		stop(sprintf("Format for SNPs %s undetected.", paste(snps[!snps1 & !snps2], collapse = ", ")));
+	}
+
 	# create 0:2 coded genotypes from SNPs encoded in a single column
 	gts1 = lapply(snps[snps1], function(s) {
 		gts = d0[[s]];
 		r = if (all(is.integer(gts))) {
 				# numerically coded genotype
-				if (!is.null(missing)) gts[gts == missing] = NA;
+				if (!is.null(missing)) gts[gts %in% missing] = NA;
 				list(alleles = c('A1', 'A2'), genotypes = gts)
 			} else {
 				alleles = t(sapply(as.character(gts), function(gt){
+					if (trimGts) gt = trimString(gt);
 					raw = if (is.null(gtRe)) {
-						if (is.na(gt) || gt == missing || gt == '') return(c(NA, NA));
+						if (is.na(gt) || gt %in% missing || gt == '') return(c(NA, NA));
 						raw = splitString(gtSplit, gt);
 						raw[raw != ''];
 					} else {
@@ -1385,7 +1389,8 @@ extractGenotypes = function(d0, snps = NULL, missing = '',
 	r = list(genotypes = dSnp, desc = desc, monomorphic_snps = monomorphic_snps,
 		indeces = c(
 			which.indeces(snps[snps1], ns),
-			which.indeces(sprintf(snps_re_prefix, snps[snps2]), ns, regex = T, match.multi = T))
+			which.indeces(sprintf(snps_re_prefix, snps[snps2]), ns, regex = T, match.multi = T)),
+		cor = cor(dSnp, use = "pairwise.complete.obs")
 	);
 	r
 }

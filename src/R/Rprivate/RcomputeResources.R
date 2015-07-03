@@ -1,13 +1,16 @@
 Log.setLevel(4);
 Parallelize_config__ = list(
 	max_depth = 3, parallel_count = 64, offline = T,
-	sourceFiles = 'RgenericAll.R',
+#	sourceFiles = 'RgenericAll.R',
+	sourceFiles = c(),
 	backends = list(
 	snow = list(
-		localNodes = 8, splitN = 2, stateDir = 'QSUB_LOCAL_DIR'
+		localNodes = 8, splitN = 2, stateDir = 'QSUB_LOCAL_DIR',
+		parallel_count = 64
 	),
 	local = list(
-		stateDir = 'QSUB_LOCAL_DIR'
+		stateDir = 'QSUB_LOCAL_DIR', parallel_count = 64
+
 	),
 	`local-grouped` = list(
 		backend = 'local',
@@ -74,7 +77,8 @@ Parallelize_config__ = list(
 		qsubRampUpMemory = '8G',
 		qsubParallelMemory = '3G',
 		ssh_source_file = '~/.env_profile',
-		doSaveResult = T
+		doSaveResult = T,
+		parallel_count = 500
 	),
 	`ogs-hgx` = list(
 		backend = 'OGSremote',
@@ -84,7 +88,8 @@ Parallelize_config__ = list(
 		qsubOptions = sprintf('--queue all.q --logLevel %d --memory QSUB_MEMORY', Log.level() + 1),
 		qsubRampUpMemory = '8G',
 		qsubParallelMemory = '3G',
-		doSaveResult = T
+		doSaveResult = T,
+		parallel_count = 100
 	),
 	`ogs-hgx-debug` = list(
 		backend = 'OGS',
@@ -93,7 +98,8 @@ Parallelize_config__ = list(
 		qsubOptions = sprintf('--queue all.q --logLevel %d --memory QSUB_MEMORY', Log.level() + 1),
 		qsubRampUpMemory = '16G',
 		qsubParallelMemory = '4G',
-		doSaveResult = T
+		doSaveResult = T,
+		parallel_count = 100
 	)
 
 ));

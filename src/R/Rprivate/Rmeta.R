@@ -68,18 +68,18 @@ bound_fcts = function(f, functions = F, exceptions = bound_fcts_std_exceptions) 
 }
 
 
-environment_evaled = function(f, functions = F) {
+environment_evaled = function(f, functions = FALSE, recursive = FALSE) {
 	vars = bound_vars(f, functions);
 	e = nlapply(vars, function(v) rget(v, envir = environment(f)));
 	#Log(sprintf('environment_evaled: vars: %s', join(vars, ', ')), 7);
 	#Log(sprintf('environment_evaled: functions: %s', functions), 7);
 	if (functions) {
-		fcts = bound_fcts(f, functions = T);
+		fcts = bound_fcts(f, functions = TRUE);
 		fcts_e = nlapply(fcts, function(v){
 			#Log(sprintf('environment_evaled: fct: %s', v), 7);
 			v = rget(v, envir = environment(f));
 			#if (!(environmentName(environment(v)) %in% c('R_GlobalEnv')))
-			v = environment_eval(v, functions = T);
+			v = environment_eval(v, functions = TRUE);
 		});
 		#Log(sprintf('fcts: %s', join(names(fcts_e))));
 		e = c(e, fcts_e);
@@ -92,8 +92,8 @@ environment_evaled = function(f, functions = F) {
 	#Log(sprintf('evaled: %s', join(names(as.list(r)))));
 	r
 }
-environment_eval = function(f, functions = F) {
-	environment(f) = environment_evaled(f, functions = functions);
+environment_eval = function(f, functions = FALSE, recursive = FALSE) {
+	environment(f) = environment_evaled(f, functions = functions, recursive = recursive);
 	f
 }
 
@@ -280,14 +280,14 @@ callEvalArgs = function(call_, env_eval = FALSE) {
 	# <p> evaluate args
 	if (length(call_$args)) {
 		args = call_$args;
-		callArgs = lapply(1:length(args), function(i)eval(args[[i]], envir = call_$envir__));
+		callArgs = lapply(1:length(args), function(i)eval(args[[i]], envir = call_$envir));
 		# <i> use match.call instead
 		names(callArgs) = setdiff(names(call_$args), '...');
 		call_$args = callArgs;
 	}
 
 	if (env_eval) {
-		call_$fct = environment_eval(call_$fct, functions = T);
+		call_$fct = environment_eval(call_$fct, functions = FALSE, recursive = FALSE);
 	}
 	# <p> construct return value
 	#callArgs = lapply(call_$args, function(e){eval(as.expression(e), call_$envir)});
@@ -337,7 +337,7 @@ encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate
 		nlapply(callm, function(e)eval(callm[[e]], envir = envir__))
 	} else nlapply(callm, function(e)callm[[e]])
 	# unbound variables in body fct
-	unbound_vars = 
+	#unbound_vars = 
 
 	call_ = list(
 		fct = fct,

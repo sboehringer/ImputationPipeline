@@ -1235,15 +1235,16 @@ cv_test_glm = function(model, formula, data, ...) {
 # cv_test = function(model, data, argsFrom...)
 
 crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list(),
-	data, cv_fold = 20, cv_repeats = 1, ..., lapply__ = lapply, align_order = TRUE) {
+	data, cv_fold = 20, cv_repeats = 1, ..., parallel = F, align_order = TRUE) {
+	if (!parallel) Lapply = lapply;
 	N = dim(data)[1];
 	r = with(cv_prepare(data = data, ...), {
-		lapply__(1:cv_repeats, function(i) {
+		Lapply(1:cv_repeats, function(i, ...) {
 			perm = Sample(1:N, N);
 			# compute partitions
 			parts = splitListEls(perm, cv_fold, returnElements = T);
 			o = order(unlist(parts));
-			r = lapply__(parts, function(part, cv_train, cv_test, data, cv_repeats, ...) {
+			r = Lapply(parts, function(part, cv_train, cv_test, data, cv_repeats, ...) {
 				d0 = data[-part, , drop = F];
 				d1 = data[part, , drop = F];
 				model = cv_train(..., data = d0);
@@ -1263,7 +1264,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 				r[o, ]
 			} else r;
 			r
-	})});
+	}, ...)});
 	r
 }
 

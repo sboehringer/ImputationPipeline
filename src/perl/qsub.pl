@@ -38,6 +38,12 @@ my $helpText = <<HELP_TEXT;
 	#	use --unquote to enforce unquoting for multiple arguments
 	qsub.pl --unquote -- 'echo hello world > /tmp/redirect'
 
+	# environment
+	# do not use default PATH export
+	qsub.pl --exports -
+	# exactly export PERL5LIB
+	qsub.pl --exports -,PERL5LIB
+
 	# job dependencies
 	# Append the job id of the submitted job to file /tmp/myJobIds
 	qsub.pl --jid /tmp/myJobIds -- echo hello world --echoOption
@@ -92,8 +98,15 @@ sub submitCommand { my ($cmd, $o) = @_;
 	# don't delete
 	my $tf = tempFileName($o->{tmpPrefix}. "/job_$cmdname", '.sh', undef, 1);
 	#my $env = ''; #join("\n", map { "$_=$ENV{$_}" } keys %ENV);
-	my @env = map { "$_=$ENV{$_}" } split(/\s*,\s*/, $o->{exports});
-	my $setenv = join("\n", split(/$o->{setenvsep}/, $o->{setenv});
+
+	# <p> prepare environment
+	my @envKeys = split(/\s*,\s*/, $o->{exports});
+	my @envReset = which_indeces(['-'], [@envKeys]);
+	@env = @envKeys[($envReset[0] + 1) .. $#envKeys] if (defined($envReset[0]));
+	my @env = map { "$_=$ENV{$_}" } grep { !/$\s*^/ } @envKeys;
+	my $setenv = join("\n", split(/\Q$o->{setenvsep}\E/, $o->{setenv}));
+
+	# <p> generic options
 	my $mergeDict = makeHash([map { 'options_'. uc($_) } keys %$o], [values %$o]);
 	my %opts = (%{makeHash([keys %Options], [map { mergeDictToString($mergeDict, $_)} values %Options])});
 	# add fixed options based on
@@ -114,7 +127,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 	$script = mergeDictToString({
 		'QSUB_OUT' => $o->{outputDir},
 		'OGS_OPTIONS' => join("\n", @options),
-		'OGS_EXPORTS' => join("\n", map { "export $_" } @env). $setenv,
+		'OGS_EXPORTS' => join("\n", ((map { "export $_" } @env), $setenv)),
 		'CMD' => $cmd
 	}, $script, { sortKeys => 'YES' });
 
@@ -152,7 +165,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 	}
 	my $result = !$optionsPresent? 1
 	: GetOptionsStandard($o,
-		'help', 'jid=s', 'jidReplace=s', 'exports=s',
+		'help', 'jid=s', 'jidReplace=s', 'exports:s',
 		'waitForJids=s', 'outputDir=s', 'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
 		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s'
 	);

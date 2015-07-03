@@ -1319,13 +1319,14 @@ extractGenotypes2 = function(d0, snps = NULL, missing = '0', snps_re = 'rs.*') {
 #' @gtRe regular expression to extract alleles from genotype character string, e.g. '([ATCG])/([ATCG])'
 extractGenotypes = function(d0, snps = NULL, missing = '',
 	snps_re = '^rs\\d+', snps_re_name = snps_re, snps_re_prefix = '^%s_', gtRe = NULL, gtSplit = '\\s*',
-	trimGts = F) {
+	trimGts = F, snpsExclude = NULL) {
 	# define SNPs
 	ns = names(d0);
 	if (is.null(snps))
 		snps = unique(sapply(ns[which.indeces(snps_re, ns, regex = T, ignore.case = T)],
 			function(s)fetchRegexpr(snps_re_name, s, ignore.case = T)[1]
 		));
+	snps = setdiff(snps, snpsExclude);
 	# one column format
 	snps1 = sapply(snps, function(s)length(which(s == ns)) == 1);
 	# two column format
@@ -1388,7 +1389,8 @@ extractGenotypes = function(d0, snps = NULL, missing = '',
 	r = list(genotypes = dSnp, desc = desc, monomorphic_snps = monomorphic_snps,
 		indeces = c(
 			which.indeces(snps[snps1], ns),
-			which.indeces(sprintf(snps_re_prefix, snps[snps2]), ns, regex = T, match.multi = T))
+			which.indeces(sprintf(snps_re_prefix, snps[snps2]), ns, regex = T, match.multi = T)),
+		cor = cor(dSnp, use = "pairwise.complete.obs")
 	);
 	r
 }

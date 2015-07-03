@@ -68,3 +68,5 @@ Log("Return code:$ret");
 	}
 	no Moose;
 }
+
+1;

@@ -18,7 +18,7 @@ Using the pipeline
 
 Log into shark.
 ```
-git clone https://git.lumc.nl/s.boehringer/ImputationPipeline.git pipeline --branch 1.0.0_shapeit
+git clone https://git.lumc.nl/s.boehringer/ImputationPipeline.git pipeline --branch 1.0.shapeit
 ```
 
 Add the following line to your ~/.bashrc and re-login.

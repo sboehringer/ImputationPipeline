@@ -7,7 +7,8 @@ export HOSTSUFFIX=`echo $PIPELINEBASE | perl -ne "@a = ((m{(_.*)})); print @a"`
 export HOST_PIPELINE="$HOST$HOSTSUFFIX"
 export PATH=$PIPELINEBASE/bin:$PATH
 #export PERL5LIB=$PERL5LIB:$HOME/perl5/lib/perl5:/usr/local/MedStat/site_perl/lib/perl5
-export PERL5LIB=$PERL5LIB:$PIPELINEBASE/perl-lib:$PIPELINEBASE/../site_perl/lib/perl5
+#export PERL5LIB=$PERL5LIB:$PIPELINEBASE/perl-lib:$PIPELINEBASE/../site_perl/lib/perl5
 export PIPELINEPATHES=$PIPELINEBASE/Pipelines
-export RPRIVATE=$PIPELINEBASE/R/Rprivate
-export PERL5LIB=$PIPELINEBASE/perl-lib:$PERL5LIB
+export RPRIVATE=$PIPELINEBASE/src/R/Rprivate
+export RSCRIPTS=$RPRIVATE:$PIPELINEBASE/src/R
+export PERL5LIB=$PIPELINEBASE/perl-lib:$HOME/perl5/lib/perl5:$PERL5LIB

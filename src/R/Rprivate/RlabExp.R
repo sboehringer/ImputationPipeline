@@ -285,8 +285,8 @@ if (0) {
 	print(isSynchroneous(be));
 }
 
-if (T) {
-	source('Rparallel.R');
+if (0) {
+	require('parallelize.dynamic');
 	source('RlabParallel.R');
 	Lapply_config = list(max_depth = 5, parallel_count = 24, offline = T, backends = list(
 		snow = list(
@@ -865,6 +865,7 @@ if (0) {
 	#print(Substr("abc", 2, 1));
 }
 
+if (0) {
 Sprintf = sprintd = function(fmt, dict, ...) {
 	extraValues = list(...);
 	re = '(?x)(?:
@@ -887,7 +888,7 @@ Sprintf = sprintd = function(fmt, dict, ...) {
 	s = do.call(sprintf, c(list(fmt = fmt1), sprintfValues));
 	s
 }
-
+}
 
 if (0) {
 	fmt = '%{text}s %.3s %-.2s %{key} %% %%s';
@@ -920,3 +921,32 @@ if (0) {
 	print(s);
 }
 
+
+if (0) {
+	r = sapply(c("ab c", "ab'c"),
+		function(s)c(s, qs(s), qss(s), Sprintf("%{s}Q"), Sprintf("%{s}q")));
+	print(t(r));
+	cat("\n"); sapply(r, function(e)cat(e)); cat("\n");
+}
+if (0) {
+	print(s);
+	System('echo hello world');
+	System('echo hello world', patterns = 'ssh', ssh_host = 'localhost');
+	System("echo 'hello world'", patterns = 'ssh', ssh_host = 'localhost');
+}
+
+if (1) {
+  modelList2 = list(
+    #global = list(list(Niteration = 1e2, m=1)),
+    global = list(list(Niteration = 10, m=1)),
+    Ngen=c(500,1000),
+    Nsnp = 5e3,
+    N = c(1, 5) * 1e3,
+    Npop = c(1, 2, 3),
+    p = c(2,3,4)
+  );
+}
+
+if (1) {
+  result = iterateModels(modelList2, function(i)i);
+}

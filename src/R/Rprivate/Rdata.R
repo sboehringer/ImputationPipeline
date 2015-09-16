@@ -153,6 +153,13 @@ r.output.to.vector.numeric = function(s) {
 	as.numeric(v)
 }
 readFile = function(path) { join(scan(path, what = "raw", sep = "\n", quiet = T), sep = "\n") };
+circumfix = function(s, post = NULL, pre = NULL) {
+	if (is.null(s) || length(s) == 0) return('');
+	sapply(s, function(s)if (s == '') s else con(pre, s, post))
+}
+abbr = function(s, Nchar = 20, ellipsis = '...') {
+	ifelse(nchar(s) > Nchar, paste(substr(s, 1, Nchar - nchar(ellipsis)), ellipsis, sep = ''), s)
+}
 
 Which.max = function(l, last.max = T, default = NA) {
 	if (is.logical(l) && all(!l)) return(default);
@@ -316,10 +323,10 @@ mergeDictToDict = function(dMap, dValues, ..., recursive = T) {
 	r
 }
 
-# quote if needed
+# double quote if needed
 qsSingle = function(s, force = F) {
 	# <N> better implementation possible: detect unquoted white-space
-	if (force || length(fetchRegexpr('[ \t]', s)) > 0) {
+	if (force || length(fetchRegexpr('[ \t"]', s)) > 0) {
 		s = gsub('([\\"])', '\\\\\\1', s);
 		s = sprintf('"%s"', s);
 	} else {
@@ -329,6 +336,16 @@ qsSingle = function(s, force = F) {
 	s
 }
 qs = function(s, ...)sapply(s, qsSingle, ...)
+# single quote if needed
+qssSingle = function(s, force = F) {
+	# <N> better implementation possible: detect unquoted white-space
+	if (force || length(fetchRegexpr("[ \t']", s)) > 0) {
+		s = gsub("(['])", "'\"'\"'", s);
+		s = sprintf("'%s'", s);
+	}
+	s
+}
+qss = function(s, ...)sapply(s, qssSingle, ...)
 
 #' Return sub-strings indicated by positions or produce a string by substituting those strings with
 #'	replacements
@@ -384,7 +401,6 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 			dict = merge.lists(dict, values[i]) else
 			extraValues = c(extraValues, values[i]);
 	}
-
 # 	re = '(?x)(?:
 # 		(?:^|[^%]|(?:%%)+)\\K
 # 		[%]
@@ -397,12 +413,12 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 		(?:[^%]+|(?:%%)+)*\\K
 		[%]
 			(?:[{]([^{}\\*\'"]*)[}])?
-		((?:[-]?[*\\d]*[.]?[*\\d]*)?(?:[sdfegGDQ]|))(?=[^sdfegGDQ]|$)
+		((?:[-]?[*\\d]*[.]?[*\\d]*)?(?:[sdfegGDQq]|))(?=[^sdfegGDQq]|$)
 	)';
 	r = fetchRegexpr(re, fmt, capturesAll = T, returnMatchPositions = T);
 	typesRaw = sapply(r$match, function(m)ifelse(m[2] == '', 's', m[2]));
 	types = ifelse(typesRaw %in% c('D', 'Q'), 's', typesRaw);
-	fmts = sapply(r$match, function(m)sprintf('%%%s', ifelse(m[2] %in% c('', 'D', 'Q'), 's', m[2])));
+	fmts = sapply(r$match, function(m)sprintf('%%%s', ifelse(m[2] %in% c('', 'D', 'Q', 'q'), 's', m[2])));
 	fmt1 = Substr(fmt, r$positions, attr(r$positions, 'match.length'), fmts);
 
 	keys = sapply(r$match, function(i)i[1]);
@@ -422,16 +438,24 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 		list();
 	allValues = c(allValues, dateValue, List_(interpolation, rm.null = T));
 
+	# 14.9.2015 -> convert to indeces
 	# build value combinations
-	dictDf = if (!sprintf_cartesian) Df(allValues) else merge.multi.list(allValues);
+	listedValues = lapply(keys, function(k)allValues[[k]]);
+	dictDf = if (!sprintf_cartesian) Df_(listedValues) else merge.multi.list(listedValues);
 	# fill names of anonymous formats
 	keys[keys == ''] = names(dictDf)[Seq(1, sum(nonKeysI != 0))];
 	# due to repeat rules of R vectors might have been converted to factors
-	dictDf = Df_(dictDf, as_character = unique(keys[types == 's']));
+	#dictDf = Df_(dictDf, as_character = unique(keys[types == 's']));
+	dictDf = Df_(dictDf, as_character = which(types == 's'));
 	
 	# <p> conversion <i>: new function
-	colsQ = keys[typesRaw == 'Q'];
+	#colsQ = keys[typesRaw == 'Q'];
+	# <!> switch to index based transformation on account of duplicate keys
+	colsQ = which(typesRaw == 'Q');
 	dictDf[, colsQ] = apply(dictDf[, colsQ, drop = F], 2, qs);
+	#colsq = keys[typesRaw == 'q'];
+	colsq = which(typesRaw == 'q');;
+	dictDf[, colsq] = apply(dictDf[, colsq, drop = F], 2, qss);
 
 	s = sapply(1:nrow(dictDf), function(i) {
 		valueDict = as.list(dictDf[i, , drop = F]);
@@ -440,8 +464,11 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 # 				firstDef(valueDict[[keys[i]]], rget(keys[i], default = '__no value__'), pos = -2)));
 # 		sprintfValues = lapply(seq_along(keys), function(i)
 # 			firstDef(valueDict[[keys[i]]], rget(keys[i], default = '__no value__', envir = envir)));
-		sprintfValues = lapply(seq_along(keys), function(i)valueDict[[keys[i]]]);
-		do.call(sprintf, c(list(fmt = fmt1), sprintfValues))
+		#sprintfValues = lapply(seq_along(keys), function(i)valueDict[[keys[i]]]);
+		#do.call(sprintf, c(list(fmt = fmt1), sprintfValues))
+		# <!> simplify above two lines, now robust against duplicated entries -> <i> needs unit tests
+		names(valueDict) = NULL;
+		do.call(sprintf, c(list(fmt = fmt1), valueDict))
 	});
 	s
 }
@@ -1954,15 +1981,18 @@ inlist = function(l)lapply(l, function(e)list(e));
 #'
 #'
 #'
-iterateModels_raw = function(modelList, models, f = function(...)list(...), ...,
-	lapply__ = Lapply, callWithList = F, restrictArgs = T) {
-	r = lapply__(1:nrow(models), function(i, ...) {
+iterateModels_raw = function(modelList, models, f_iterate = function(...)list(...), ...,
+	callWithList = F, restrictArgs = T, parallel = F, lapply__) {
+	if (!parallel) Lapply = lapply;
+	# model indeces contains the original positions in models
+	# this allows reordering of execution, eg with reverseEvaluationOrder
+	r = Lapply(1:nrow(models), function(i, ..., im__f, im__model_idcs) {
 		modelPars = merge.lists.takenFrom(modelList, unlist(models[i, ]));
-		if (callWithList) f(i, modelPars, ...) else {
-			args = c(list(i = i), modelPars, list(...));
-		.do.call(f, args, restrictArgs = restrictArgs)
+		if (callWithList) im__f(im__model_idcs[i], modelPars, ...) else {
+			args = c(list(i = im__model_idcs[i]), modelPars, list(...));
+		.do.call(im__f, args, restrictArgs = restrictArgs)
 		}
-	}, ...);
+	}, ..., im__f = f_iterate, im__model_idcs = as.integer(row.names(models)));
 	r
 }
 
@@ -1974,7 +2004,7 @@ iterateModels_prepare = function(modelList, .constraint = NULL,
 
 	# <p> handle constraints
 	selC = if (is.null(.constraint)) T else
-		unlist(iterateModels_raw(modelList, models, f = .constraint,
+		unlist(iterateModels_raw(modelList, models, f_iterate = .constraint,
 			lapply__ = lapply, callWithList = callWithList, restrictArgs = restrictArgs, ...));
 	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
 	#	apply constraints
@@ -1989,8 +2019,8 @@ iterateModels_prepare = function(modelList, .constraint = NULL,
 
 iterateModels = function(modelList, f = function(...)list(...), ...,
 	.constraint = NULL, .clRunLocal = T, .resultsOnly = F, .unlist = 0,
-	lapply__ = Lapply, callWithList = F, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
-	.first.constant = T) {
+	callWithList = F, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
+	.first.constant = T, parallel = F, lapply__, reverseEvaluationOrder = T) {
 	# <p> produce raw combinations
 	modelSize = lapply(modelList, function(m)1:length(m));
 	models = merge.multi.list(modelSize, .first.constant = .first.constant);
@@ -1999,15 +2029,18 @@ iterateModels = function(modelList, f = function(...)list(...), ...,
 
 	# <p> handle constraints
 	selC = if (is.null(.constraint)) T else
-		unlist(iterateModels_raw(modelList, models, f = .constraint,
-			lapply__ = lapply, callWithList = callWithList, restrictArgs = restrictArgs, ...));
+		unlist(iterateModels_raw(modelList, models, f_iterate = .constraint,
+			callWithList = callWithList, restrictArgs = restrictArgs, ..., parallel = F));
 	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
-	#	apply constraints
+	# <p> apply constraints
 	models = models[selC & selI, , drop = F];
 	models_symbolic = models_symbolic[selC & selI, , drop = F];
 
-	r = iterateModels_raw(modelList, models, f = f,
-		lapply__ = lapply__, callWithList = callWithList, restrictArgs = restrictArgs, ...);
+	# <p> models to be iterated
+	modelsIt = if (reverseEvaluationOrder) models[rev(1:nrow(models)), , drop = F] else models;
+	r = iterateModels_raw(modelList, modelsIt, f_iterate = f,
+		callWithList = callWithList, restrictArgs = restrictArgs, ..., parallel = parallel);
+	if (reverseEvaluationOrder) r = rev(r);
 	r = if (.resultsOnly) r else list(
 		models = models,
 		results = r,

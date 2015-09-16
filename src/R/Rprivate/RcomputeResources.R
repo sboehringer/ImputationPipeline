@@ -57,6 +57,17 @@ Parallelize_config__ = list(
 		ssh_source_file = '~/.env_profile',
 		doSaveResult = T
 	),
+	`ogs-shark-all-huge` = list(
+		backend = 'OGSremote',
+		remote = 'QSUB_REMOTE_DIR',
+		freezerClass = 'LapplyGroupingFreezer',
+		stateDir = sprintf('%s/tmp/parallel_states', Sys.getenv('HOME')),
+		qsubOptions = sprintf('--queue all.q --logLevel %d --memory QSUB_MEMORY', Log.level() + 2),
+		qsubRampUpMemory = '16G',
+		qsubParallelMemory = '6G',
+		ssh_source_file = '~/.env_profile',
+		doSaveResult = T
+	),
 	`ogs-shark-all-big` = list(
 		backend = 'OGSremote',
 		remote = 'QSUB_REMOTE_DIR',

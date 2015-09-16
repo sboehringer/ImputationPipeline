@@ -705,7 +705,7 @@ REP.finalizeSubTemplate = function(subTemplate) {
 	REP.save();
 }
 
-REP.finalize = function(conditionals = list(), verbose = F, cycles = 1, output = NULL) {
+REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, output = NULL) {
 	# <p> vars
 	ri = .REPORTER.ITEMS;
 	
@@ -747,7 +747,7 @@ REP.finalize = function(conditionals = list(), verbose = F, cycles = 1, output =
 		r = System(Sprintf('cd %{dir}s ; %{latexCmd}s -interaction=nonstopmode \"%{tn}s\"'),
 			4, return.output = T);
 		if (r$error > 0) Log(Sprintf("%{latexCmd}s exited with error."), 1);
-		if (r$error > 0 || verbose) Log(r$output, 1);
+		if (r$error > 0 || (verbose && i == 1)) Log(r$output, 1);
 		#if (r$error > 0) break;
 	}
 

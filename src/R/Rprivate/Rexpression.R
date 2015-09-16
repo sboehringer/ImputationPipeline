@@ -2,6 +2,241 @@
 #	Rexpression.R
 #
 
+
+#
+#	<p> classes
+#
+
+ExpressionMatrixRawClass = setRefClass('ExpressionMatrixRaw',
+	fields = list(
+		expr = 'matrix'
+	),
+	methods = list(
+	#
+	#	<p> methods
+	#
+	initialize = function(...) {
+		.self$initFields(...);
+		.self
+	},
+	samples = function() {
+		dimnames(expr)[[2]]
+	},
+	probes = function() {
+		dimnames(expr)[[1]]
+	},
+	nrows = function()expr$nrows(),
+	Qnormalize = function(reference = NULL) {
+		mref = if (is.null(reference)) expr else expr[, reference];
+		m1 = quantileNormalization(mref, expr);
+		ExpressionMatrixRawClass(expr = m1)
+	},
+	range = function(i = NULL) {
+		d0 = if (is.null(i)) expr else expr[, i];
+		mn = min(d0, na.rm = T);
+		mx = max(d0, na.rm = T);
+		list(range = mx - mn, min = mn, max = mx)
+	},
+	missingness = function()apply(expr, 2, function(col)mean(is.na(col))),
+	selectSamples = function(idcs) {
+		new('ExpressionMatrixRaw', expr = expr[, idcs, drop = FALSE])
+	},
+	getProbesMatrix = function(probeNames) {
+		is = match(probeNames, row.names(expr));
+		expr[is, ]
+	},
+	diagnostics_skewness = function() {
+		s = apply(log(expr), 1, function(row)c(
+			mean(row), median(row), Skewness(row), var(row), Noutliers(row)));
+		r = Df_(Df(t(s), medianDiff = s[2, ] - s[1, ], sdStd = sqrt(s[4, ])/ifelse(s[1, ] == 0, 1e-4, s[1,])),
+			names = c('mean', 'median', 'skewness', 'variance', 'Nout'));
+		r
+	},
+	diagnostics = function() {
+		list(skewness = diagnostics_skewness())
+	},
+	diagnostics_plots = function() {
+		diag = diagnostics();
+		ps = list(
+			qplot(medianDiff, mean, data = diag$skewness) + theme_bw(),
+			qplot(skewness, mean, data = diag$skewness) + theme_bw(),
+			qplot(sdStd, mean, data = diag$skewness) + theme_bw(),
+			qplot(Nout, mean, data = diag$skewness) + theme_bw()
+		);
+		ps
+	},
+	Eapply = function(f_apply, ...) {
+		r = lapply(1:nrow(expr), function(i)f_apply(expr[i, ], ...));
+		r
+	},
+	apply_with_data = function(f_apply, data, ...) {
+		r = .self$Eapply(function(probe_expr) {
+			d0 = data.frame(probe_expr = probe_expr, data);
+			f_apply(d0, ...)
+		});
+		r
+	},
+	apply_to_matrix = function(f_apply, ...) {
+		r = do.call(rbind, .self$Eapply(f_apply, ...));
+		dimnames(r) = dimnames(expr);
+		r
+	},
+	apply_with_data_to_matrix = function(f_apply, data, ..., is_transform = FALSE, col_names = NULL) {
+		r = do.call(rbind, .self$apply_with_data(f_apply, data, ...));
+		if (is_transform) dimnames(r) = dimnames(expr) else dimnames(r)[[1]] = dimnames(expr)[[1]];
+		if (!is.null(col_names)) dimnames(r)[[2]] = col_names;
+		r
+	},
+	regressOutVarsFormula = function(f_corr, data) {
+		if (is.null(f_corr)) return(.self);
+		f = as.formula(con('probe_expr', formula.to.character(f_corr)));
+		exprRes = apply_with_data_to_matrix(
+			function(data){residuals(lm(f, data = data))},
+			data, is_transform = TRUE
+		);
+		ExpressionMatrixRawClass(expr = exprRes)
+	}
+
+	#
+	#	</p> methods
+	#
+	)
+);
+ExpressionMatrixRawClass$accessors(names(ExpressionMatrixRawClass$fields()));
+
+ExpressionAnnotatedClass = setRefClass('ExpressionAnnotated',
+	fields = list(
+		expr = 'ExpressionMatrixRaw',
+		annotation = 'data.frame',
+		probeAnnotation = 'data.frame',
+		idCol = 'character'
+	),
+	methods = list(
+	#
+	#	<p> methods
+	#
+	initialize = function(..., probeAnnotation = NULL) {
+		idCol <<- 'id';
+		.self$initFields(...);
+		.self$setProbeAnnotation(probeAnnotation);
+		.self
+	},
+	setProbeAnnotation = function(d) {
+		if (is.null(d)) return(NULL);
+		ns = names(d);
+		i = which(ns == 'probe');
+		if (is.na(i)) {
+			probeAnnotation <<- NULL;
+			warning('Probeannotation does not contain "probe" column (used for merging)');
+			return;
+		}
+		ns[-i] = paste('probeAnnotation', ns[-1], sep = '.')
+		names(d) = ns;
+		probeAnnotation <<- d;
+	},
+	annotateProbes = function(tab, useRowNames = T) {
+		m = if (useRowNames) data.frame(probe = row.names(tab)) else tab[, 'probe', drop = F];
+		tabAnn = merge(m, probeAnnotation);
+		tab0 = cbind(tab, Df_(tabAnn, min_ = 'probe'));
+		tab0
+	},
+	analyzeDesign = function(design, coef = NULL, Nresult = NULL) {
+		if (is.null(Nresult)) Nresult = nrow(expr$expr);
+		l = lmFit(log(expr$expr), design);
+		lBayes = eBayes(l)
+		r = topTable(lBayes, coef = coef, number = Nresult);
+		r
+	},
+	analyzeRaw = function(data, model, correct, ...) {
+		# Create design
+		# <p> confounders
+		# remove intercept
+		dCorrect = if (missing(correct) || is.null(correct))
+			matrix(nrow = length(i), ncol = 0, dimnames = list(1:length(i), NULL)) else
+			model.matrix(model.frame(correct, data = data), data = data)[, -1, drop = F];
+
+		# <p> covariates of interest
+		dModel = model.matrix(model.frame(formula.rhs(model), data = data), data = data);
+		is = intersect(as.integer(row.names(dCorrect)), as.integer(row.names(dModel)));
+		design = cbind(
+			dModel[match(is, as.integer(row.names(dModel))), , drop = FALSE],
+			dCorrect[match(is, as.integer(row.names(dCorrect))), , drop = FALSE]
+		);
+		# run analysis
+		new('ExpressionAnnotated',
+			expr = expr$selectSamples(is), annotation = annotation,
+			probeAnnotation = probeAnnotation)$analyzeDesign(
+			design, coef = 1:ncol(dModel), ...
+		);
+	},
+	diagnostics = function(output = NULL) {
+		if (is.null(output)) return();
+		ps = expr$diagnostics_plots();
+		plot_save(plot_grid(ps, ncol = 2), plot_path = Sprintf("%{output}s-quality.jpg"));
+	},
+	analyze = function(model, correct, ..., doAttachProbeAnnotation = TRUE, output = NULL,
+		doWrite = T, doHeatmap = T, heatmapN = 1e3, doDiagnostics = TRUE) {
+		i = match(expr$samples(), annotation[[idCol]]);
+		if (any(is.na(i))) stop('Sample ids do not match');
+		d0 = annotation[i, ];
+		row.names(d0) = NULL;
+		r = analyzeRaw(d0, model, correct, ...);
+		if (doAttachProbeAnnotation) r = annotateProbes(r);
+		if (!is.null(output)) {
+			if (doWrite) write.csv(r, file = Sprintf("%{output}s.csv"));
+			if (doHeatmap) {
+				m = expr$getProbesMatrix(row.names(r)[1:heatmapN]);
+				plot_save(heatmap(m), plot_path = Sprintf("%{output}s-heatmap.jpg"));
+			}
+			if (doDiagnostics) diagnostics(output);
+		}
+		r
+	},
+	analyzeModels = function(models, ..., doAttachProbeAnnotation = T,
+		doWrite = T, doWriteModel = F, output = NULL, doDiagnostics = T) {
+		rs = ilapply(models, function(model, i) {
+			if (!is.null(output)) output = Sprintf("%{output}s-%{i}d");
+			analyze(model = model$model, correct = model$correct, ...,
+				doWrite = doWriteModel,
+				doAttachProbeAnnotation = FALSE, doDiagnostics = FALSE, output = output)
+		});
+		rs1 = ilapply(rs, function(r, i) {
+			r = as.data.frame(r);
+			names(r) = paste(names(r), i, sep = '-');
+			r[, 'probe'] = row.names(r);
+			r
+		});
+		r = merge.multi.dfs(rs1, by = 'probe');
+		if (doAttachProbeAnnotation) r = annotateProbes(r, useRowNames = F);
+		if (!is.null(output)) {
+			if (doWrite) write.csv(r, file = Sprintf("%{output}s.csv"));
+			if (doDiagnostics) diagnostics(output);
+		}
+#		r = r[Order(ilapply(), ];
+		r
+	}
+	#
+	#	</p> methods
+	#
+	)
+);
+#ExpressionAnnotatedClass$accessors(names(ExpressionAnnotatedClass$fields()));
+
+ExpressionAnnotatedNonParametricClass = setRefClass('ExpressionAnnotatedNonParametric',
+	contains = 'ExpressionAnnotated',
+	methods = list(
+	analyzeRaw = function(data, model, correct, ...) {
+		expr1 = expr$regressOutVarsFormula(correct, data);
+		r = expr1$apply_with_data_to_matrix(function(data, model) {
+			r = kruskal.test(model, data);
+			c(r$p.value, r$statistic, r$parameter)
+		}, data, model = model, col_names = c('P.value', 'T', 'df'));
+		r = r[order(r[, 'P.value']), ];
+		r
+	}
+	)
+);
+
 ExpressionMatrixClass = setRefClass('ExpressionMatrix',
 	fields = list(
 		expr = 'matrix',
@@ -50,7 +285,6 @@ ExpressionMatrixClass = setRefClass('ExpressionMatrix',
 		list(range = mx - mn, min = mn, max = mx)
 	},
 	missingness = function()apply(expr, 2, function(col)mean(is.na(col)))
-
 
 	#
 	#	</p> methods

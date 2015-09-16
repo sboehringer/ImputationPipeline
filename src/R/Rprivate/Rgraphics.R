@@ -431,7 +431,7 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	unit_out = if (is.null(unit_out)) units_default[[type]];
 	width = units_conv[[unit_out]]$to(units_conv[[unit]]$from(width));
 	height = units_conv[[unit_out]]$to(units_conv[[unit]]$from(height));
-	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 4);
+	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 5);
 
 	device(plot_path, width = width, height = height, ...);
 		#ret = eval(object, envir = envir);
@@ -443,13 +443,18 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	dev.off();
 }
 
+plot_typeMap = list(jpg = 'jpeg');
 plot_save = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	type = NULL,
 	envir = parent.frame(), options = list(), simplify = T, unit = 'cm', unit_out = NULL) {
 
 	if (is.null(plot_path)) file = tempFileName('plat_save', 'pdf', inRtmp = T);
 	ret = lapply(plot_path, function(plot_path) {
-		if (is.null(type)) type = splitPath(plot_path)$ext;
+		if (is.null(type) && !is.null(plot_path)) {
+			ext = splitPath(plot_path)$ext;
+			type = firstDef(plot_typeMap[[ext]], ext);
+		}
+		Logs("plot_path: %{plot_path}s, device: %{type}s", logLevel = 5);
 		plot_save_raw(object, ..., type = type, width = width, height = height, plot_path = plot_path,
 			options = options, unit = unit, unit_out = unit_out);
 	});

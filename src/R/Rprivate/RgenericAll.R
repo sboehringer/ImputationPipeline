@@ -163,6 +163,13 @@ r.output.to.vector.numeric = function(s) {
 	as.numeric(v)
 }
 readFile = function(path) { join(scan(path, what = "raw", sep = "\n", quiet = T), sep = "\n") };
+circumfix = function(s, post = NULL, pre = NULL) {
+	if (is.null(s) || length(s) == 0) return('');
+	sapply(s, function(s)if (s == '') s else con(pre, s, post))
+}
+abbr = function(s, Nchar = 20, ellipsis = '...') {
+	ifelse(nchar(s) > Nchar, paste(substr(s, 1, Nchar - nchar(ellipsis)), ellipsis, sep = ''), s)
+}
 
 Which.max = function(l, last.max = T, default = NA) {
 	if (is.logical(l) && all(!l)) return(default);
@@ -326,10 +333,10 @@ mergeDictToDict = function(dMap, dValues, ..., recursive = T) {
 	r
 }
 
-# quote if needed
+# double quote if needed
 qsSingle = function(s, force = F) {
 	# <N> better implementation possible: detect unquoted white-space
-	if (force || length(fetchRegexpr('[ \t]', s)) > 0) {
+	if (force || length(fetchRegexpr('[ \t"]', s)) > 0) {
 		s = gsub('([\\"])', '\\\\\\1', s);
 		s = sprintf('"%s"', s);
 	} else {
@@ -339,6 +346,16 @@ qsSingle = function(s, force = F) {
 	s
 }
 qs = function(s, ...)sapply(s, qsSingle, ...)
+# single quote if needed
+qssSingle = function(s, force = F) {
+	# <N> better implementation possible: detect unquoted white-space
+	if (force || length(fetchRegexpr("[ \t']", s)) > 0) {
+		s = gsub("(['])", "'\"'\"'", s);
+		s = sprintf("'%s'", s);
+	}
+	s
+}
+qss = function(s, ...)sapply(s, qssSingle, ...)
 
 #' Return sub-strings indicated by positions or produce a string by substituting those strings with
 #'	replacements
@@ -394,7 +411,6 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 			dict = merge.lists(dict, values[i]) else
 			extraValues = c(extraValues, values[i]);
 	}
-
 # 	re = '(?x)(?:
 # 		(?:^|[^%]|(?:%%)+)\\K
 # 		[%]
@@ -407,12 +423,12 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 		(?:[^%]+|(?:%%)+)*\\K
 		[%]
 			(?:[{]([^{}\\*\'"]*)[}])?
-		((?:[-]?[*\\d]*[.]?[*\\d]*)?(?:[sdfegGDQ]|))(?=[^sdfegGDQ]|$)
+		((?:[-]?[*\\d]*[.]?[*\\d]*)?(?:[sdfegGDQq]|))(?=[^sdfegGDQq]|$)
 	)';
 	r = fetchRegexpr(re, fmt, capturesAll = T, returnMatchPositions = T);
 	typesRaw = sapply(r$match, function(m)ifelse(m[2] == '', 's', m[2]));
 	types = ifelse(typesRaw %in% c('D', 'Q'), 's', typesRaw);
-	fmts = sapply(r$match, function(m)sprintf('%%%s', ifelse(m[2] %in% c('', 'D', 'Q'), 's', m[2])));
+	fmts = sapply(r$match, function(m)sprintf('%%%s', ifelse(m[2] %in% c('', 'D', 'Q', 'q'), 's', m[2])));
 	fmt1 = Substr(fmt, r$positions, attr(r$positions, 'match.length'), fmts);
 
 	keys = sapply(r$match, function(i)i[1]);
@@ -432,16 +448,24 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 		list();
 	allValues = c(allValues, dateValue, List_(interpolation, rm.null = T));
 
+	# 14.9.2015 -> convert to indeces
 	# build value combinations
-	dictDf = if (!sprintf_cartesian) Df(allValues) else merge.multi.list(allValues);
+	listedValues = lapply(keys, function(k)allValues[[k]]);
+	dictDf = if (!sprintf_cartesian) Df_(listedValues) else merge.multi.list(listedValues);
 	# fill names of anonymous formats
 	keys[keys == ''] = names(dictDf)[Seq(1, sum(nonKeysI != 0))];
 	# due to repeat rules of R vectors might have been converted to factors
-	dictDf = Df_(dictDf, as_character = unique(keys[types == 's']));
+	#dictDf = Df_(dictDf, as_character = unique(keys[types == 's']));
+	dictDf = Df_(dictDf, as_character = which(types == 's'));
 	
 	# <p> conversion <i>: new function
-	colsQ = keys[typesRaw == 'Q'];
+	#colsQ = keys[typesRaw == 'Q'];
+	# <!> switch to index based transformation on account of duplicate keys
+	colsQ = which(typesRaw == 'Q');
 	dictDf[, colsQ] = apply(dictDf[, colsQ, drop = F], 2, qs);
+	#colsq = keys[typesRaw == 'q'];
+	colsq = which(typesRaw == 'q');;
+	dictDf[, colsq] = apply(dictDf[, colsq, drop = F], 2, qss);
 
 	s = sapply(1:nrow(dictDf), function(i) {
 		valueDict = as.list(dictDf[i, , drop = F]);
@@ -450,8 +474,11 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 # 				firstDef(valueDict[[keys[i]]], rget(keys[i], default = '__no value__'), pos = -2)));
 # 		sprintfValues = lapply(seq_along(keys), function(i)
 # 			firstDef(valueDict[[keys[i]]], rget(keys[i], default = '__no value__', envir = envir)));
-		sprintfValues = lapply(seq_along(keys), function(i)valueDict[[keys[i]]]);
-		do.call(sprintf, c(list(fmt = fmt1), sprintfValues))
+		#sprintfValues = lapply(seq_along(keys), function(i)valueDict[[keys[i]]]);
+		#do.call(sprintf, c(list(fmt = fmt1), sprintfValues))
+		# <!> simplify above two lines, now robust against duplicated entries -> <i> needs unit tests
+		names(valueDict) = NULL;
+		do.call(sprintf, c(list(fmt = fmt1), valueDict))
 	});
 	s
 }
@@ -1964,15 +1991,18 @@ inlist = function(l)lapply(l, function(e)list(e));
 #'
 #'
 #'
-iterateModels_raw = function(modelList, models, f = function(...)list(...), ...,
-	lapply__ = Lapply, callWithList = F, restrictArgs = T) {
-	r = lapply__(1:nrow(models), function(i, ...) {
+iterateModels_raw = function(modelList, models, f_iterate = function(...)list(...), ...,
+	callWithList = F, restrictArgs = T, parallel = F, lapply__) {
+	if (!parallel) Lapply = lapply;
+	# model indeces contains the original positions in models
+	# this allows reordering of execution, eg with reverseEvaluationOrder
+	r = Lapply(1:nrow(models), function(i, ..., im__f, im__model_idcs) {
 		modelPars = merge.lists.takenFrom(modelList, unlist(models[i, ]));
-		if (callWithList) f(i, modelPars, ...) else {
-			args = c(list(i = i), modelPars, list(...));
-		.do.call(f, args, restrictArgs = restrictArgs)
+		if (callWithList) im__f(im__model_idcs[i], modelPars, ...) else {
+			args = c(list(i = im__model_idcs[i]), modelPars, list(...));
+		.do.call(im__f, args, restrictArgs = restrictArgs)
 		}
-	}, ...);
+	}, ..., im__f = f_iterate, im__model_idcs = as.integer(row.names(models)));
 	r
 }
 
@@ -1984,7 +2014,7 @@ iterateModels_prepare = function(modelList, .constraint = NULL,
 
 	# <p> handle constraints
 	selC = if (is.null(.constraint)) T else
-		unlist(iterateModels_raw(modelList, models, f = .constraint,
+		unlist(iterateModels_raw(modelList, models, f_iterate = .constraint,
 			lapply__ = lapply, callWithList = callWithList, restrictArgs = restrictArgs, ...));
 	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
 	#	apply constraints
@@ -1999,8 +2029,8 @@ iterateModels_prepare = function(modelList, .constraint = NULL,
 
 iterateModels = function(modelList, f = function(...)list(...), ...,
 	.constraint = NULL, .clRunLocal = T, .resultsOnly = F, .unlist = 0,
-	lapply__ = Lapply, callWithList = F, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
-	.first.constant = T) {
+	callWithList = F, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
+	.first.constant = T, parallel = F, lapply__, reverseEvaluationOrder = T) {
 	# <p> produce raw combinations
 	modelSize = lapply(modelList, function(m)1:length(m));
 	models = merge.multi.list(modelSize, .first.constant = .first.constant);
@@ -2009,15 +2039,18 @@ iterateModels = function(modelList, f = function(...)list(...), ...,
 
 	# <p> handle constraints
 	selC = if (is.null(.constraint)) T else
-		unlist(iterateModels_raw(modelList, models, f = .constraint,
-			lapply__ = lapply, callWithList = callWithList, restrictArgs = restrictArgs, ...));
+		unlist(iterateModels_raw(modelList, models, f_iterate = .constraint,
+			callWithList = callWithList, restrictArgs = restrictArgs, ..., parallel = F));
 	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
-	#	apply constraints
+	# <p> apply constraints
 	models = models[selC & selI, , drop = F];
 	models_symbolic = models_symbolic[selC & selI, , drop = F];
 
-	r = iterateModels_raw(modelList, models, f = f,
-		lapply__ = lapply__, callWithList = callWithList, restrictArgs = restrictArgs, ...);
+	# <p> models to be iterated
+	modelsIt = if (reverseEvaluationOrder) models[rev(1:nrow(models)), , drop = F] else models;
+	r = iterateModels_raw(modelList, modelsIt, f_iterate = f,
+		callWithList = callWithList, restrictArgs = restrictArgs, ..., parallel = parallel);
+	if (reverseEvaluationOrder) r = rev(r);
 	r = if (.resultsOnly) r else list(
 		models = models,
 		results = r,
@@ -2455,7 +2488,7 @@ path.absolute = absolutePath = function(path, home.dir = T, ssh = T) {
 	if (nchar(path) > 0 && substr(path, 1, 1) == "/") path else sprintf("%s/%s", getwd(), path)
 }
 tempFileName = function(prefix, extension = NULL, digits = 6, retries = 5, inRtmp = F,
-	createDir = F, home.dir = T) {
+	createDir = F, home.dir = T, doNotTouch = F) {
 	ext = if (is.null(extension)) '' else sprintf('.%s', extension);
 	path = NULL;
 	if (inRtmp) prefix = sprintf('%s/%s', tempdir(), prefix);
@@ -2469,7 +2502,7 @@ tempFileName = function(prefix, extension = NULL, digits = 6, retries = 5, inRtm
 	# potential race condition <N>
 	if (createDir)
 		Dir.create(path, recursive = T) else
-		writeFile(path, '', mkpath = T, ssh = T);
+		if (!doNotTouch) writeFile(path, '', mkpath = T, ssh = T);
 	# # old implementation
 	#path = tempfile(prefix);
 	#cat('', file = path);	# touch path to lock name
@@ -2808,13 +2841,14 @@ Log.setLevel(4);	# default
 	post = function(spec, ret, ...) { list() }
 	),
 	# <i> stdout/stderr handling
-	ssh = list(pre = function(cmd, spec, ssh_host = 'localhost', ssh_source_file = NULL, ...) {
+	ssh = list(pre = function(cmd, spec, ssh_host = 'localhost', ssh_source_file = NULL, ...,
+		ssh_single_quote = T) {
 		if (!is.null(ssh_source_file)) {
 			cmd = sprintf('%s ; %s',
 				join(paste('source', qs(ssh_source_file), sep = ' '), ' ; '), cmd);
 		}
-		ncmd = sprintf('ssh %s %s', ssh_host, qs(cmd));
-		spec = list(cmd = ncmd);
+		fmt = if (ssh_single_quote) 'ssh %{ssh_host}s %{cmd}q' else 'ssh %{ssh_host}s %{cmd}Q';
+		spec = list(cmd = Sprintf(fmt));
 		spec
 	},
 	fs = function(fs, ..., ssh_host) {
@@ -3079,8 +3113,12 @@ Do.call = function(what, args, quote = FALSE, envir = parent.frame(),
 #'
 #' @param as.dirs assume that prefixes are pathes, i.e. a slash will be put between path and prefix
 #' @param force enforces that path and prefix are always joined, otherwise if path is absolute no prefixing is performed
-file.locate = function(path, prefixes = NULL, normalize = T, as.dirs = T, force = F) {
+file.locate = function(path, prefixes = NULL, normalize = T, as.dirs = T, force = F, home = T) {
 	if (!force && substr(path, 1, 1) == '/') return(path);
+	if (substr(path, 1, 1) == '~' && home) {
+		path = path.absolute(path, home = TRUE);
+		if (!force) return(path);
+	}
 	if (is.null(prefixes)) prefixes = if (as.dirs) '.' else '';
 	sep = ifelse(as.dirs, '/', '');
 	for (prefix in prefixes) {
@@ -3156,10 +3194,10 @@ Source_url = function(url, ...) {
 
 # <!> local = T does not work
 Source = function(file, ...,
-	locations = c('.', sprintf('%s/src/Rscripts', Sys.getenv('HOME')))) {
+	locations = c('', '.', sprintf('%s/src/Rscripts', Sys.getenv('HOME')))) {
 	sapply(file, function(file) {
 		if (isURL(file)) Source_url(file, ...) else {
-			file0 = file.locate(file, prefixes = locations);
+		file0 = file.locate(file, prefixes = locations);
 			source(file = file0, ...)
 		}
 	})
@@ -3337,6 +3375,7 @@ stdOutFromCall = function(call_) {
 #
 
 md5sumString = function(s, prefix = 'md5generator') {
+	require('tools');
 	path = tempfile('md5generator');
 	writeFile(path, s);
 	md5 = avu(md5sum(path));
@@ -3605,6 +3644,7 @@ sqliteQuery = function(db, query, table = NULL) {
 #
 
 # if (1) {
+#	.fn.set(prefix = 'results/201404/expressionMonocytes-')
 # 	initPublishing('expressionMonocytes201404', '201405');
 # 	publishFile('results/expressionMonocytesReportGO.pdf');
 # }
@@ -3648,15 +3688,30 @@ publishCsv = function(table, as, ..., into = NULL) {
 }
 
 publishDir = function(dir, into = NULL, as = NULL) with(publishFctEnv('', into, as), {
-	if (!is.null(into)) Dir.create(destination);
-	Logs('Publishing %{dir} --> "%{destination}s', 3);
+	if (!is.null(into)) {
+		destination = splitPath(destination)$fullbase;	# remove trailing slash
+		Dir.create(destination);
+	}
+	Logs('Publishing %{dir} --> %{destination}s', 3);
 	Dir.create(destination, recursive = T);
-	System(Sprintf("chmod -R a+rX %{dir}s", dir = qs(projectFolder)), 4);
-	System(Sprintf("cp -r %{dir}s/ %{dest}s", dir = qs(dir),
-		dest = qs(destination)), 4);
-	System(Sprintf("chmod -R a+rX %{dir}s", dir = qs(projectFolder)), 4);
+	System(Sprintf("chmod -R a+rX %{projectFolder}Q"), 4);
+	System(Sprintf("cp -r %{dir}Q/* %{destination}Q"), 4);
+	System(Sprintf("chmod -R a+rX %{projectFolder}Q"), 4);
 	destination
 })
+
+publishAsZip = function(files, as, into = NULL, recursive = FALSE) {
+	tmp = tempFileName('publishAsZip', createDir = T, inRtmp = T);
+	output = tempFileName('publishAsZip', 'zip', inRtmp = T, doNotTouch = T);
+	sapply(files, function(file) {
+		File.symlink(splitPath(file)$absolute, Sprintf("%{tmp}s"), replace = F);
+		NULL
+	});
+	recursiveOption = ifelse(recursive, '-r', '');
+	System(Sprintf("zip -j %{recursiveOption}s %{output}s %{tmp}s/*"), 2);
+	publishFile(output, into = into, as = as);
+}
+
 
 #
 #	<p> quick pdf generation
@@ -3983,12 +4038,12 @@ callEvalArgs = function(call_, env_eval = FALSE) {
 }
 
 #callWithFunctionArgs = function(f, args, envir__ = parent.frame(), name = NULL) {
-callWithFunctionArgs = function(f, args, envir__ = environment(f), name = NULL, env_eval = FALSE) {
-	if (env_eval) f = environment_eval(f, functions = T);
+callWithFunctionArgs = function(f__, args__, envir__ = environment(f__), name = NULL, env_eval = FALSE) {
+	if (env_eval) f = environment_eval(f__, functions = FALSE, recursive = FALSE);
 	call_ = list(
-		fct = f,
-		envir = environment(f),
-		args = args,
+		fct = f__,
+		envir = environment(f__),
+		args = args__,
 		name = name
 	);
 	call_
@@ -4476,7 +4531,7 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	unit_out = if (is.null(unit_out)) units_default[[type]];
 	width = units_conv[[unit_out]]$to(units_conv[[unit]]$from(width));
 	height = units_conv[[unit_out]]$to(units_conv[[unit]]$from(height));
-	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 4);
+	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 5);
 
 	device(plot_path, width = width, height = height, ...);
 		#ret = eval(object, envir = envir);
@@ -4488,13 +4543,18 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	dev.off();
 }
 
+plot_typeMap = list(jpg = 'jpeg');
 plot_save = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	type = NULL,
 	envir = parent.frame(), options = list(), simplify = T, unit = 'cm', unit_out = NULL) {
 
 	if (is.null(plot_path)) file = tempFileName('plat_save', 'pdf', inRtmp = T);
 	ret = lapply(plot_path, function(plot_path) {
-		if (is.null(type)) type = splitPath(plot_path)$ext;
+		if (is.null(type) && !is.null(plot_path)) {
+			ext = splitPath(plot_path)$ext;
+			type = firstDef(plot_typeMap[[ext]], ext);
+		}
+		Logs("plot_path: %{plot_path}s, device: %{type}s", logLevel = 5);
 		plot_save_raw(object, ..., type = type, width = width, height = height, plot_path = plot_path,
 			options = options, unit = unit, unit_out = unit_out);
 	});
@@ -5209,7 +5269,7 @@ REP.finalizeSubTemplate = function(subTemplate) {
 	REP.save();
 }
 
-REP.finalize = function(conditionals = list(), verbose = F, cycles = 1, output = NULL) {
+REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, output = NULL) {
 	# <p> vars
 	ri = .REPORTER.ITEMS;
 	
@@ -5251,7 +5311,7 @@ REP.finalize = function(conditionals = list(), verbose = F, cycles = 1, output =
 		r = System(Sprintf('cd %{dir}s ; %{latexCmd}s -interaction=nonstopmode \"%{tn}s\"'),
 			4, return.output = T);
 		if (r$error > 0) Log(Sprintf("%{latexCmd}s exited with error."), 1);
-		if (r$error > 0 || verbose) Log(r$output, 1);
+		if (r$error > 0 || (verbose && i == 1)) Log(r$output, 1);
 		#if (r$error > 0) break;
 	}
 
@@ -6773,6 +6833,16 @@ quantileReference = function(reference, direction = 2, center = TRUE) {
 	ref
 }
 
+Skewness = function(x, na.rm = T) {
+	x0 = if(na.rm) na.omit(x) else x;
+    N = length(x0);
+    x1 = x0 - mean(x0)
+    y = sqrt(N) * sum(x1^3) / (sum(x1^2)^(3/2))
+    s = y * ((1 - 1/N))^(3/2);
+    s
+}
+Noutliers = function(x, coef = 1.5)length(boxplot.stats(x, coef = coef)$out)
+
 #' Quantile normalization of frame/matrix with respect to reference distribution
 #'
 #' Distribution to be normalized are represented as columns or rows of a matrix/data frame.
@@ -7719,38 +7789,6 @@ ReapFromDisk = function(path, sow_field = 'default', fields = NULL, auto_unlist 
 	if (auto_unlist && length(r) == 1) r = r[[1]];
 	r
 	
-}
-#
-#	Rparallel_setEnable_standalone.R
-#Mon Mar 25 17:06:14 CET 2013
-
-# enable/disable parallelize.dynamic functionality during standalone use
-
-parallelize_setEnable = function(state) {
-	if (!exists('parallelize_env', envir = .GlobalEnv)) assign('parallelize_env', new.env(), envir = .GlobalEnv);
-	if (!state) {
-		assign('Lapply', lapply, envir = .GlobalEnv);
-		assign('Sapply', sapply, envir = .GlobalEnv);
-		assign('Apply', apply, envir = .GlobalEnv);
-		assign('parallelize', parallelize_dummy, envir = .GlobalEnv);
-		assign('parallelize_call', parallelize_call_dummy, envir = .GlobalEnv);
-	} else {
-		assign('Lapply', Lapply_backup, envir = .GlobalEnv);
-		assign('Sapply', Sapply_backup, envir = .GlobalEnv);
-		assign('Apply', Apply_backup, envir = .GlobalEnv);
-		assign('parallelize', parallelize_backup, envir = .GlobalEnv);
-		assign('parallelize_call', parallelize_call_backup, envir = .GlobalEnv);
-	}
-}
-
-#
-#	<p> initialize
-#
-
-#parallelize_setEnable(F);
-
-setupLocalEnv = function(vars = list()) {
-	NULL
 }
 #
 #	RparallelTools.R

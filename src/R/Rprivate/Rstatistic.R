@@ -1397,6 +1397,16 @@ quantileReference = function(reference, direction = 2, center = TRUE) {
 	ref
 }
 
+Skewness = function(x, na.rm = T) {
+	x0 = if(na.rm) na.omit(x) else x;
+    N = length(x0);
+    x1 = x0 - mean(x0)
+    y = sqrt(N) * sum(x1^3) / (sum(x1^2)^(3/2))
+    s = y * ((1 - 1/N))^(3/2);
+    s
+}
+Noutliers = function(x, coef = 1.5)length(boxplot.stats(x, coef = coef)$out)
+
 #' Quantile normalization of frame/matrix with respect to reference distribution
 #'
 #' Distribution to be normalized are represented as columns or rows of a matrix/data frame.

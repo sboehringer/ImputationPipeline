@@ -373,8 +373,9 @@ powerLocusCaseControl = function(M = 1e2, N, af, mu, beta,
 	test = function(formula, data) {
 		cfs = coefficients(summary(glm(formula, family = binomial(), data = data)));
 		list(p.value =  if (length(row.names(cfs)) <= 1) NA else cfs['gtScores', 'Pr(>|z|)'])
-	}, ...){
+	}, ..., parallel = F){
 
+	if (!parallel) Sapply = sapply;
 	ps = Sapply(1:M, function(i, N, af, mu, beta, scoresSim, scoresTest, test, formula) {
 		d = simulateLocusCaseControl(N, af, mu, beta, scores = scoresSim);
 		testLocusCaseControl(d, scores = scoresTest, formula = formula, test = test, ...)

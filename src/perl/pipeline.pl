@@ -592,7 +592,7 @@ sub submitPipeline { my ($c, $p) = @_;
 		my %old_env = %ENV;
 		my %pipe_env = map {
 			my ($k) = (/^ENV_ADD_(.*)/);
-			$k => qs("$ENV{$k}$pp{$_}")
+			$k => "$ENV{$k}$pp{$_}"
 		} grep { /^ENV_ADD_/ } keys %pp;
 		%ENV = (%ENV, %pipe_env);
 

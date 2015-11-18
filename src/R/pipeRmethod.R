@@ -11,7 +11,7 @@
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
-	by = NULL, do_debug = F, browserAtLine = NULL, Hlimit = 1e-2){
+	by = NULL, do_debug = F, browserAtLine = NULL, entropyLimit = 1e-7, entropyCuts = 6){
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);
@@ -74,15 +74,17 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		if (do_debug) print(head(data));
 		
 		# <p> call function
+		gtCat = cut(data$MARKER_dosage, seq(0, 2 + 1e-3, length.out = entropyCuts), right = F);
 		H = table.entropy(data$MARKER_dosage);
 		Log(sprintf('Calling %s for snp %s [#%d] [Entropy:%.1e]', RfunctionName, snpname, i, H), 5);
 		if (!is.null(browserAtLine) && browserAtLine == i) browser();
-		r = try(
+		# <!> avoid analysis of degenerate data, cox-regression might core-dump
+		r = if (H > entropyLimit) try(
 			do.call(get(RfunctionName), c(list(data = data, snp = snpname), list(...)))
 			#do.call(get(RfunctionName), c(list(data = data, snp = snpname), formula0=formula0, formula1=formula1))
-		);
-		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
+		) else NA;
 		if (class(r) == 'try-error') r = NA;
+		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
 		r = c(snpname, chromosome, snpinfo, snpinfo2, r);
 		names(r)[1:7] = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
 		r

@@ -5,9 +5,3 @@
 # universal defaults
 @include defaults_all
 @include defaults_shark_common
-
-# queue used on the batch queueing system
-ENV:QSUB_QUEUE	all.q
-ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
-ENV:RSCRIPTS			$HOME/src/pipeline_development/R:$HOME/src/Rprivate:$HOME/src/Rscripts
-ENV:RINCLUDES			RgenericAll.R

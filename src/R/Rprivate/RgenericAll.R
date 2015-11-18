@@ -7057,6 +7057,7 @@ qqSim = function(Nsim, dist = 'truncnorm', Nqts = Nsim/10, ...) {
 
 table.entropy = function(d) {
 	p = table.freq(d);
+	p = p[p != 0];
 	H = - sum(p * log(p));
 }#
 #	Rpatches.R

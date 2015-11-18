@@ -1471,3 +1471,12 @@ qqSim = function(Nsim, dist = 'truncnorm', Nqts = Nsim/10, ...) {
 	qq = qqDist(Nqts, qdist, ...);
 	qq
 }
+
+#
+#	<p> entropy
+#
+
+table.entropy = function(d) {
+	p = table.freq(d);
+	H = - sum(p * log(p));
+}

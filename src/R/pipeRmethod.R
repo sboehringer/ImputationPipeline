@@ -11,7 +11,7 @@
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
-	by = NULL, do_debug = F, browserAtLine = NULL){
+	by = NULL, do_debug = F, browserAtLine = NULL, Hlimit = 1e-2){
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);
@@ -74,7 +74,8 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		if (do_debug) print(head(data));
 		
 		# <p> call function
-		Log(sprintf('Calling %s for snp %s [#%d]', RfunctionName, snpname, i), 5);
+		H = table.entropy(data$MARKER_dosage);
+		Log(sprintf('Calling %s for snp %s [#%d] [Entropy:%.1e]', RfunctionName, snpname, i, H), 5);
 		if (!is.null(browserAtLine) && browserAtLine == i) browser();
 		r = try(
 			do.call(get(RfunctionName), c(list(data = data, snp = snpname), list(...)))

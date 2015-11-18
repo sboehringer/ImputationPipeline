@@ -74,15 +74,13 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		if (do_debug) print(head(data));
 		
 		# <p> call function
-		Log(sprintf('Calling %s for snp %s', RfunctionName, snpname), 5);
+		Log(sprintf('Calling %s for snp %s [#%d]', RfunctionName, snpname, i), 5);
 		if (!is.null(browserAtLine) && browserAtLine == i) browser();
 		r = try(
 			do.call(get(RfunctionName), c(list(data = data, snp = snpname), list(...)))
 			#do.call(get(RfunctionName), c(list(data = data, snp = snpname), formula0=formula0, formula1=formula1))
 		);
-		if (i %% 5e2 == 0)
-			Log(sprintf('Processed %d snps', i), 3) else
-			Log(sprintf('Processed %d snps', i), 7);
+		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
 		if (class(r) == 'try-error') r = NA;
 		r = c(snpname, chromosome, snpinfo, snpinfo2, r);
 		names(r)[1:7] = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');

@@ -11,7 +11,7 @@
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
-	by = NULL, do_debug = F, browserAtLine = NULL, entropyLimit = 1e-7, entropyCuts = 12){
+	by = NULL, do_debug = F, browserAtLine = NULL, entropyLimit = 2e-3, entropyCuts = 12){
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);

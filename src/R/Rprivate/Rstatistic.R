@@ -1233,16 +1233,19 @@ cv_test_glm = function(model, formula, data, ...) {
 # cv_prepare = function(data, argsFrom...)
 # cv_train = function(data, argsFrom...)
 # cv_test = function(model, data, argsFrom...)
+# @arg cv_fold number of crossvalidation folds, denotes leave -cv_fold out if negative
 
 crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list(),
 	data, cv_fold = 20, cv_repeats = 1, ..., parallel = F, align_order = TRUE) {
+	if (cv_fold == 0) stop('crossvalidate: cv_fold must be an integer != 0');
 	if (!parallel) Lapply = lapply;
-	N = dim(data)[1];
+	N = nrow(data);
 	r = with(cv_prepare(data = data, ...), {
 		Lapply(1:cv_repeats, function(i, ...) {
 			perm = Sample(1:N, N);
 			# compute partitions
-			parts = splitListEls(perm, cv_fold, returnElements = T);
+			fold = if (cv_fold > 0) cv_fold else as.integer(N/-cv_fold);
+			parts = splitListEls(perm, fold, returnElements = T);
 			o = order(unlist(parts));
 			r = Lapply(parts, function(part, cv_train, cv_test, data, cv_repeats, ...) {
 				d0 = data[-part, , drop = F];
@@ -1263,6 +1266,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 				r = do.call(rbind, r);
 				r[o, ]
 			} else r;
+			gc();
 			r
 	}, ...)});
 	r
@@ -1271,6 +1275,8 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 #
 #	<p> data standardization
 #
+
+standardize = function(v)(v / sd(v));
 
 df2z = function(data, vars = names(as.data.frame(data))) {
 	data = as.data.frame(data);

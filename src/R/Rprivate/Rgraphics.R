@@ -419,16 +419,17 @@ histograms_alpha = function(data, palette = histogram_colors, log10 = F,
 # base unit is 600dpi
 units_conv = list(
 	cm = list(from = function(cm)(cm/2.54*600), to = function(b)(b/600*2.54)),
+	points = list(from = function(points)(points/72*600), to = function(b)(b/600*72)),
 	inch = list(from = function(i)(i*600), to = function(b)(b/600)),
 	dpi150 = list(from = function(dpi)(dpi/150*600), to = function(b)(b*150/600))
 );
-units_default = list(jpeg = 'dpi150', pdf = 'inch');
+units_default = list(jpeg = 'dpi150', pdf = 'cm', png = 'points');
 
 plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	type = NULL, options = list(), unit = 'cm', unit_out = NULL, envir = parent.frame()) {
 
 	device = get(type);
-	unit_out = if (is.null(unit_out)) units_default[[type]];
+	if (is.null(unit_out)) unit_out = units_default[[type]];
 	width = units_conv[[unit_out]]$to(units_conv[[unit]]$from(width));
 	height = units_conv[[unit_out]]$to(units_conv[[unit]]$from(height));
 	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 5);
@@ -446,14 +447,16 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 plot_typeMap = list(jpg = 'jpeg');
 plot_save = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	type = NULL,
-	envir = parent.frame(), options = list(), simplify = T, unit = 'cm', unit_out = NULL) {
+	envir = parent.frame(), options = list(), simplify = T, unit, unit_out = NULL) {
 
+	unitMissing = missing(unit);
 	if (is.null(plot_path)) file = tempFileName('plat_save', 'pdf', inRtmp = T);
 	ret = lapply(plot_path, function(plot_path) {
 		if (is.null(type) && !is.null(plot_path)) {
 			ext = splitPath(plot_path)$ext;
 			type = firstDef(plot_typeMap[[ext]], ext);
 		}
+		if (unitMissing) unit = firstDef(units_default[[type]], 'cm');
 		Logs("plot_path: %{plot_path}s, device: %{type}s", logLevel = 5);
 		plot_save_raw(object, ..., type = type, width = width, height = height, plot_path = plot_path,
 			options = options, unit = unit, unit_out = unit_out);

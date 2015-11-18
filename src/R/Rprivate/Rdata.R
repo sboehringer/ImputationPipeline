@@ -123,6 +123,8 @@ listFind = function(lsed, lsee) {
 	r
 }
 
+same.vector = function(v)all(v == v[1])
+
 #
 #	<§> string manipulation
 #
@@ -265,6 +267,53 @@ FetchRegexpr = function(re, str, ..., ret.all = F, globally = T, captures = F, c
 regex = Vectorize(fetchRegexpr, 'str', SIMPLIFY = T, USE.NAMES = T);
 Regex = Vectorize(FetchRegexpr, 're', SIMPLIFY = T, USE.NAMES = T);
 regexIdcs = function(re, s, ...)vectorIdcs(regex(re, s, ...), is.null, not = T)
+
+# unify capture extraction for gregexpr, regexpr
+# pos == 0: grexepr, regexpr else by iterating pos as index into str
+matchRegexCapture = function(reg, str, pos = NULL) {
+	if (is.null(attr(reg, 'capture.start'))) return(NULL);
+	if (!is.null(pos)) str = str[pos] else pos = seq_along(reg);
+	captures = lapply(1:ncol(attr(reg, 'capture.start')), function(i) {
+		sapply(pos, function(j)Substr(str,
+			attr(reg, 'capture.start')[j, i], attr(reg, 'capture.length')[j, i]))
+	});
+	names(captures) = attr(reg, 'capture.names');
+	captures
+}
+matchRegexExtract = function(reg, str, pos = NULL) {
+	if (!is.null(pos)) str = str[pos] else pos = seq_along(reg);
+	matches = ifelse(reg[pos] < 0, character(0),
+		sapply(pos, function(i)Substr(str, reg[i], attr(reg, 'match.length')[i])));
+	matches
+}
+# <i> re nested list with sub-res for named captures
+# <!> globally == FALSE, removeNonMatch == FALSE
+matchRegex = function(re, str, ..., globally = TRUE, simplify = TRUE,
+	positions = FALSE, removeNonMatch = FALSE) {
+	if (length(re) == 0) return(NULL);
+	reg = if (globally) gregexpr(re, str, perl = T, ...) else regexpr(re, str, perl = T, ...);
+	ms = if (globally)
+		lapply(seq_along(reg), function(i)matchRegexExtract(reg[[i]], str[i])) else
+		lapply(seq_along(str), function(i)matchRegexExtract(reg, str, pos = i));
+	#	regmatches(str, reg);
+	captures = if (globally)
+		lapply(seq_along(reg), function(i)matchRegexCapture(reg[[i]], str[i])) else
+		lapply(seq_along(str), function(i)matchRegexCapture(reg, str, pos = i));
+	if (removeNonMatch) {
+		nonmatch = sapply(ms, length) == 0 | is.na(ms);
+		ms = ms[!nonmatch];
+		captures = captures[!nonmatch];
+		reg = reg[!nonmatch];
+	}
+	if (simplify && length(str) == 1) {
+		ms = ms[[1]];
+		captures = captures[[1]];
+		reg = reg[[1]];
+	}
+	r = if(positions) list(match = ms, capture = captures, positions = reg) else
+		list(match = ms, capture = captures);
+	r
+}
 
 splitString = function(re, str, ..., simplify = T) {
 	l = lapply(str, function(str) {
@@ -413,12 +462,13 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 		(?:[^%]+|(?:%%)+)*\\K
 		[%]
 			(?:[{]([^{}\\*\'"]*)[}])?
-		((?:[-]?[*\\d]*[.]?[*\\d]*)?(?:[sdfegGDQq]|))(?=[^sdfegGDQq]|$)
+		((?:[-]?[*\\d]*[.]?[*\\d]*)?(?:[sdfegGDQqu]|))(?=[^sdfegGDQqu]|$)
 	)';
 	r = fetchRegexpr(re, fmt, capturesAll = T, returnMatchPositions = T);
 	typesRaw = sapply(r$match, function(m)ifelse(m[2] == '', 's', m[2]));
 	types = ifelse(typesRaw %in% c('D', 'Q'), 's', typesRaw);
-	fmts = sapply(r$match, function(m)sprintf('%%%s', ifelse(m[2] %in% c('', 'D', 'Q', 'q'), 's', m[2])));
+	fmts = sapply(r$match, function(m)sprintf('%%%s',
+		ifelse(m[2] %in% c('', 'D', 'Q', 'q', 'u'), 's', m[2])));
 	fmt1 = Substr(fmt, r$positions, attr(r$positions, 'match.length'), fmts);
 
 	keys = sapply(r$match, function(i)i[1]);
@@ -456,6 +506,12 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 	#colsq = keys[typesRaw == 'q'];
 	colsq = which(typesRaw == 'q');;
 	dictDf[, colsq] = apply(dictDf[, colsq, drop = F], 2, qss);
+
+	colsu = which(typesRaw == 'u');;
+	dictDf[, colsu] = apply(dictDf[, colsu, drop = F], 2, uc.first);
+
+	colsd = which(typesRaw == 'd');;
+	dictDf[, colsd] = apply(dictDf[, colsd, drop = F], 2, as.integer);
 
 	s = sapply(1:nrow(dictDf), function(i) {
 		valueDict = as.list(dictDf[i, , drop = F]);
@@ -618,13 +674,24 @@ splitListIndcs = function(M, N = 1, .compact = F, .truncate = T) {
 	if (!is.matrix(idcs)) idcs = matrix(idcs, nrow = 1);
 	idcs
 }
-splitListEls = function(l, N, returnElements = F) {
+splitListEls = function(l, N, returnElements = FALSE) {
 	idcs = splitListIndcs(length(l), N);
 	li = apply(idcs, 1, function(r)(if (returnElements) l[r[1]:r[2]] else r[1]:r[2]));
 	# <!> R ambiguity of apply return type
 	if (is.matrix(li)) li = lapply(1:(dim(li)[2]), function(i)li[, i]);
 	if (is.vector(li)) li = as.list(li);;
 	li
+}
+
+# @arg l list of index positions from another object
+# @return return vector indicating to which list element an index was assigned
+# Example: glmnet accepts fold numbers per index (as opposed to a partitioning of elements)
+index2listPosition = function(l) {
+	N = sum(sapply(l, length));
+	na = rep(NA, N);
+	m = sapply(1:length(l), function(i)vector.assign(na, l[[i]], i, na.rm = NA));
+	r = apply(m, 1, na.omit);
+	r
 }
 
 # splitting based on fractions
@@ -722,14 +789,17 @@ exists.pos = function(v, i)(is.vector(v) && !is.na(v[i]))
 #	<par> lists
 #
 
-merge.lists = function(..., ignore.nulls = TRUE, listOfLists = F) {
+merge.lists = function(..., ignore.nulls = TRUE, listOfLists = FALSE, concat = FALSE, useIndeces = FALSE) {
 	lists = if (listOfLists) c(...) else list(...);
 	l1 = lists[[1]];
 	if (length(lists) > 1) for (i in 2:length(lists)) {
 		l2 = lists[[i]];
-		for(n in names(l2)) {
+		ns = if (useIndeces) 1L:length(l2) else names(l2);
+		for(n in ns) {
 			if (is.null(n)) print("Warning: tried to merge NULL key");
-			if (!is.null(n) & (!ignore.nulls | !is.null(l2[[n]]))) l1[[n]] = l2[[n]];
+			if (!is.null(n) & (!ignore.nulls | !is.null(l2[[n]]))) {
+				if (concat) l1[[n]] = c(l1[[n]], l2[[n]]) else l1[[n]] = l2[[n]];
+			}
 		}
 	}
 	l1
@@ -932,11 +1002,16 @@ gapply = function(l, key, unlist = F)list.key(l, key, unlist)
 # construct list as a dictionary for given keys and values
 listKeyValue = function(keys, values) {
 	if (length(keys) != length(values))
-		stop("listKeyValues: number of provided keys does not match that of values");
+		stop("listKeyValue: number of provided keys does not match that of values");
 
 	l = as.list(values);
 	names(l) = keys;
 	l
+}
+vectorNamed = function(v, names) {
+	if (length(names) > length(v)) stop("vectorNamed: more names than vector elements");
+	names(v) = names;
+	v
 }
 #listInverse = function(l)listKeyValue(avu(l), names(l));
 listInverse = function(l, toNA = F) {
@@ -1219,10 +1294,13 @@ searchDataFrame = function(d, l, .remove.factors = T) {
 
 # manipulate list of vectors
 # vectors i = 1,.., n with entries v_ij are represented as vector v_11, ..., v_n1, v_21, ...
-meshVectors = function(...) {
+vector.intercalate = meshVectors = function(...) {
 	l = list(...);
 	if (length(l) == 1) l = l[[1]];
 	v = as.vector(t(sapply(l, function(v)unlist(v))));
+	# <N> preferred implementation
+	# No unlist -> should be part of input sanitization
+	# v = as.vector(do.call(rbind, l));
 	v
 }
 
@@ -1251,6 +1329,30 @@ rep.each.row = function(m, n) {
 	r
 }
 rep.list = function(l, n) lapply(1:length(l), function(e)l);
+matrix.intercalate = function(..., direction = 1) {
+	l = list(...);
+	# <!> assume same dimension
+	d = dim(l[[1]]);
+	N = prod(d);
+	# <p> create new matrix
+	v = c(if (direction == 1) sapply(l, as.vector) else sapply(sapply(l, t), as.vector) , recursive = T);
+	vN = as.vector(matrix(v, ncol = N, byrow = T));
+	r = if (direction == 1)
+		matrix(vN, nrow = d[1] * length(l)) else
+		matrix(vN, ncol = d[2] * length(l), byrow = T);
+	# <p> return value
+	if (class(l[[1]]) == 'data.frame') r = Df_(r, names = names(l[[1]]));
+	r
+}
+matrix.intercalate_test = function() {
+	m1 = matrix(1:4, ncol = 2);
+	m2 = matrix(5:8, ncol = 2);
+	# <i>
+	print(list(m1, m2));
+	print(matrix.intercalate(m1, m2));
+	print(matrix.intercalate(m1, m2, direction = 2));
+}
+
 
 data.frame.expandWeigths = function(data, weights = 'weights') {
 	w = data[[weights]];
@@ -1290,6 +1392,11 @@ matrix.assign = function(m, idcs, e, byrow = T) {
 		m[idcs, ] = e else
 		m[, idcs] = e
 	m
+}
+
+# are columns/rows same values in matrix
+matrix.same = function(m, direction = 1) {
+	apply(m, direction, function(e)all(e[1] == e))
 }
 
 vectorIdcs = function(v, f, ..., not = F) {
@@ -1585,6 +1692,19 @@ vectorLag = function(v, start = 0)pop(c(v, start) - c(start, v))
 splitN = function(N, by = 4) vectorLag(round(cumsum(rep(N/by, by))));
 splitToMax = function(N, max = 4) vectorLag(round(cumsum(rep(N/ceiling(N/max), ceiling(N/max)))));
 
+# cumsum returning indeces for numbers given in Ns
+cumsumI = function(Ns, offset = 1, do.pop = FALSE) {
+	cs = vectorNamed(c(0, cumsum(Ns)) + offset, c(names(Ns), 'N'));
+	if (do.pop) cs = pop(cs);
+	cs
+}
+# recursive cumsum (one level)
+cumsumR = function(l, offset = 1) {
+	cs0 = if (is.list(l)) lapply(l, cumsumR, offset = 0) else rev(cumsum(l))[1];
+	cs = vectorNamed(c(0, pop(unlist(cs0))) + offset, names(cs0));
+	cs
+}
+
 #
 #	<par> sets and permutations
 #
@@ -1691,6 +1811,18 @@ data.frame.union = function(l) {
 		dfu = rbind(dfu, cbind(df, factor));
 	}
 	dfu
+}
+
+recodeLevels = function(f, map, others2na = TRUE) {
+	# map others to NA
+	if (others2na) {
+		nonmentioned = setdiff(if (is.factor(f)) levels(f) else unique(f), names(map));
+		map = c(map, listKeyValue(nonmentioned, rep(NA, length(nonmentioned))));
+	}
+	v = vector.replace(as.character(f), map);
+	if (is.integer(f)) v = as.integer(v);
+	if (is.factor(f)) v = as.factor(v);
+	v
 }
 
 Union = function(..., .drop = T) {
@@ -2005,7 +2137,7 @@ iterateModels_prepare = function(modelList, .constraint = NULL,
 	# <p> handle constraints
 	selC = if (is.null(.constraint)) T else
 		unlist(iterateModels_raw(modelList, models, f_iterate = .constraint,
-			lapply__ = lapply, callWithList = callWithList, restrictArgs = restrictArgs, ...));
+			parallel = FALSE, callWithList = callWithList, restrictArgs = restrictArgs, ...));
 	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
 	#	apply constraints
 	models = models[selC & selI, , drop = F];
@@ -2018,10 +2150,13 @@ iterateModels_prepare = function(modelList, .constraint = NULL,
 }
 
 iterateModels = function(modelList, f = function(...)list(...), ...,
-	.constraint = NULL, .clRunLocal = T, .resultsOnly = F, .unlist = 0,
-	callWithList = F, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
-	.first.constant = T, parallel = F, lapply__, reverseEvaluationOrder = T) {
-	# <p> produce raw combinations
+	.constraint = NULL, .clRunLocal = TRUE, .resultsOnly = FALSE, .unlist = 0,
+	callWithList = FALSE, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
+	.first.constant = TRUE, parallel = FALSE, lapply__, reverseEvaluationOrder = TRUE) {
+	nsDupl = duplicated(names(modelList));
+	if (any(nsDupl))
+		stop(con('iterateModels: duplicated modelList entries: ', join(names(modelList)[nsDupl], ', ')));
+# <p> produce raw combinations
 	modelSize = lapply(modelList, function(m)1:length(m));
 	models = merge.multi.list(modelSize, .first.constant = .first.constant);
 	models_symbolic = merge.multi.list.symbolic(modelList,
@@ -2359,9 +2494,10 @@ formula.response = function(f) {
 	#r = all.vars(f)[attr(terms(f), "response")];	# fails to work on 'response ~ .'
 	r
 }
-formula.rhs = function(f)as.formula(
-	fetchRegexpr('([~].*)', if (!is.character(f)) formula.to.character(f) else f, captures = T)
-);
+formula.rhs = function(f, noTilde = FALSE) {
+	rhs = fetchRegexpr('[~](.*)', if (!is.character(f)) formula.to.character(f) else f, captures = T);
+	if (noTilde) rhs else as.formula(con('~', rhs))
+}
 formula.covariates = function(f) {
 	covs = all.vars(formula.rhs(f));
 	#covs = setdiff(all.vars(as.formula(f)), formula.response(f));
@@ -2389,6 +2525,9 @@ formula2filename = function(f) {
 }
 data.vars = function(data, formula, re.string = '.*', ignore.case = F) {
 	all.vars(formula.re(formula = formula, data = data, re.string = re.string, ignore.case = ignore.case));
+}
+formula.add.rhs = function(f0, f1) {
+	as.formula(join(c(formula.to.character(f0), formula.rhs(f1, noTilde = TRUE)), '+'))
 }
 
 # <i> use terms.formula from a (a + ... + z)^2 formula

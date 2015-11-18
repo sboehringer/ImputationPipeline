@@ -88,7 +88,7 @@ my @R_STD_INCLUDES = ( 'RgenericAll.R' );
 #	$result = GetOptionsStandard($o, 'credentials');
 	$result = 1;
 	$result = GetOptionsStandard($o, 'code=s', 'instantiate!', 'header=s', 'quiet!',
-		'trigger!', 'rscripts=s', 'includes=s', 'allPerl', 'template=s', 'vsize=s', 'psize=s'
+		'trigger!', 'rscripts=s', 'includes=s', 'allPerl', 'template=s', 'vsize=s', 'psize=s', 'RlogLevel=s'
 	) if ((grep { $_ eq '--' } @ARGV) || (grep { $_ eq '--allPerl' } @ARGV));
 	if (!$result
 		|| $o->{help}
@@ -104,6 +104,7 @@ my @R_STD_INCLUDES = ( 'RgenericAll.R' );
 	$o->{header} .= join("\n", map {
 		"source('". firstFileLocation($_, @srcDirs). "');"
 	} @R_INCLUDES). "\n";
+	$o->{header} .= "\tLog.setLevel($o->{RlogLevel});\n" if (defined($o->{RlogLevel}));
 	#$c = readConfigFile($o->{config});
 	#$cred = KeyRing->new()->handleCredentials($o->{credentials}, '.this_cookie') || exit(0);
 	$o->{trigger} = 0 if ($o->{code});

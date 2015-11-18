@@ -1264,11 +1264,12 @@ publishCsv = function(table, as, ..., into = NULL) {
 	publishFile(file, into, as);
 }
 
-publishDir = function(dir, into = NULL, as = NULL) with(publishFctEnv('', into, as), {
+publishDir = function(dir, into = NULL, as = NULL, asSubdir = FALSE) with(publishFctEnv('', into, as), {
+	if (asSubdir) into = splitPath(dir)$file;
 	if (!is.null(into)) {
-		destination = splitPath(destination)$fullbase;	# remove trailing slash
-		Dir.create(destination);
+		destination = splitPath(Sprintf('%{destination}s/%{into}s/'))$fullbase;	# remove trailing slash
 	}
+	Dir.create(destination);
 	Logs('Publishing %{dir} --> %{destination}s', 3);
 	Dir.create(destination, recursive = T);
 	System(Sprintf("chmod -R a+rX %{projectFolder}Q"), 4);

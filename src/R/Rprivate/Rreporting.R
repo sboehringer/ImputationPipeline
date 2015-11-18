@@ -427,8 +427,8 @@ REP.new = function(templates = NULL, cache = NULL, parameters = .REP.defaultPara
 	latex = 'pdflatex', setup = 'setup.tex') {
 	parameters = merge.lists(.REP.defaultParameters,
 		parameters,
-		list(copy.files = setup, latex = latex, setup = setup)
-	);
+		list(copy.files = setup, latex = latex, setup = setup),
+	concat = TRUE);
 	if (!is.null(cache) && file.exists(cache) && !resetCache) {
 		REP.tex('SETUP', setup);
 		REP.setParameters(parameters);

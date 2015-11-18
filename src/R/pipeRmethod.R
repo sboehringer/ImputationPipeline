@@ -11,7 +11,7 @@
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
-	by = NULL, do_debug = F){
+	by = NULL, do_debug = F, browserAtLine = NULL){
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);
@@ -75,11 +75,14 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		
 		# <p> call function
 		Log(sprintf('Calling %s for snp %s', RfunctionName, snpname), 5);
+		if (!is.null(browserAtLine) && browserAtLine == i) browser();
 		r = try(
 			do.call(get(RfunctionName), c(list(data = data, snp = snpname), list(...)))
 			#do.call(get(RfunctionName), c(list(data = data, snp = snpname), formula0=formula0, formula1=formula1))
 		);
-		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
+		if (i %% 5e2 == 0)
+			Log(sprintf('Processed %d snps', i), 3) else
+			Log(sprintf('Processed %d snps', i), 7);
 		if (class(r) == 'try-error') r = NA;
 		r = c(snpname, chromosome, snpinfo, snpinfo2, r);
 		names(r)[1:7] = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');

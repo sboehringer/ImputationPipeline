@@ -75,7 +75,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		
 		# <p> call function
 		gtCat = cut(data$MARKER_dosage, seq(0, 2 + 1e-3, length.out = entropyCuts), right = F);
-		H = table.entropy(data$MARKER_dosage);
+		H = table.entropy(gtCat);
 		Log(sprintf('Calling %s for snp %s [#%d] [Entropy:%.1e]', RfunctionName, snpname, i, H), 5);
 		if (!is.null(browserAtLine) && browserAtLine == i) browser();
 		# <!> avoid analysis of degenerate data, cox-regression might core-dump

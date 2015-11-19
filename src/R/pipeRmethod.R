@@ -52,9 +52,8 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	Tfile = file(genotypeFile, "r")
 	Ifile = file(genotypeInfofile, "r")
 	infocols = scan(Ifile, what=character(0), n=10, quiet=T) #discard header
-browser();
 	r = lapply(1:N, function(i) {
-		if (!is.null(skipToAndBrowseAtLine) && skipToAndBrowseAtLine < i) return(NULL);
+		if (!is.null(skipToAndBrowseAtLine) && i < skipToAndBrowseAtLine) return(NULL);
 		firstcols = scan(Tfile, what = character(0), n = 5, quiet=T)
 		infocols = scan(Ifile, what = character(0), n = 10, quiet=T)
 		snpname = firstcols[2];

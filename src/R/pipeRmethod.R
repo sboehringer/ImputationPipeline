@@ -62,6 +62,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		genos = scan(Tfile, what=numeric(0), n = 3 * Nids, quiet=T)
 		# <p> first part of return value
 		r0 = c(snpname, chromosome, snpinfo, snpinfo2);
+		names(r0) = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
 
 		# <p> debugging
 		if (!is.null(skipToAndBrowseAtLine) && i < skipToAndBrowseAtLine) return(r0);
@@ -95,7 +96,6 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		if (class(r) == 'try-error') r = NA;
 		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
 		r = c(r0, r);
-		names(r)[1:7] = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
 		r
 	});
 	close(Tfile);

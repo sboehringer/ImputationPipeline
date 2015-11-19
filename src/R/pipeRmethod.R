@@ -53,13 +53,19 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	Ifile = file(genotypeInfofile, "r")
 	infocols = scan(Ifile, what=character(0), n=10, quiet=T) #discard header
 	r = lapply(1:N, function(i) {
-		if (!is.null(skipToAndBrowseAtLine) && i < skipToAndBrowseAtLine) return(NULL);
+		# <p> scan SNP meta data
 		firstcols = scan(Tfile, what = character(0), n = 5, quiet=T)
 		infocols = scan(Ifile, what = character(0), n = 10, quiet=T)
 		snpname = firstcols[2];
 		snpinfo = firstcols[3:5];
 		snpinfo2 = infocols[4:5];
 		genos = scan(Tfile, what=numeric(0), n = 3 * Nids, quiet=T)
+		# <p> first part of return value
+		r0 = c(snpname, chromosome, snpinfo, snpinfo2);
+
+		# <p> debugging
+		if (!is.null(skipToAndBrowseAtLine) && i < skipToAndBrowseAtLine) return(r0);
+
 		# <p> read impute file format <A>
 		#genos <- gens[i, 6:ncol(gens)];
 		genoarray = t(array(unlist(genos), dim = c(3, length(genos)/3)));
@@ -88,7 +94,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		) else NA;
 		if (class(r) == 'try-error') r = NA;
 		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
-		r = c(snpname, chromosome, snpinfo, snpinfo2, r);
+		r = c(r0, r);
 		names(r)[1:7] = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
 		r
 	});

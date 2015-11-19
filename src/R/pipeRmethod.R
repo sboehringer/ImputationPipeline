@@ -79,6 +79,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		gtCat = cut(data$MARKER_dosage, entropyCuts, right = F);
 		H = table.entropy(gtCat);
 		Log(sprintf('Calling %s for snp %s [#%d] [Entropy:%.1e]', RfunctionName, snpname, i, H), 5);
+		if (is.na(H)) print(table(gtCat));
 		if (!is.null(skipToAndBrowseAtLine) && skipToAndBrowseAtLine == i) browser();
 		# <!> avoid analysis of degenerate data, cox-regression might core-dump
 		r = if (H > entropyLimit) try(

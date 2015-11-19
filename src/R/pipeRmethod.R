@@ -12,7 +12,7 @@
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
 	by = NULL, do_debug = F, skipToAndBrowseAtLine = NULL,
-	entropyLimit = 2e-3, entropyCuts = c(0, .5, 1.5, 1+1e-3)){
+	entropyLimit = 2e-3, entropyCuts = c(0, .5, 1.5, 2+1e-3)){
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);

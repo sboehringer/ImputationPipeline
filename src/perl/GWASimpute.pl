@@ -213,9 +213,9 @@ sub createImputationBatch { my ($i, $o) = @_;
 				NUMBER_STOP => $chunk * $chunkSize,	NUMBER_CHUNK => $chunk,
 				PREPHASED_FILE => $prephased->{path}
 			};
-			Log("Merge Dict:". Dumper($merge), 1);
+			#Log("Merge Dict:". Dumper($merge), 1);
 			my $cmd = mergeDictToString($merge, $pars{CMD}, {iterate => 'yes'});
-			Log("Command:". $cmd, 1);
+			#Log("Command:". $cmd, 1);
 			{
 				cmd => $cmd,
 				file => { %$f,

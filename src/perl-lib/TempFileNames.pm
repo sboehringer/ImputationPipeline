@@ -758,7 +758,7 @@ sub pipeStringToCommandSystem { my ($strRef, $cmd, $logLevel)=@_;
 # flags:
 #	maxIterations: for iterate eq 'YES' iterate that often. 0: 2^(bitWidth - 1) iterations
 sub mergeDictToString { my ($hash, $str, $flags)=@_;
-	my $maxIterations = firstDef($flags->{maxIterations}, 50);
+	my $maxIterations = firstDef($flags->{maxIterations}, 100);
 	my @keys = grep { defined($hash->{$_}) } keys(%{$hash});
 	my $doIterate = uc($flags->{iterate}) eq 'YES';
 	my $keysRe = uc($flags->{keysAreREs}) eq 'YES';

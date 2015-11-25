@@ -762,10 +762,10 @@ sub mergeDictToString { my ($hash, $str, $flags)=@_;
 	my @keys = grep { defined($hash->{$_}) } keys(%{$hash});
 	my $doIterate = uc($flags->{iterate}) eq 'YES';
 	if (uc($flags->{sortKeys}) eq 'YES' || $doIterate)
-	{	@keys = sort { length($b) <=> length($a); } @keys;
+	{	@keys = sort { length($b) <=> length($a) } @keys;
 	}
 	if (uc($flags->{sortKeysInOrder}) eq 'YES')
-	{	@keys = sort { length($a) <=> length($b); } @keys;
+	{	@keys = sort { $a <=> $b } @keys;
 	}
 	my $str0;
 	do {
@@ -783,7 +783,7 @@ sub mergeDictToString { my ($hash, $str, $flags)=@_;
 				last if ($doIterate && $str ne $str0);
 			}
 		}
-	} while (uc($flags->{iterate}) eq 'YES' && ($str ne $str0) && --$maxIterations);
+	} while ($doIterate && ($str ne $str0) && --$maxIterations);
 	return $str;
 }
 

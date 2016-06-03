@@ -29,6 +29,7 @@ Inject:ExtraOptions
 #
 
 # inject 3col files
+inject3col:isa			Inject
 inject3col:FileType		tped3col
 # inject files from a different pipeline run
 injectExternal:Options	--inject-files-spec

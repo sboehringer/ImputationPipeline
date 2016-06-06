@@ -26,6 +26,9 @@ my $helpText = <<HELP_TEXT;
 	QSUB_QUEUE		default queue to use in job submissions
 	QSUB_OPTIONS	default options passed to include
 	QSUB_PRIORITY	default priority for jobs
+	QSUB_SOURCEFILES	colon separated list of files to source
+				prior to running the command
+	QSUB_EXCLUDENODES	comma separated lists of nodes not to use
 
 	# Examples:
 	# simply prepend qsub.pl to your command
@@ -83,6 +86,7 @@ my %Options = (
 	'-l' => 'h_vmem=options_MEMORY',
 	'-pe' => sub { return $_[0]->{Ncpu} == 1? undef: sprintf('BWA %d', $_[0]->{Ncpu}) },
 	'-r' => 'yes',	# job re-runnable
+	'-h' => undef,	# host exclusions
  );
 my %OptionsOnOff = (
 	checkpointing => [ '-ckpt' =>  'check_userdefined']
@@ -123,7 +127,11 @@ sub submitCommand { my ($cmd, $o) = @_;
 			: split("\n", readFile($o->{waitForJids}));
 		$opts{'-hold_jid'} = join(',', @jids) if (!!@jids);
 	}
+	if ($o->{excludeNodes} ne '') {
+		$opts{'-h'} = '!('. join('|', split(/\s*,\s*/, $o->{excludeNodes})). ')';
+	}
 	# <p> construct script
+	# remove empty options
 	%opts = %{dict2defined({%opts})};
 	my @options = map { "#\$ $_ $opts{$_}" } keys %opts;
 	my $script = $HEADER;
@@ -160,7 +168,8 @@ sub submitCommand { my ($cmd, $o) = @_;
 		sourceFiles => firstDef($ENV{QSUB_SOURCEFILES}, ''),
 		setenvsep => '+++',
 		memory => firstDef($ENV{QSUB_MEMORY}, '4G'),
-		Ncpu => 1
+		Ncpu => 1,
+		excludeNodes => firstDef($ENV{QSUB_EXCLUDENODES}, undef),
 	};
 	my $optionsPresent = int(grep { $_ eq '--' } @ARGV) > 0;
 	# <!><i> proper command line splitting
@@ -172,7 +181,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 	: GetOptionsStandard($o,
 		'help', 'jid=s', 'jidReplace=s', 'exports:s',
 		'waitForJids=s', 'outputDir=s', 'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
-		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s',
+		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s',
 	);
 	# <!> heuristic for unquoting
 	$o->{unquote} = 1 if (!defined($o->{unquote}) && @ARGV == 1);

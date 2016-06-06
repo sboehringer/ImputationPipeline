@@ -113,10 +113,8 @@ sub submitCommand { my ($cmd, $o) = @_;
 	my $setenv = join("\n", split(/\Q$o->{setenvsep}\E/, $o->{setenv}));
 
 	# <p> generic options
-	if ($o->{excludeNodes} ne '') {
-		$o = { %$o, EXCLUDENODES => $o->{excludeNodes} eq ''? ''
-			: 'h=!('. join('|', split(/\s*,\s*/, $o->{excludeNodes})). ')' };
-	}
+	$o->{excludeNodes} = $o->{excludeNodes} eq ''? ''
+		: ('h=!('. join('|', split(/\s*,\s*/, $o->{excludeNodes})). ')');
 	my $mergeDict = makeHash([map { 'options_'. uc($_) } keys %$o], [values %$o]);
 	my %opts = (%{makeHash([keys %Options], [map { mergeDictToString($mergeDict, $_)} values %Options])});
 	# add fixed options based on

@@ -68,6 +68,7 @@ OGS_OPTIONS
 
 # Explicit ENV exports
 OGS_EXPORTS
+OGS_SOURCE
 
 # Command
 CMD
@@ -101,6 +102,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 
 	# <p> prepare environment
 	my @envKeys = split(/\s*,\s*/, $o->{exports});
+	my @sourceFiles = split(/\s*,\s*/, $o->{sourceFiles});
 	my @envReset = which_indeces(['-'], [@envKeys]);
 	@env = @envKeys[($envReset[0] + 1) .. $#envKeys] if (defined($envReset[0]));
 	my @env = map { "$_=$ENV{$_}" } grep { !/$\s*^/ } @envKeys;
@@ -128,6 +130,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 		'QSUB_OUT' => $o->{outputDir},
 		'OGS_OPTIONS' => join("\n", @options),
 		'OGS_EXPORTS' => join("\n", ((map { "export $_" } @env), $setenv)),
+		'OGS_SOURCE' => join("\n", (map { ". $_" } @sourceFiles)),
 		'CMD' => $cmd
 	}, $script, { sortKeys => 'YES' });
 
@@ -153,6 +156,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 		priority => firstDef($ENV{QSUB_PRIORITY}, 0),
 		tmpPrefix => firstDef($ENV{QSUB_TMPPREFIX}, '/tmp/qsub_pl_'.$ENV{USER}),
 		exports => 'PATH',
+		sourceFiles => firstDef($ENV{QSUB_SOURCEFILES}, ''),
 		setenvsep => '+++',
 		memory => firstDef($ENV{QSUB_MEMORY}, '4G'),
 		Ncpu => 1
@@ -167,7 +171,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 	: GetOptionsStandard($o,
 		'help', 'jid=s', 'jidReplace=s', 'exports:s',
 		'waitForJids=s', 'outputDir=s', 'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
-		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s'
+		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s',
 	);
 	# <!> heuristic for unquoting
 	$o->{unquote} = 1 if (!defined($o->{unquote}) && @ARGV == 1);

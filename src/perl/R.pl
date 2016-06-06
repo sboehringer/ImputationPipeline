@@ -151,5 +151,5 @@ my @R_STD_INCLUDES = ( 'RgenericAll.R' );
 	Log($Rcode, 5);
 	writeFile($tf, $Rcode);
 	my $psize = mergeDictToString({'k' => '000'}, $o->{psize});
-	System("R --min-vsize=$o->{vsize} --max-ppsize=$psize --vanilla --slave < $tf", 5);
-exit(0);
+	my $exit = System("R --min-vsize=$o->{vsize} --max-ppsize=$psize --vanilla --slave < $tf", 5);
+exit($exit);

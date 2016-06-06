@@ -81,7 +81,8 @@ my %Options = (
 	'-e' => 'QSUB_OUT', '-o' => 'QSUB_OUT',
 	'-p' => 'options_PRIORITY',
 	'-l' => 'h_vmem=options_MEMORY',
-	'-pe' => sub { return $_[0]->{Ncpu} == 1? undef: sprintf('BWA %d', $_[0]->{Ncpu}) }
+	'-pe' => sub { return $_[0]->{Ncpu} == 1? undef: sprintf('BWA %d', $_[0]->{Ncpu}) },
+	'-r' => 'yes',	# job re-runnable
  );
 my %OptionsOnOff = (
 	checkpointing => [ '-ckpt' =>  'check_userdefined']
@@ -102,7 +103,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 
 	# <p> prepare environment
 	my @envKeys = split(/\s*,\s*/, $o->{exports});
-	my @sourceFiles = split(/\s*,\s*/, $o->{sourceFiles});
+	my @sourceFiles = split(/\s*:\s*/, $o->{sourceFiles});
 	my @envReset = which_indeces(['-'], [@envKeys]);
 	@env = @envKeys[($envReset[0] + 1) .. $#envKeys] if (defined($envReset[0]));
 	my @env = map { "$_=$ENV{$_}" } grep { !/$\s*^/ } @envKeys;

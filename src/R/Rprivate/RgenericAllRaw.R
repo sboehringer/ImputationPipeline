@@ -143,13 +143,18 @@ say = function(...)cat(..., "\n");
 printf = function(fmt, ...)cat(sprintf(fmt, ...));
 join = function(v, sep = " ")paste(v, collapse = sep);
 con = function(...)paste(..., sep="");
+# pastem = function(a, b, ..., revsort = T) {
+# 	if (revsort)
+# 		as.vector(apply(merge(data.frame(a = b), data.frame(b = a), sort = F), 1,
+# 			function(e)paste(e[2], e[1], ...))) else
+# 		as.vector(apply(merge(data.frame(a = a), data.frame(b = b), sort = F), 1,
+# 			function(e)paste(e[1], e[2], ...)))
+# }
 pastem = function(a, b, ..., revsort = T) {
-	if (revsort)
-		as.vector(apply(merge(data.frame(a = b), data.frame(b = a), sort = F), 1,
-			function(e)paste(e[2], e[1], ...))) else
-		as.vector(apply(merge(data.frame(a = a), data.frame(b = b), sort = F), 1,
-			function(e)paste(e[1], e[2], ...)))
+	df = merge.multi.list(list(Df(a = a), Df(b = b)), .first.constant = revsort);
+	paste(df[, 1], df[, 2], ...)
 }
+
 r.output.to.vector.int = function(s) {
 	matches = gregexpr("(?<![\\[\\d])\\d+", s, perl=T);
 	starts = as.vector(matches[[1]]);
@@ -325,6 +330,17 @@ matchRegex = function(re, str, ..., globally = TRUE, simplify = TRUE,
 	r
 }
 
+#
+#	<p> final interface as of 2016/04
+#
+MatchRegex = function(re, str, mode = 'return') {
+	r = regexpr(re, str);
+	if (mode == 'return') {
+		r = str[which(r > 0)];
+	}
+	r
+}
+
 splitString = function(re, str, ..., simplify = T) {
 	l = lapply(str, function(str) {
 		r = gregexpr(re, str, perl = T, ...)[[1]];
@@ -385,7 +401,7 @@ mergeDictToDict = function(dMap, dValues, ..., recursive = T) {
 # double quote if needed
 qsSingle = function(s, force = F) {
 	# <N> better implementation possible: detect unquoted white-space
-	if (force || length(fetchRegexpr('[ \t"]', s)) > 0) {
+	if (force || length(fetchRegexpr('[ \t"()\\[\\]:,]', s)) > 0) {
 		s = gsub('([\\"])', '\\\\\\1', s);
 		s = sprintf('"%s"', s);
 	} else {
@@ -398,7 +414,7 @@ qs = function(s, ...)sapply(s, qsSingle, ...)
 # single quote if needed
 qssSingle = function(s, force = F) {
 	# <N> better implementation possible: detect unquoted white-space
-	if (force || length(fetchRegexpr("[ \t']", s)) > 0) {
+	if (force || length(fetchRegexpr("[ \t'()\\[\\]:,]", s)) > 0) {
 		s = gsub("(['])", "'\"'\"'", s);
 		s = sprintf("'%s'", s);
 	}
@@ -450,8 +466,7 @@ Substr = function(s, start, length, replacement) {
 #' Sprintf('These are N %{N} characters.', list(N = 10));
 #' Sprintf('These are N %{N}d characters.', list(N = 10));
 #' Sprintf('These are N %{N}02d characters.', list(N = 10));
-Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent.frame()) {
-	values = list(...);
+Sprintfl = function(fmt, values, sprintf_cartesian = FALSE, envir = parent.frame()) {
 	dict = extraValues = list();
 	for (i in seq_along(values)) {
 		if (is.list(values[[i]]))
@@ -475,6 +490,8 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 		((?:[-]?[*\\d]*[.]?[*\\d]*)?(?:[sdfegGDQqu]|))(?=[^sdfegGDQqu]|$)
 	)';
 	r = fetchRegexpr(re, fmt, capturesAll = T, returnMatchPositions = T);
+	# <p> nothing to format
+	if (length(r$match) == 0) return(fmt);
 	typesRaw = sapply(r$match, function(m)ifelse(m[2] == '', 's', m[2]));
 	types = ifelse(typesRaw %in% c('D', 'Q'), 's', typesRaw);
 	fmts = sapply(r$match, function(m)sprintf('%%%s',
@@ -539,26 +556,8 @@ Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent
 	s
 }
 
-Sprintf_tests = function() {
-	# <!> tests should not run close to midnight
-	Dvalue = format(Sys.time(), '%Y%d%m');
-	welcome = 'welcome to goldrunner';
-	test = 'test';
-
-	e = sprintf('welcome to goldrunner-%s', Dvalue);
-	if (!compare_print(Sprintf('%{welcome}s-%D'), e)) return(FALSE);
-
-	e = sprintf('welcome to goldrunner-%s%s', Dvalue, Dvalue);
-	if (!compare_print(Sprintf('%{welcome}s-%D%D'), e)) return(FALSE);
-
-	e = sprintf('welcome to goldrunner-%s-test%s', Dvalue, Dvalue);
-	if (!compare_print(Sprintf('%{welcome}s-%D-%{test}%D'), e)) return(FALSE);
-
-	e = c(
-		sprintf('welcome to goldrunner-%s-a%s', Dvalue, Dvalue),
-		sprintf('welcome to goldrunner-%s-b%s', Dvalue, Dvalue)
-	);
-	if (!compare_print(Sprintf('%{welcome}s-%D-%{test}%D', test = c('a', 'b')), e)) return(FALSE);
+Sprintf = sprintd = function(fmt, ..., sprintf_cartesian = FALSE, envir = parent.frame()) {
+	Sprintfl(fmt, list(...), sprintf_cartesian = sprintf_cartesian, envir = envir);
 }
 
 #r = getPatternFromStrings(DOC, '(?:\\nDOCUMENTATION_BEGIN:)([^\\n]+)\\n(.*?)(?:\\nDOCUMENTATION_END\\n)');
@@ -875,28 +874,6 @@ compare_print = function(r, e) {
 	cmp$result
 }
 
-Merge.lists_tests = function() {
-	# non-recursive
-	e = list(a = 3, b = 2);
-	r = Merge.lists(list(a = 1, b = 2), list(a = 3));
-	if (!compare_print(r, e)) return(FALSE);
-
-	# recursive, no keyPathes
-	e = list(a = 3, b = list(a = 3, d = 2, e = 4));
-	r = Merge.lists(
-		list(a = 1, b = list(a = 3, d = 4)),
-		list(a = 3, b = list(d = 2, e = 4)), recursive = T);
-	if (!compare_print(r, e)) return(FALSE);
-
-	# recursive, no keyPathes
-	e = list(a = 3, b = list(a = 3, d = 2, e = 4), c = list(e = 8));
-	r = Merge.lists(
-		list(a = 1, b = list(a = 3, d = 4), c = list(c = 9)),
-		list(a = 3, b = list(d = 2, e = 4), c = list(e = 8)), recursive = T, keyPathes = 'b');
-	if (!compare_print(r, e)) return(FALSE);
-}
-
-
 
 # use.names preserves names and concatenates with lower level names
 # reset sets names to top level names
@@ -1040,11 +1017,26 @@ nlapply = function(ns, f, ...) {
 	names(r) = ns;
 	r
 }
+nelapply = function(l, f, ...) {
+	ns = names(l);
+	r = lapply(ns, function(n, ...)f(n, l[[n]]), ...);
+	names(r) = ns;
+	r
+}
+
 ilapply = function(l, f, ...) {
 	r = lapply(1:length(l), function(i)f(l[[i]], i, ...));
 	if (!is.null(names(l))) names(r) = names(l);
 	r
 }
+# pass element, index, name
+einlapply = function(l, f, ...) {
+	ns = names(l);
+	r = lapply(1:length(l), function(i)f(l[[i]], i, ns[i], ...));
+	names(r) = ns;
+	r
+}
+
 kvlapply = function(l, f, ...) {
 	ns = names(l);
 	r = lapply(1:length(l), function(i)f(ns[i], l[[i]], ...));
@@ -1238,6 +1230,14 @@ rbind.list2df = function(d, l, row.name = NULL) {
 	r0
 }
 
+# take list of lists
+#	names of list elements become column-names
+listOfLists2df = function(l, columnNames = names(l[[1]])) {
+	colV = lapply(columnNames, function(n)Df_(list.kp(l, n, do.unlist = T)));
+	r = Df_(do.call(cbind, colV), names = columnNames);
+	r
+}
+
 # d: data frame, l: list with names corresponding to cols, values to be searched for in columns
 searchDataFrame = function(d, l, .remove.factors = T) {
 	ns = names(l);
@@ -1354,15 +1354,6 @@ matrix.intercalate = function(..., direction = 1) {
 	if (class(l[[1]]) == 'data.frame') r = Df_(r, names = names(l[[1]]));
 	r
 }
-matrix.intercalate_test = function() {
-	m1 = matrix(1:4, ncol = 2);
-	m2 = matrix(5:8, ncol = 2);
-	# <i>
-	print(list(m1, m2));
-	print(matrix.intercalate(m1, m2));
-	print(matrix.intercalate(m1, m2, direction = 2));
-}
-
 
 data.frame.expandWeigths = function(data, weights = 'weights') {
 	w = data[[weights]];
@@ -1398,7 +1389,9 @@ vector.assign = function(v, idcs, e, na.rm = 0) {
 	v
 }
 matrix.assign = function(m, idcs, e, byrow = T) {
-	if (byrow)
+	if (length(dim(idcs)) > 1) {
+		m[as.matrix(idcs)] = e
+	} else if (byrow)
 		m[idcs, ] = e else
 		m[, idcs] = e
 	m
@@ -1472,10 +1465,11 @@ which.row = function(m, row) {
 # lsee:	list with searchees
 # lsed:	list with searched objects
 # inverse: lsed are regexes matched against lsee; pre-condition: length(lsee) == 1
+# ret.list: for match.multi return list by lsee
 # <!><t> cave: semantics changed as of 17.8.2009: return NA entries for unfound lsee-entries
 # <!> match multi only implemented for merge = T
 which.indeces = function(lsee, lsed, regex = F, ret.na = F, merge = T, match.multi = F, ...,
-	inverse = F) {
+	inverse = F, ret.list = FALSE) {
 	if (!length(lsed) || !length(lsee)) return(c());
 	v = if (is.list(lsed)) names(lsed) else lsed;
 	idcs = if (regex) {
@@ -1491,7 +1485,10 @@ which.indeces = function(lsee, lsed, regex = F, ret.na = F, merge = T, match.mul
 		idcs = if (match.multi) {
 				#d0$ix[unlist(sapply(lsee, function(e)which(d0$d == e)))]
 				#na.omit(sort(d0$ix))
-				na.omit(d0$ix)
+				r = if (ret.list)
+					unlist.n(by(d0, d0$d, function(d)list(na.omit(d$ix)), simplify = FALSE)) else
+					na.omit(d0$ix);
+				r
 			} else {
 				d0$ix[pop(which(c(d0$iy, 0) - c(0, d0$iy) != 0))];
 			}
@@ -1507,7 +1504,8 @@ which.indeces = function(lsee, lsed, regex = F, ret.na = F, merge = T, match.mul
 			ifelse(length(w), w, NA)
 		})))
 	};
-	as.integer(idcs)
+	r = if (ret.list) idcs else as.integer(idcs);
+	r
 }
 
 grep.vector = function(lsee, lsed, regex = F, ret.na = F, merge = T, match.multi = F, ..., inverse = F) {
@@ -1584,6 +1582,15 @@ data.frame.types = function(df, numeric = c(), character = c(), factor = c(), in
 	df
 }
 
+DfClasses = function(dataFrame)nlapply(dataFrame, function(n)class(dataFrame[[n]]));
+DfAsInteger = function(dataFrame, as_integer) {
+	#dfn = apply(dataFrame[, as_integer, drop = F], 2, function(col)as.integer(avu(col)));
+	# <!> 6.6.2016 as.integer first needed to retain factor status on factors
+	dfn = nlapply(as_integer, function(col)avu(as.integer(dataFrame[[col]])));
+	dataFrame[, as_integer] = do.call(cbind, dfn);
+	dataFrame
+}
+
 # as of 22.7.2013 <!>: min_ applied before names/headerMap
 # as of 19.12.2013 <!>: as.numeric -> as_numeric
 # as of 22.5.2014 <!>: t -> t_
@@ -1592,11 +1599,15 @@ data.frame.types = function(df, numeric = c(), character = c(), factor = c(), in
 Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	as_numeric = NULL, as_character = NULL, as_factor = NULL, as_integer = NULL,
 	row.names = NA, valueMap = NULL, Df_as_is = TRUE, simplify_ = FALSE,
-	deep_simplify_ = FALSE, t_ = FALSE, unlist_cols = F, transf_log = NULL, transf_m1 = NULL) {
+	deep_simplify_ = FALSE, t_ = FALSE, unlist_cols = F, transf_log = NULL, transf_m1 = NULL,
+	Df_doTrimValues = FALSE, Df_mapping_value = '__df_mapping_value__') {
 	#r = as.data.frame(df0);
 	if (t_) df0 = t(df0);
 	r = data.frame(df0, stringsAsFactors = !Df_as_is);
-	if (!is.null(min_)) r = r[, -which.indeces(min_, names(r)), drop = F];
+	if (!is.null(min_)) {
+		is = which.indeces(min_, names(r));
+		if (length(is) > 0) r = r[, -is, drop = F];
+	}
 	if (simplify_) r = sapply(r, identity);
 	if (deep_simplify_) r = as.data.frame(
 		nlapply(r, function(col)sapply(r[[col]], unlist)), stringsAsFactors = !Df_as_is
@@ -1608,20 +1619,21 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	if (!is.null(headerMap)) names(r) = vector.replace(names(r), headerMap);
 	if (!is.null(valueMap)) {
 		for (n in names(valueMap)) {
-			r[[n]] = unlist(valueMap[[n]][r[[n]]]);
+			vs = if (Df_doTrimValues)
+				nina(trimString(as.character(r[[n]])), Df_mapping_value) else
+				as.character(r[[n]]);
+			vs = nina(valueMap[[n]][vs], Df_mapping_value);
+			r[[n]] = ifelse(vs == Df_mapping_value, as.character(r[[n]]), vs);
 		}
 	}
 	if (!is.null(as_numeric)) {
 		dfn = apply(r[, as_numeric, drop = F], 2, function(col)as.numeric(avu(col)));
-		r[, as_numeric] = dfn;
+		r[, as_numeric] = as.data.frame(dfn);
 	}
-	if (!is.null(as_integer)) {
-		dfn = apply(r[, as_integer, drop = F], 2, function(col)as.integer(avu(col)));
-		r[, as_integer] = dfn;
-	}
+	if (!is.null(as_integer)) r = DfAsInteger(r, as_integer);
 	if (!is.null(as_character)) {
 		dfn = apply(r[, as_character, drop = F], 2, function(col)as.character(avu(col)));
-		r[, as_character] = dfn;
+		r[, as_character] = as.data.frame(dfn, stringsAsFactors = FALSE);
 	}
 	if (!is.null(as_factor)) {
 		# <N> does not work
@@ -1823,19 +1835,40 @@ data.frame.union = function(l) {
 	dfu
 }
 
-recodeLevels = function(f, map, others2na = TRUE) {
-	# map others to NA
-	if (others2na) {
-		nonmentioned = setdiff(if (is.factor(f)) levels(f) else unique(f), names(map));
-		map = c(map, listKeyValue(nonmentioned, rep(NA, length(nonmentioned))));
+# levels: take levels in that order, unmentioned levels are appended
+# setLevels: set to these levels, else to NA
+recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevels = NULL) {
+	r = f;
+	if (!is.null(map)) {
+		# map others to NA
+		if (others2na) {
+			nonmentioned = setdiff(if (is.factor(f)) levels(f) else unique(f), names(map));
+			map = c(map, listKeyValue(nonmentioned, rep(NA, length(nonmentioned))));
+		}
+		v = vector.replace(as.character(f), map);
+		if (is.integer(f)) v = as.integer(v);
+		if (is.factor(f)) v = as.factor(v);
+		r = v;
 	}
-	v = vector.replace(as.character(f), map);
-	if (is.integer(f)) v = as.integer(v);
-	if (is.factor(f)) v = as.factor(v);
-	v
+	if (!is.null(levels) || !is.null(setLevels)) {
+		# <p> preparation
+		fact0 = as.factor(r);
+		levls = levels(fact0);
+		r = levls[fact0];
+
+		# <p> new levels
+		levlsN0 = firstDef(setLevels, levels, levls);
+		levlsN = c(levlsN0, setdiff(levls, levlsN0));
+
+		# <p> remove unwanted factors
+		if (!is.null(setLevels)) r = ifelse(r %in% setLevels, r, NA);
+		r = factor(r, levels = if (!is.null(setLevels)) levlsN0 else levlsN);
+	}
+	r
 }
 
-Union = function(..., .drop = T) {
+Union = function(..., .drop = T, as.list = FALSE) {
+	l = if (as.list) list(...)[[1]] else list(...);
 	l = list(...);
 	# auto-detect list of values
 	if (.drop && length(l) == 1 && is.list(l[[1]])) l = l[[1]];
@@ -1843,6 +1876,15 @@ Union = function(..., .drop = T) {
 	for (e in l) { r = union(r, e); }
 	r
 }
+Intersect = function(..., .drop = T, as.list = FALSE) {
+	l = if (as.list) list(...)[[1]] else list(...);
+	# auto-detect list of values
+	if (.drop && length(l) == 1 && is.list(l[[1]])) l = l[[1]];
+	r = l[[1]];
+	for (e in l[-1]) { r = intersect(r, e); }
+	r
+}
+
 intersectSetsCount = function(sets) {
 	i = iterateModels(list(s1 = names(sets), s2 = names(sets)), function(s1, s2) {
 		length(intersect(sets[[s1]], sets[[s2]]))
@@ -1912,6 +1954,10 @@ nit = function(b) {
 #niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
 niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
 
+# null is na (or other special value
+#niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
+nina = function(e, value = NA)sapply(e, function(e)ifelse(is.null(e), value, e))
+
 #
 #	<p> complex structures
 #
@@ -1941,12 +1987,6 @@ meanMatrices = function(d) {
 	r = matrix(m1, ncol = dm[2], dimnames = dimnames(d[[1]]));
 	r
 }
-meanMatrices_test = function() {
-	m = list(matrix(1:4, ncol = 2), matrix(5:8, ncol = 2));
-	if (!all(meanMatrices(m) == matrix(3:6, ncol = 2))) stop('meanMatrix test failed');
-	if (!all(meanMatrices(c(m, list())) == matrix(3:6, ncol = 2))) stop('meanMatrix test failed');
-}
-
 meanVectors = function(d) {
 	ns = names(d[[1]]);
 	mn = apply(as.matrix(sapply(d, function(e)e)), 1, mean, na.rm = T);
@@ -1987,7 +2027,7 @@ matrixDeCenter = function(m, center, direction = 2) {
 #	i.e. all other factors are iterated for a fixed value of l[[1]] (T) or not
 # .constraint provides a function to filter the resulting data frame
 merge.multi.list = function(l, .col.names = NULL, .col.names.prefix = "X",
-	.return.lists = F, .first.constant = T, stringsAsFactors = F, .cols.asAre = F, .constraint = NULL) {
+	.return.lists = F, .first.constant = T, stringsAsFactors = F, .cols.asAre = F, .constraint = NULL, ...) {
 	# <p> determine column names of final data frame
 	.col.names.generic = paste(.col.names.prefix, 1:length(l), sep = "");
 	if (is.null(.col.names)) .col.names = names(l);
@@ -2000,10 +2040,12 @@ merge.multi.list = function(l, .col.names = NULL, .col.names.prefix = "X",
 	if (length(l) >= 1) for (i in 1:length(l)) {
 		newNames = if (.cols.asAre) names(l[[i]]) else names(l)[i];
 		# <p> prepare data.frame: handle lists as well as data.frames
-		dfi = if (is.list(l[[i]])) unlist(l[[i]]) else l[[i]];
+		# <!> changed 22.3.2016
+		#dfi = if (is.list(l[[i]])) unlist(l[[i]]) else l[[i]];
+		dfi = if (!is.data.frame(l[[i]])) unlist(l[[i]]) else l[[i]];
 		df1 = data.frame.types(dfi, names = newNames, stringsAsFactors = stringsAsFactors);
 		# <p> perform merge
-		df0 = if (i > 1) merge(df0, df1) else df1;
+		df0 = if (i > 1) merge(df0, df1, ...) else df1;
 	}
 	if (.first.constant) df0 = df0[, rev(names(df0)), drop = F];
 	if (.return.lists) df0 = apply(df0, 1, as.list);
@@ -2033,7 +2075,34 @@ iterateModels_old = function(modelList, f, ...,
 #	if sub-element is not a list, take name of sub-element and contruct list therefrom
 #	namesOfLists controls whether, if a selected element is a list, its name is used instead
 #		can be used to produce printable summaries
+list.takenFrom = function(listOfLists, v) {
+	ns = names(listOfLists);
+	if (any(ns != names(v))) v = v[order_align(ns, names(v))];
+	l = lapply(1:length(v), function(i) {
+		new = if (!is.list(listOfLists[[i]]))
+			listKeyValue(ns[i], listOfLists[[i]][v[i]]) else {
+				t = listOfLists[[i]][[v[i]]];
+				# list of vectors
+				t = (if (!is.list(t)) {
+					# define name from higher level
+					listKeyValue(firstDef(
+						names(listOfLists[[i]])[v[i]], ns[i]
+					), list(t))
+					# <A> probably better and correct
+					#listKeyValue(ns[i], list(t))
+				} else if (is.null(names(t))) listKeyValue(ns[i], t) else t);
+				t
+			}
+	});
+	names(l) = names(v);
+	l
+}
+
 merge.lists.takenFrom = function(listOfLists, v) {
+	merge.lists(list.takenFrom(listOfLists, v), listOfLists = TRUE);
+}
+
+merge.lists.takenFrom_old = function(listOfLists, v) {
 	l = list();
 	ns = names(listOfLists);
 	if (any(ns != names(v))) v = v[order_align(ns, names(v))];
@@ -2073,7 +2142,9 @@ lists.splice = function(listOfLists, v, namesOfLists = F, aggregator = NULL, nul
 				if (is.null(g)) {
 					# make an attempt later to print element
 					#if (!is.null(aggregator)) e[[1]] else e[[1]][[1]]
-					if (!is.null(aggregator)) e[[1]] else join(as.character(e[[1]][[1]]), ", ")
+					if (!is.null(aggregator))
+						e[[1]] else
+						join(as.character(e[[1]][[1]]), ", ")
 				} else g
 			} else e[[1]];
 		}
@@ -2092,7 +2163,8 @@ merge.multi.list.symbolic = function(modelList, ..., symbolizer = NULL) {
 	models = merge.multi.list(modelSize, ...);
 	namesDf = if (is.null(symbolizer)) names(modelList) else NULL;
 	df0 = sapply(1:nrow(models), function(i, ...) {
-		r = lists.splice(modelList, unlist(models[i, ]), namesOfLists = T, aggregator = symbolizer);
+		r = lists.splice(modelList, unlist(models[i, ]),
+			namesOfLists = T, aggregator = symbolizer);
 		r
 	});
 	r = Df_(df0, t_ = T, names = namesDf);
@@ -2100,6 +2172,18 @@ merge.multi.list.symbolic = function(modelList, ..., symbolizer = NULL) {
 }
 
 inlist = function(l)lapply(l, function(e)list(e));
+Inlist = function(...)inlist(list(...));
+
+Do.callIm = function(im__f, args, ..., restrictArgs = TRUE, callMode = 'inline') {
+	if (callMode == 'inlist') {
+		.do.call(im__f, c(args, list(...)), restrictArgs = restrictArgs)
+	} else if (callMode == 'list') {
+		im__f(args, ...)
+	} else if (callMode == 'inline') {
+		args = c(merge.lists(args, listOfLists = TRUE), list(...));
+		.do.call(im__f, args, restrictArgs = restrictArgs)
+	} else stop('Unknown call mode');
+}
 
 # <!> should be backwards compatible with iterateModels_old, not tested
 # modelList: list of lists/vectors; encapuslate blocks of parameters in another level of lists
@@ -2120,34 +2204,42 @@ inlist = function(l)lapply(l, function(e)list(e));
 #' A = list(list(a = 1, b = 2), list(a = 3, b = 5));
 #' modelList = list(N = inlist(A), parsAsBlock = list(list(list(c = 1, d = 2)), list(list(c = 3, d = 4))));
 #' print(iterateModels(modelList));
+#' # shorter version of the above
+#' modelList = list(N = Inlist(list(a = 1, b = 2), list(a = 3, b = 5)), parsAsBlock = Inlist(list(c = 1, d = 2), list(c = 3, d = 4)));
+#' print(iterateModels(modelList));
+#' # inline calling
+#' modelList = list(N = list(list(a = 1, b = 2), list(a = 3, b = 5)), parsAsBlock = list(list(c = 1, d = 2), list(c = 3, d = 4)));
+#' print(iterateModels(modelList));
 #'
 #'
 #'
+#' callMode: 'inline', 'list', 'inlist'
 iterateModels_raw = function(modelList, models, f_iterate = function(...)list(...), ...,
-	callWithList = F, restrictArgs = T, parallel = F, lapply__) {
+	callWithList = F, callMode = NULL, restrictArgs = T, parallel = F, lapply__) {
 	if (!parallel) Lapply = lapply;
+	if (is.null(callMode)) callMode = if (callWithList) 'list' else 'inline';
 	# model indeces contains the original positions in models
 	# this allows reordering of execution, eg with reverseEvaluationOrder
 	r = Lapply(1:nrow(models), function(i, ..., im__f, im__model_idcs) {
-		modelPars = merge.lists.takenFrom(modelList, unlist(models[i, ]));
-		if (callWithList) im__f(im__model_idcs[i], modelPars, ...) else {
-			args = c(list(i = im__model_idcs[i]), modelPars, list(...));
-		.do.call(im__f, args, restrictArgs = restrictArgs)
-		}
+		args = c(Inlist(i = im__model_idcs[i]), list.takenFrom(modelList, unlist(models[i, ])));
+		Do.callIm(im__f, args, ..., restrictArgs = restrictArgs, callMode = callMode);
 	}, ..., im__f = f_iterate, im__model_idcs = as.integer(row.names(models)));
 	r
 }
 
 # <i> refactor iterateModels to use iterateModels_prepare
 iterateModels_prepare = function(modelList, .constraint = NULL,
-	callWithList = F, restrictArgs = T, selectIdcs = NULL, .first.constant = T) {
+	callWithList = FALSE, callMode = NULL, restrictArgs = T, selectIdcs = NULL, .first.constant = T) {
+	# <p> preparation
+	if (is.null(callMode)) callMode = if (callWithList) 'list' else 'inline';
+
 	modelSize = lapply(modelList, function(m)1:length(m));
 	models = merge.multi.list(modelSize, .first.constant = .first.constant);
 
 	# <p> handle constraints
 	selC = if (is.null(.constraint)) T else
 		unlist(iterateModels_raw(modelList, models, f_iterate = .constraint,
-			parallel = FALSE, callWithList = callWithList, restrictArgs = restrictArgs, ...));
+			parallel = FALSE, callMode = callMode, restrictArgs = restrictArgs, ...));
 	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
 	#	apply constraints
 	models = models[selC & selI, , drop = F];
@@ -2159,23 +2251,46 @@ iterateModels_prepare = function(modelList, .constraint = NULL,
 	r
 }
 
+iterateModelsDefaultSymbolizer = function(i, ...) {
+	l = list(...);
+	r = lapply(l, function(e)unlist(as.character(unlist(e)[1])));
+	r
+}
+iterateModelsSymbolizer = function(i, ..., im_symbolizer, im_symbolizerMode) {
+	l = list(...);
+	l0 = iterateModelsDefaultSymbolizer(i, ...);
+	l1 = .do.call(im_symbolizer, c(list(i = i), list(...)), restrictArgs = TRUE);
+	r = merge.lists(l0, l1);
+	r
+}
+
 iterateModels = function(modelList, f = function(...)list(...), ...,
 	.constraint = NULL, .clRunLocal = TRUE, .resultsOnly = FALSE, .unlist = 0,
-	callWithList = FALSE, symbolizer = NULL, restrictArgs = T, selectIdcs = NULL,
+	callWithList = FALSE, callMode = NULL,
+	symbolizer = iterateModelsDefaultSymbolizer, symbolizerMode = 'inlist',
+	restrictArgs = T, selectIdcs = NULL,
 	.first.constant = TRUE, parallel = FALSE, lapply__, reverseEvaluationOrder = TRUE) {
+	# <p> pre-conditions
 	nsDupl = duplicated(names(modelList));
 	if (any(nsDupl))
 		stop(con('iterateModels: duplicated modelList entries: ', join(names(modelList)[nsDupl], ', ')));
-# <p> produce raw combinations
+
+	# <p> preparation
+	if (is.null(callMode)) callMode = if (callWithList) 'list' else 'inline';
+
+	# <p> produce raw combinations
 	modelSize = lapply(modelList, function(m)1:length(m));
 	models = merge.multi.list(modelSize, .first.constant = .first.constant);
-	models_symbolic = merge.multi.list.symbolic(modelList,
-		symbolizer = symbolizer, .first.constant = .first.constant);
+# 	models_symbolic = merge.multi.list.symbolic(modelList,
+# 		symbolizer = symbolizer, .first.constant = .first.constant);
+	models_symbolic = do.call(rbind, iterateModels_raw(modelList, models, iterateModelsSymbolizer,
+		callMode = 'inlist', parallel = F,
+		im_symbolizerMode = symbolizerMode, im_symbolizer = symbolizer));
 
 	# <p> handle constraints
 	selC = if (is.null(.constraint)) T else
 		unlist(iterateModels_raw(modelList, models, f_iterate = .constraint,
-			callWithList = callWithList, restrictArgs = restrictArgs, ..., parallel = F));
+			callMode = callMode, restrictArgs = restrictArgs, ..., parallel = F));
 	selI = if (is.null(selectIdcs)) T else 1:nrow(models) %in% selectIdcs;
 	# <p> apply constraints
 	models = models[selC & selI, , drop = F];
@@ -2184,7 +2299,7 @@ iterateModels = function(modelList, f = function(...)list(...), ...,
 	# <p> models to be iterated
 	modelsIt = if (reverseEvaluationOrder) models[rev(1:nrow(models)), , drop = F] else models;
 	r = iterateModels_raw(modelList, modelsIt, f_iterate = f,
-		callWithList = callWithList, restrictArgs = restrictArgs, ..., parallel = parallel);
+		callMode = callMode, restrictArgs = restrictArgs, ..., parallel = parallel);
 	if (reverseEvaluationOrder) r = rev(r);
 	r = if (.resultsOnly) r else list(
 		models = models,
@@ -2226,12 +2341,17 @@ merge.multi.dfs = function(l, .first.constant = T, all = T, stringsAsFactors = F
 	df0
 }
 
-Merge = function(x, y, by = intersect(names(x), names(y)), ..., safemerge = T) {
+Merge = function(x, y, by = intersect(names(x), names(y)), ..., safemerge = T, stableByX = FALSE) {
+	if (stableByX) x = data.frame(x, MergeStableByX = 1:nrow(x));
 	if (safemerge && length(by) == 0) {
 		stop(sprintf('Merge: safemerge triggered. No common columns between "%s" and "%s"',
 			join(names(x), sep = ','), join(names(y), sep = ',')))
 	}
 	r = merge(x = x, y = y, by = by, ...);
+	if (stableByX) {
+		indexCol = which(names(r) == 'MergeStableByX');
+		r = r[order(r$MergeStableByX), -indexCol, drop = FALSE];
+	}
 	r
 }
 
@@ -2520,7 +2640,8 @@ formula.nullModel = function(f) {
 	fn = as.formula(sprintf("%s ~ 1", r));
 	fn
 }
-formula.to.character = function(f)join(deparse(f), '');
+formula.to.character = function(f)join(deparse(as.formula(f)), '');
+Formula.to.character = function(f)ifelse(is.character(f), f, formula.to.character(f));
 
 formula2filename = function(f) {
 	fs = join(f, sep = '');
@@ -2539,6 +2660,34 @@ data.vars = function(data, formula, re.string = '.*', ignore.case = F) {
 formula.add.rhs = function(f0, f1) {
 	as.formula(join(c(formula.to.character(f0), formula.rhs(f1, noTilde = TRUE)), '+'))
 }
+formula.add.response = function(f0, f1) {
+	formula = join(c(formula.response(f1), formula.rhs(f0, noTilde = FALSE)), ' ');
+	as.formula(formula)
+}
+formula.predictors = function(f, data, dataFrameNames = TRUE) {
+	if (formula.rhs(f) == ~ 1) return('(Intercept)');
+	mm = model.matrix(model.frame(formula.rhs(f), data), data);
+	ns = dimnames(mm)[[2]];
+
+	# <p> create data frame to extract proper names
+# 	if (dataFrameNames) {
+# 		df0 = as.data.frame(t(rep(1, length(ns))));
+# 		names(df0) = ns;
+#		ns = names(df0);
+# 	}
+	ns
+}
+
+# <!> cave survival
+formulaRemoveTransformation = function(model) {
+	respVar = setdiff(all.vars(model), all.vars(formula.rhs(model)));
+	formula.add.response(formula.rhs(model), as.formula(Sprintf('%{respVar}s ~ 1')))
+}
+
+formulas.free = function(f1, f0, data) {
+	setdiff(formula.predictors(f1, data), formula.predictors(f0, data))
+}
+
 
 # <i> use terms.formula from a (a + ... + z)^2 formula
 # <i> merge.multi.list(rep.list(covs, 2), .constraint = is.ascending)
@@ -2569,6 +2718,7 @@ minimax = function(v, min = -Inf, max = Inf) {
 #
 
 # <!><N> works only on atomic path
+# <!> 5.1.2016: trailing slash leads to basename of ""
 splitPath = function(path, removeQualifier = T, ssh = F, skipExists = F) {
 	if (is.null(path)) return(NULL);
 	if (removeQualifier) {
@@ -2593,23 +2743,32 @@ splitPath = function(path, removeQualifier = T, ssh = F, skipExists = F) {
 	# take everything before ext and handle possible absence of '.'
 	#base = substr(r.base, 1, r[1] - 1 - (ifelse(substr(r.base, r[1] - 1, r[1] - 1) == '.', 1, 0)));
 	# reduce to file.ext
-	base = basename(path);
+	Nchar = nchar(path);
+	if (Nchar != 0 && substr(path, Nchar, Nchar) == '/') {
+		base = '';
+		dir = substr(path, 1, Nchar - 1);
+	} else {
+		base = basename(path);
+		dir = dirname(path);
+	}
+	# base as yet still contains the file extension
+	file = base;
 	# chop off extension if present
 	if (length(fetchRegexpr('\\.', base)) > 0) base = fetchRegexpr('\\A.*(?=\\.)', base);
 	
 	#pieces = regexpr(re, path, perl = T);
 	pieces = fetchRegexpr('([^.]+)', path);
-	isAbsolute = nchar(path) != 0 && substr(path, 1, 1) == '/';
+	isAbsolute = Nchar != 0 && substr(path, 1, 1) == '/';
 	# <N> disk is accessed
 	exists = if (!skipExists) File.exists(path, host = sshm$userhost, ssh = F) else NA;
 	nonempty = exists && (file.info(path)$size > 0);
 	ret = list(
-		dir = dirname(path),
+		dir = dir,
 		base = base,
 		path = path,
-		fullbase = sprintf("%s/%s", dirname(path), base),
+		fullbase = sprintf("%s/%s", dir, base),
 		ext = ext,
-		file = basename(path),
+		file = file,
 		isAbsolute = isAbsolute,
 		absolute = if (isAbsolute) path else sprintf('%s/%s', getwd(), path),
 		# fs properties
@@ -3008,6 +3167,8 @@ Log.setLevel(4);	# default
 #	a system call (c.f. privatePerl/TempFilenames::System)
 #
 System_env__ <- new.env();
+assign(".system.doLogOnly", FALSE, envir = System_env__);
+
 System = function(cmd, logLevel = get('DefaultLogLevel', envir = Log_env__),
 	doLog = TRUE, printOnly = NULL, return.output = F,
 	pattern = NULL, patterns = NULL, ..., return.cmd = F) {
@@ -3342,6 +3503,56 @@ Source = function(file, ...,
 	})
 }
 
+#
+#	<p> helper functions readTable/writeTable
+#
+
+compressPathBz2 = function(pathRaw, path, doRemoveOrig = TRUE) {
+	cmd = Sprintf("cat %{pathRaw}q | bzip2 -9 > %{path}q");
+	r = System(cmd, 2);
+	if (doRemoveOrig && !get('.system.doLogOnly', envir = System_env__)) file.remove(pathRaw);
+	r
+}
+compressPath = function(pathRaw, path, extension = NULL, doRemoveOrig = TRUE) {
+	if (is.null(extension)) return(path);
+	compressor = get(Sprintf('compressPath%{extension}u'));
+	r = compressor(pathRaw, path, doRemoveOrig = doRemoveOrig);
+	r
+}
+decompressPathBz2 = function(path, pathTmp, doRemoveOrig = FALSE) {
+	cmd = Sprintf("cat %{path}q | bunzip2 > %{pathTmp}q");
+	r = System(cmd, 2);
+	if (doRemoveOrig && !get('.system.doLogOnly', envir = System_env__)) file.remove(pathRaw);
+	r
+}
+decompressPath = function(path, pathTmp, extension = NULL, doRemoveOrig = FALSE) {
+	if (is.null(extension)) return(path);
+	decompressor = get(Sprintf('decompressPath%{extension}u'));
+	r0 = decompressor(path, pathTmp, doRemoveOrig = doRemoveOrig);
+	r = list(destination = pathTmp, pathOrig = path, return = r0);
+	r
+}
+
+compressedConnectionBz2 = function(path, mode = '') {
+	#r = Sprintf('%{path}s.bz2');
+	bzfile(path, open = mode)
+}
+compressedConnectionGz = function(path, mode = '') {
+	gzfile(path, open = mode)
+}
+compressedConnection = function(path, extension = NULL, mode = '') {
+	if (is.null(extension)) return(path);
+	compressor = get(Sprintf('compressedConnection%{extension}u'));
+	compressor(path, mode = mode)
+}
+compressedConnectionPath = function(conn) {
+	if ('connection' %in% class(conn)) summary(conn)$description else conn
+}
+
+#
+#	<p> readTable
+#
+
 # complete: return only complete data with respect to specified colums
 # NA: specify 'NA'-values
 readTableSepMap = list(T = "\t", S = ' ', C = ',', `;` = ';', `S+` = '');
@@ -3349,7 +3560,9 @@ optionParser = list(
 	SEP = function(e)readTableSepMap[[e]],
 	QUOTE = function(e)(if (e == 'F') '' else e),
 	HEADER = function(e)list(T = T, F = F)[[e]],
+	ROW.NAMES = function(e)list(T = T, F = F)[[e]],
 	NAMES = function(e)splitString(';', e),
+	FACTORS = function(e)splitString(';', e),
 	PROJECT = function(e)splitString(';', e),
 	`NA` = function(e)splitString(';', e),
 	complete = function(e)splitString(';', e),
@@ -3399,13 +3612,16 @@ readTable.ods = function(path, options = NULL) {
 # <!> changed SEP default "\t" -> ",", 20.5.2015
 #readTable.csv.defaults = list(HEADER = T, SEP = "\t", `NA` = c('NA'), QUOTE = '"');
 readTable.csv.defaults = list(HEADER = T, SEP = ",", `NA` = c('NA'), QUOTE = '"');
-readTable.csv = function(path, options = readTable.csv.defaults, headerMap = NULL, setHeader = NULL, ...) {
+readTable.txt = readTable.csv = function(
+	path, options = readTable.csv.defaults, headerMap = NULL, setHeader = NULL, ...) {
+
 	options = merge.lists(readTable.csv.defaults, options);
 	t = read.table(path, header = options$HEADER, sep = options$SEP, as.is = T,
 		na.strings = options$`NA`, comment.char = '', quote = options$QUOTE, ...);
 	if (!is.null(options$NAMES)) names(t)[1:length(options$NAMES)] = options$NAMES;
 	if (!is.null(headerMap)) names(t) = vector.replace(names(t), headerMap);
 	if (!is.null(setHeader)) names(t) =  c(setHeader, names(t)[(length(setHeader)+1): length(names(t))]);
+	if (!is.null(options$FACTORS)) t = Df_(t, as_factor = options$FACTORS);
 	t
 }
 
@@ -3422,9 +3638,55 @@ readTable.RData = function(path, options = NULL, headerMap = NULL) {
 	t
 }
 
+readTable.xls = function(path, options = NULL, ..., sheet = 1) {
+	require('gdata');
+	read.xls(path, sheet = sheet, verbose = FALSE);
+}
+
+tableFunctionConnect = c('csv', 'RData');
+
+tableFunctionForPathMeta = function(path, template = 'readTable.%{ext}s', default = readTable.csv,
+	forceReader = NULL) {
+	sp = splitPath(path);
+	compression = NULL;
+	tmpFile = NULL;
+	if (firstDef(forceReader, sp$ext) %in% c('bz2', 'gz')) {
+		compression = sp$ext;
+		sp = splitPath(sp$fullbase);
+		tmpFile = Sprintf('%{file}s.%{ext}s', file = tempfile(), ext = sp$ext);
+	}
+	name = Sprintf(template, ext = firstDef(forceReader, sp$ext));
+	f = if (exists(name)) get(name) else default;
+	r = list(
+		fct = f, name = name, ext = sp$ext,
+		compression = compression, tempfile = tmpFile, path = path
+	);
+	r
+}
+tableFunctionForPath = function(path, template = 'readTable.%{ext}s',
+	default = readTable.csv, forceReader = NULL) {
+	tableFunctionForPathMeta(path, template, default, forceReader)$fct
+}
+
+# forceReader: force readerFunction
+tableFunctionForPathReader = function(path, template = 'readTable.%{ext}s', default = readTable.csv,
+	forceReader = NULL) {
+	m = m0 = tableFunctionForPathMeta(path, template = 'readTable.%{ext}s', default = default, forceReader);
+	if (!is.null(m$compression)) {
+		path = if (m0$compression %in% tableFunctionConnect)
+			compressedConnection(m0$path, m0$compression) else
+			decompressPath(m0$path, m0$tempfile, m0$compression)$destination
+		m = merge.lists(m0, list(path = path));
+	}
+	m
+}
+
 # <!> as of 23.5.2014: headerMap after o$NAMES assignment
+# <i> use tableFunctionForPath
 readTable = function(path, autodetect = T, headerMap = NULL, extendedPath = T, colnamesFile = NULL, ...,
-	as_factor = NULL, stringsAsFactors = F) {
+	as_factor = NULL, stringsAsFactors = F, defaultReader = readTable.csv, doRemoveTempFile = TRUE,
+	forceReader = NULL) {
+	# <p> preparation
 	path = join(path, '');
 	o = list();
 	if (extendedPath) {
@@ -3432,13 +3694,18 @@ readTable = function(path, autodetect = T, headerMap = NULL, extendedPath = T, c
 		path = r$path;
 		o = r$options;
 	}
+
+	# <p> read table raw
 	sp = splitPath(path);
-	r = if (autodetect && !is.null(sp$ext)) {
-		if (sp$ext %in% c('bz2', 'gz')) sp = splitPath(sp$fullbase);
-		name = sprintf('readTable.%s', sp$ext);
-		f = if (exists(name)) get(name) else readTable.csv;
-		f(path, options = o, ...)
-	} else readTable.csv(path, options = o, ...);
+	reader = if (autodetect && !is.null(sp$ext)) 
+		tableFunctionForPathReader(path, 'readTable.%{ext}s', readTable.csv, forceReader) else defaultReader;
+	r = reader$fct(reader$path, options = o, ...);
+
+	# <p> cleanup
+	if (doRemoveTempFile && !get('.system.doLogOnly', envir = System_env__) && !is.null(reader$tempfile))
+		file.remove(reader$tempfile);
+
+	# <p> table transformations
 	if (!is.null(o$NAMES) && length(o$NAMES) <= ncol(r)) names(r)[1:length(o$NAMES)] = o$NAMES;
 	colnamesFile = firstDef(o$COLNAMESFILE, colnamesFile);
 	headerMap = c(headerMap, o$HEADERMAP);
@@ -3451,6 +3718,71 @@ readTable = function(path, autodetect = T, headerMap = NULL, extendedPath = T, c
 	if (!is.null(o$complete)) r = r[apply(r[, o$complete], 1, function(e)!any(is.na(e))), ];
 	if (!is.null(o$CONST)) { for (n in names(o$CONST)) r[[n]] = o$CONST[[n]]; }
 	if (!is.null(as_factor)) r = Df_(r, as_factor = as_factor);
+	r
+}
+
+#
+#	<p> writeTable
+#
+
+writeTable.defaults = list(
+	SEP = ' ',
+	ROW.NAMES = FALSE,
+	HEADER = TRUE,
+	QUOTE = TRUE
+);
+writeTable.table = function(dataFrame, path, ..., doCompress = NULL, row.names = TRUE, options = list()) {
+	o = merge.lists(writeTable.defaults, list(ROW.NAMES = row.names), options);
+	conn = compressedConnection(path, doCompress, mode = 'w');
+	with(o, write.table(dataFrame, file = conn, ...,
+		row.names = ROW.NAMES, col.names = HEADER, sep = SEP, quote = (QUOTE != '')));
+}
+
+writeTable.xls = function(object, path, doCompress = NULL, row.names = TRUE,
+	doRemoveOrig = TRUE, options = list()) {
+	require('WriteXLS');
+	r = path;
+	dataFrame = as.data.frame(object);
+	pathRaw = if (!is.null(doCompress)) Sprintf('%{path}s_raw_') else path;
+	r0 = WriteXLS(dataFrame, ExcelFileName = pathRaw, row.names = row.names);
+	r1 = compressPath(pathRaw, path, doCompress, doRemoveOrig);
+	r0
+}
+
+writeTable.csv = function(dataFrame, path, ..., doCompress = NULL, row.names = TRUE, options = list()) {
+	conn = compressedConnection(path, doCompress, mode = 'w');
+	write.csv(dataFrame, file = conn, ..., row.names = row.names);
+}
+# doCompress = 'bz2' to write bz2
+# <i><!> determine from path
+writeTableRaw = function(object, path, ..., doCompress = NULL, row.names = TRUE, autodetect = TRUE,
+	defaultWriter = writeTable.csv, options = list()) {
+	sp = splitPath(path);
+	if (!is.null(doCompress) && sp$ext %in% c('bz2', 'gz')) doCompress = sp$ext;
+	writer = if (autodetect && !is.null(sp$ext)) 
+		tableFunctionForPath(path, 'writeTable.%{ext}s', writeTable.csv) else defaultWriter;
+	if (is.null(writer))
+		stop(Sprintf("Writing table to extension '%{ext}s' not supported", ext = sp$ext));
+	r0 = writer(object, path = path, ..., doCompress = doCompress, row.names = row.names, options = options);
+	r = list(path = path, return = r0);
+	r
+}
+
+writeTable = function(object, path, ..., doCompress = NULL, row.names = TRUE, autodetect = TRUE,
+	defaultWriter = writeTable.csv, simplify = TRUE, extendedPath = TRUE) {
+	o = list();
+	if (extendedPath) {
+		r = splitExtendedPath(path);
+		path = r$path;
+		o = r$options;
+		defaultWriter = writeTable.table;
+	}
+	r = lapply(path, function(p)
+		writeTableRaw(object, p, ...,
+			doCompress = doCompress, row.names = row.names, autodetect = autodetect,
+			defaultWriter = defaultWriter, options = o)
+	);
+	if (simplify && length(path) == 1) r = r[[1]];
 	r
 }
 
@@ -3881,7 +4213,10 @@ Install_local = function(path, ...) {
 	System(Sprintf('tar czf %{pkgPath}Q %{path}Q'), 2);
 	install_local(pkgPath, ...);
 }
-#
+
+# misc
+
+clearWarnings = function()assign('last.warning', NULL, envir = baseenv())#
 #	Rmeta.R
 #Wed Jun  3 15:11:27 CEST 2015
 
@@ -4106,6 +4441,7 @@ frozenCallWrap = function(freeze_file, freeze_control = FreezeThawControlDefault
 	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
 	sp = splitPath(freeze_file, ssh = freeze_ssh);
 	file = if (freeze_relative) sp$file else sp$path;
+browser();
 	#wrapperPath = sprintf("%s-wrapper.RData", splitPath(file)$fullbase);
 	r = sprintf("R.pl --template raw --no-quiet --loglevel %d --code 'eval(get(load(\"%s\")[[1]]))' --",
 		logLevel, file);
@@ -4243,6 +4579,54 @@ encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate
 #Mon 27 Jun 2005 10:52:17 AM CEST
 
 require('grid');
+#
+#	<p> unit model
+#
+#	base unit is cm
+setGeneric("factorToBase", function(this) standardGeneric("factorToBase"));
+setGeneric("fromUnitToUnit", function(thisA, thisB) standardGeneric("fromUnitToUnit"));
+setClass('unitGeneric', representation = list(value = 'numeric'), prototype = list(value = as.numeric(NA)));
+setMethod('initialize', 'unitGeneric', function(.Object, value = as.numeric(NA)) {
+	.Object@value = value;
+	.Object
+});
+setMethod('fromUnitToUnit', c('unitGeneric', 'unitGeneric'), function(thisA, thisB)
+	new(class(thisB), value = thisA@value * factorToBase(thisA) / factorToBase(thisB)));
+
+setClass('unitCm', contains = 'unitGeneric');
+setMethod('initialize', 'unitCm', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitCm', function(this)1);
+
+setClass('unitInch', contains = 'unitGeneric');
+setMethod('initialize', 'unitInch', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitInch', function(this)cm(1));
+
+setClass('unitDpi150', contains = 'unitGeneric');
+setMethod('initialize', 'unitDpi150', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitDpi150', function(this)cm(1)/150);
+
+setClass('unitDpi200', contains = 'unitGeneric');
+setMethod('initialize', 'unitDpi200', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitDpi200', function(this)cm(1)/200);
+
+setClass('unitDpi300', contains = 'unitGeneric');
+setMethod('initialize', 'unitDpi300', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitDpi300', function(this)cm(1)/300);
+
+setClass('unitPoints', contains = 'unitGeneric');
+setMethod('initialize', 'unitPoints', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitPoints', function(this)cm(1)/72);
+
+valueU = valueUnited = function(value, unit) {
+	class = getClass(Sprintf('unit%{unit}u'));
+	new(class, value = value)
+}
+toUnit = function(value, unit)fromUnitToUnit(value, valueU(as.numeric(NA), unit));
+ToUnit = function(value, unit)toUnit(value, unit)@value;
+
+#
+#	</p> unit model
+#
 
 cm2in = function(i) (i/2.54)
 
@@ -4371,19 +4755,47 @@ ggplot_qqunif = function(p.values, alpha = .05, fontsize = 6,
 	# (Casella & Berger, 2002, 2nd edition, pg 230, Duxbury)
 	ciU = tr(qbeta(1 - alpha/2, Ns, N - Ns + 1));
 	ciL = tr(qbeta(    alpha/2, Ns, N - Ns + 1));
-	d = data.frame(theoretical = tr(Ns/N), ciU = ciU, ciL = ciL, p.value = p.values);
+	d = data.frame(theoretical = tr(Ns/N), ciU = ciU, ciL = ciL, p.value = p.values, colorCI = colorCI);
 	p = ggplot(d) +
 		geom_line(aes(x = theoretical, y = ciU, colour = colorCI)) +
 		geom_line(aes(x = theoretical, y = ciL, colour = colorCI)) +
 		geom_point(aes(x = theoretical, y = p.value), size = 1) +
-		theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(p.values)*1.1)) +
+		theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(p.values)*1.1)) +
 		scale_y_continuous(name = trName) +
 		theme(text = element_text(size = fontsize));
 	p
 }
+#ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
+
 
 vp_at = function(x, y)viewport(layout.pos.row = x, layout.pos.col = y);
-plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL) {
+plot_grid_grid = function(plots, coords) {
+	# <p> do plotting
+	grid.newpage();
+	# <!> layout might not be respected
+	nrow = max(coords[, 1]);
+	ncol = max(coords[, 2]);
+	pushViewport(viewport(layout = grid.layout(nrow, ncol)));
+
+	sapply(1:length(plots), function(i) {
+		print(plots[[i]], vp = vp_at(coords[i, 1], coords[i, 2]));
+	});
+}
+
+plot_grid_base = function(plots, coords, envirPlotVar = 'plot') {
+	# <p> do plotting
+	coordMat0 = matrix(0, nrow = max(coords[, 1]), ncol = max(coords[, 2]));
+	coordMat = matrix.assign(coordMat0, coords, 1:length(plots));
+	layout(coordMat);
+
+	sapply(1:length(plots), function(i) {
+		eval(get(envirPlotVar, plots[[i]]));
+	});
+# 			if (is.environment(plots[[i]])) eval(get(envirPlotVar, plots[[i]])) else print(plots[[i]]);
+}
+
+
+plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar = 'plot') {
 	if (missing(nrow)) {
 		if (missing(ncol)) {
 			ncol = 1;
@@ -4397,18 +4809,36 @@ plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL) {
 		merge.multi(1:nrow, 1:ncol, .first.constant = byrow) else
 		mapper(1:length(plots));
 		
-	# <p> do plotting
-	grid.newpage();
-	pushViewport(viewport(layout = grid.layout(nrow, ncol)));
-
-	sapply(1:length(plots), function(i) {
-		print(plots[[i]], vp = vp_at(coords[i, 1], coords[i, 2]));
-	});
+	if (is.environment(plots[[1]]))
+		plot_grid_base(plots, coords, envirPlotVar) else
+		plot_grid_grid(plots, coords)
 }
 
-plot_grid_to_path =  function(plots, ..., path, width = 8, height = 8) {
-	pdf(path, width = width, height = height);
-		plot_grid(plots, ...);
+plot_grid_to_path =  function(plots, ..., path,
+	width = valueU(21, 'cm'), height = valueU(29.7, 'cm'), NperPage = NULL, pdfOptions = list(paper = 'a4')) {
+
+	if (class(width) == 'numeric') width = valueU(width, 'inch');
+	if (class(height) == 'numeric') height = valueU(height, 'inch');
+	Nplots = length(plots);
+
+	pages = if (!is.null(NperPage)) {
+		Npages = ceiling(Nplots / NperPage);
+		lapply(1:Npages, function(i) {
+			Istrt = (i - 1) * NperPage + 1;
+			Istop = min(i * NperPage, Nplots);
+			Istrt:Istop
+		})
+	} else list(1:length(plots));
+
+	pdfArgs = c(list(
+		file = path, onefile = TRUE, width = ToUnit(width, 'inch'), height = ToUnit(height, 'inch')
+	), pdfOptions);
+	do.call(pdf, pdfArgs);
+
+	lapply(pages, function(plotIdcs) {
+		plot_grid(plots[plotIdcs], ...);
+	});
+
 	dev.off();
 }
 
@@ -4656,6 +5086,7 @@ histograms_alpha = function(data, palette = histogram_colors, log10 = F,
 #	<p> saving of plots
 #
 
+
 # base unit is 600dpi
 units_conv = list(
 	cm = list(from = function(cm)(cm/2.54*600), to = function(b)(b/600*2.54)),
@@ -4670,8 +5101,8 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 
 	device = get(type);
 	if (is.null(unit_out)) unit_out = units_default[[type]];
-	width = units_conv[[unit_out]]$to(units_conv[[unit]]$from(width));
-	height = units_conv[[unit_out]]$to(units_conv[[unit]]$from(height));
+	width = toUnit(width, unit_out)@value;
+	height = toUnit(height, unit_out)@value;
 	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 5);
 
 	device(plot_path, width = width, height = height, ...);
@@ -4685,25 +5116,41 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 }
 
 plot_typeMap = list(jpg = 'jpeg');
-plot_save = function(object, ..., width = 20, height = 20, plot_path = NULL,
+plot_save = function(object, ..., width = valueU(20, 'cm'), height = valueU(20, 'cm'), plot_path = NULL,
 	type = NULL,
-	envir = parent.frame(), options = list(), simplify = T, unit, unit_out = NULL) {
+	envir = parent.frame(), options = list(), simplify = T, unit_out = NULL, createDir = TRUE) {
 
-	unitMissing = missing(unit);
-	if (is.null(plot_path)) file = tempFileName('plat_save', 'pdf', inRtmp = T);
+	if (class(width) == 'numeric') width = valueU(width, 'cm');
+	if (class(height) == 'numeric') height = valueU(height, 'cm');
+	if (is.null(plot_path)) file = tempFileName('plot_save', 'pdf', inRtmp = T);
 	ret = lapply(plot_path, function(plot_path) {
+		if (createDir) Dir.create(plot_path, recursive = T, treatPathAsFile = T);
 		if (is.null(type) && !is.null(plot_path)) {
 			ext = splitPath(plot_path)$ext;
 			type = firstDef(plot_typeMap[[ext]], ext);
 		}
-		if (unitMissing) unit = firstDef(units_default[[type]], 'cm');
 		Logs("plot_path: %{plot_path}s, device: %{type}s", logLevel = 5);
 		plot_save_raw(object, ..., type = type, width = width, height = height, plot_path = plot_path,
-			options = options, unit = unit, unit_out = unit_out);
+			options = options, unit_out = unit_out, envir = envir);
 	});
 	if (length(plot_path) == 1 && simplify) ret = ret[[1]];
 	r = list(path = plot_path, ret = ret);
 	r
+}
+
+# USAGE:
+# plts = exprR1$Eapply(function(data, probe_name) {
+# 	delayedPlot({
+# 		boxplot(model, data, main = main);
+# 		beeswarm(model, data, add = T)
+# 	})
+# });
+# eval(plts[[1]])
+
+delayedPlot = function(plotExpr, envir = parent.frame()) {
+	e = new.env(parent = envir);
+	delayedAssign('plot', plotExpr, assign.env = e)
+	e
 }
 #
 #	Rreporting.R
@@ -5130,12 +5577,14 @@ Plot = function(..., file = NULL, .plotType = 'pdf', o = NULL, f = NULL) {
 	useDefaultTemplate = T
 );
 # create new, global reporter
-REP.new = function(templates = NULL, cache = NULL, parameters = .REP.defaultParameters, resetCache = F,
+REP.new = function(templates = NULL, cache = NULL, parameters = list(), resetCache = F,
 	latex = 'pdflatex', setup = 'setup.tex') {
+	copy.files = merge.lists(.REP.defaultParameters['copy.files'], list(copy.files = setup), concat = TRUE);
 	parameters = merge.lists(.REP.defaultParameters,
 		parameters,
-		list(copy.files = setup, latex = latex, setup = setup),
-	concat = TRUE);
+		list(latex = latex, setup = setup),
+		copy.files,
+	concat = FALSE);
 	if (!is.null(cache) && file.exists(cache) && !resetCache) {
 		REP.tex('SETUP', setup);
 		REP.setParameters(parameters);
@@ -6280,6 +6729,13 @@ regressionMethods = list(
 	)
 );
 
+completeRows = function(f1, data) {
+	vars = all.vars(as.formula(f1));
+	rows = apply(data[, vars, drop = F], 1, function(r)all(!is.na(r)));
+	r = which(rows);
+	r
+}
+
 # <!> clusterIds is needed as argument although just forwarded
 regressionFit = function(f, data, type, ...) {
 	r = regressionMethods[[type]]$fit(f, data, ...);
@@ -6376,6 +6832,39 @@ regressionCompareModelsEmp = function(f1, f0, data, nuisanceCovariates = c(), ty
 	idName = "id", idClusterName = "cluster", .clRunLocal = T) {
 	r = regressionCompareModelsPermuted(f1, f0, type, ..., clusterCol = idClusterName, idCol = idName,
 		permute = list(Nchunk = M, nuisanceCovariates = nuisanceCovariates, .clRunLocal = .clRunLocal));
+	r
+}
+
+# data: data.frame
+# stat: function computing test statistic
+# vars: formula for permuation
+# Nperm: number of permutations
+# Pvalue: c('upper', 'lower', 'two.tailed')
+permute = function(data, stat, vars, ..., Nperm = 5e3, Pvalue = 'lower', na.rm = T, fracBadStatThres = .01,
+	returnT = TRUE) {
+	perm.vars = all.vars(as.formula(vars));
+	f = function(i, ...) {
+	};
+	Ts = Sapply(0:Nperm, function(i, data, ...) {
+		if (i > 0) data[, perm.vars] = data[sample(nrow(data)), perm.vars];
+		stat(data, ...)
+	}, data = data, ...);
+
+	fracBadStatistics = mean(is.na(Ts[-1]));
+	if (is.na(Ts[1]) || fracBadStatistics >= fracBadStatThres) return(list(p.value = NA));
+	Ts = Ts[!is.na(Ts)];
+	Tdata = Ts[1];
+	Ts = Ts[-1];
+	Plower = (1 + sum(Ts <= Tdata)) / Nperm;
+	Pupper = (1 + sum(Ts >= Tdata)) / Nperm;
+	p.value = switch(Pvalue,
+		lower = Plower,
+		upper = Pupper,
+		two.tailed = 2 * min(Plower, Pupper)
+	);
+	r = if (returnT)
+		list(p.value = p.value, t.data = Tdata, t.perm = Ts) else
+		list(p.value = p.value, t.data = Tdata);
 	r
 }
 
@@ -6483,6 +6972,16 @@ cross.imputer = function(imputationData, imputationVars = NULL, doExpandFactors 
 		d0
 	};
 	f
+}
+
+imputeMeanVar = function(col) {
+	mn = mean(col, na.rm = T);
+	col[is.na(col)] = mn;
+	col
+}
+imputeMean = function(data) {
+	d1 = apply(data, 2, imputeMeanVar);
+	d1
 }
 
 #
@@ -6605,14 +7104,16 @@ model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, re
 	f1 = formula.re(f, data = data, ignore.case = ignore.case);
 	f1vars = all.vars(f1);
 	response = formula.response(f1);
+	responseValues = if (length(response) > 0) data[[response]] else NULL;
 	row.names(data) = NULL;
-	complete = !apply(data[, f1vars], 1, function(r)any(is.na(r)));
-	d1 = data[complete, ];
+	complete = !apply(data[, f1vars, drop = F], 1, function(r)any(is.na(r)));
+	data = droplevels(data[complete, ]);
+	responseValues = responseValues[complete];
 	offset = if (!is.null(offset)) offset[complete] else NULL;
-	mm = model.matrix(f1, model.frame(f1, data = d1));
+	mm = model.matrix(f1, model.frame(f1, data = data));
 	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)')];
 
-	r = list(mm = mm, response = d1[[response]], offset = offset, indeces = as.integer(row.names(d1)));
+	r = list(mm = mm, response = responseValues, offset = offset, indeces = as.integer(row.names(data)));
 	r
 }
 complete_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F) {
@@ -6836,7 +7337,9 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			}, cv_train = cv_train, cv_test = cv_test,
 				data = data, cv_repeats = cv_repeats, ...);
 			# re-establish order
-			r = if (align_order && all(sapply(r, class) == 'numeric') && all(sapply(r, length) == 1)) {
+			r = if (align_order
+				&& all(sapply(r, class) %in% c('numeric', 'integer'))
+				&& all(sapply(r, length) == 1)) {
 				unlist(r)[o];
 			} else if (align_order && all(sapply(r, class) == 'data.frame') &&
 				sum(sapply(r, nrow)) == nrow(data)) {
@@ -6844,7 +7347,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 				#r = rbindDataFrames(r, colsFromFirstDf = T);
 				r = do.call(rbind, r);
 				r[o, ]
-			} else r;
+			} else if (align_order) stop("Crossvalidate: didn't know how to align order.") else r;
 			gc();
 			r
 	}, ...)});
@@ -7021,6 +7524,43 @@ quantileNormalization = function(reference, data, direction = 2,
 	dN
 }
 
+# quantile normalization based on samples picked on the basis of their medians (around the medians)
+# Nqn: number of reference samples
+quantileNormalizationMedians = function(data, direction = 2, Nqn = 5, impute = TRUE) {
+	# <p> determine median of medians, corresponding median, IQR
+	medians = apply(data, direction, median);
+	mediansO = order(medians);
+	medianOI = as.integer(length(mediansO)/2 + .5);
+	medianI = mediansO[medianOI];
+	refMed = summary(data[, medianI]);
+	refIQR = refMed[['3rd Qu.']] - refMed[['1st Qu.']];
+
+	# <p> reference samples
+	refL = as.integer(medianOI - Nqn/2 + .5);
+	refU = refL + Nqn - 1;
+	refSamples = mediansO[refL:refU];
+	#print(refSamples)
+
+	# <p> standardize reference samples wrt median, IQR
+	refSampleValues = sapply(refSamples, function(i) {
+		refI = summary(data[, i]);
+		refIIQR = refI[['3rd Qu.']] - refI[['1st Qu.']];
+		E = (data[, i] - refI[['Median']]) * refIQR/refIIQR + refMed[['Median']];
+		#refIE = summary(E);
+		#refIEIQR = refIE[['3rd Qu.']] - refIE[['1st Qu.']];
+		#print(list(refI = refI, refIIQR = refIIQR, refIE = refIE, refIEIQR = refIEIQR));
+		E
+	});
+	eQn = quantileNormalization(refSampleValues, data,
+		direction = direction, impute = impute, center = FALSE);
+	eQn
+}
+
+dataCentered = function(d, na.rm = T) {
+	dC = apply(d, 2, function(col)col - mean(col, na.rm = na.rm));
+	dC
+}
+
 #
 #	<p> distributions
 #
@@ -7059,7 +7599,21 @@ table.entropy = function(d) {
 	p = table.freq(d);
 	p = p[p != 0];
 	H = - sum(p * log(p));
-}#
+}
+
+#
+#	<p> qvalue
+#
+
+Qvalue = function(P.value, ...) {
+	require('qvalue');
+	P.valuesNotNA = na.omit(P.value);
+	qv = qvalue(P.valuesNotNA, ...);
+	r = qv;
+	r$qvalue = vector.embed(rep(NA, sum(is.na(P.value))), which(!is.na(P.value)), qv$qvalue);
+	r
+}
+#
 #	Rpatches.R
 #Fri Nov 20 17:18:37 CET 2009
 

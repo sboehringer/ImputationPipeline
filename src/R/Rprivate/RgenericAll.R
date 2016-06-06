@@ -519,6 +519,7 @@ Sprintfl = function(fmt, values, sprintf_cartesian = FALSE, envir = parent.frame
 	# build value combinations
 	listedValues = lapply(keys, function(k)allValues[[k]]);
 	dictDf = if (!sprintf_cartesian) Df_(listedValues) else merge.multi.list(listedValues);
+#if (substr(fmt, 0, 5) == '%{wel') browser();
 	# fill names of anonymous formats
 	keys[keys == ''] = names(dictDf)[Seq(1, sum(nonKeysI != 0))];
 	# due to repeat rules of R vectors might have been converted to factors
@@ -539,7 +540,6 @@ Sprintfl = function(fmt, values, sprintf_cartesian = FALSE, envir = parent.frame
 
 	colsd = which(typesRaw == 'd');;
 	dictDf[, colsd] = apply(dictDf[, colsd, drop = F], 2, as.integer);
-
 	s = sapply(1:nrow(dictDf), function(i) {
 		valueDict = as.list(dictDf[i, , drop = F]);
 # 		sprintfValues = lapply(seq_along(keys), function(i)
@@ -1590,6 +1590,13 @@ DfAsInteger = function(dataFrame, as_integer) {
 	dataFrame[, as_integer] = do.call(cbind, dfn);
 	dataFrame
 }
+DfAsCharacter = function(dataFrame, as_character) {
+	#dfn = apply(dataFrame[, as_character, drop = F], 2, function(col)as.character(avu(col)));
+	#dataFrame[, as_character] = as.data.frame(dfn, stringsAsFactors = FALSE);
+	dfn = nlapply(as_character, function(col)avu(as.character(dataFrame[[col]])));
+	dataFrame[, as_character] = do.call(cbind, dfn);
+	dataFrame
+}
 
 # as of 22.7.2013 <!>: min_ applied before names/headerMap
 # as of 19.12.2013 <!>: as.numeric -> as_numeric
@@ -1631,10 +1638,7 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 		r[, as_numeric] = as.data.frame(dfn);
 	}
 	if (!is.null(as_integer)) r = DfAsInteger(r, as_integer);
-	if (!is.null(as_character)) {
-		dfn = apply(r[, as_character, drop = F], 2, function(col)as.character(avu(col)));
-		r[, as_character] = as.data.frame(dfn, stringsAsFactors = FALSE);
-	}
+	if (!is.null(as_character)) r = DfAsCharacter(r, as_character);
 	if (!is.null(as_factor)) {
 		# <N> does not work
 		#dfn = apply(r[, as_factor, drop = F], 2, function(col)as.factor(col));
@@ -3698,7 +3702,8 @@ readTable = function(path, autodetect = T, headerMap = NULL, extendedPath = T, c
 	# <p> read table raw
 	sp = splitPath(path);
 	reader = if (autodetect && !is.null(sp$ext)) 
-		tableFunctionForPathReader(path, 'readTable.%{ext}s', readTable.csv, forceReader) else defaultReader;
+		tableFunctionForPathReader(path, 'readTable.%{ext}s', readTable.csv, forceReader) else
+		list(fct = defaultReader, path = path);
 	r = reader$fct(reader$path, options = o, ...);
 
 	# <p> cleanup

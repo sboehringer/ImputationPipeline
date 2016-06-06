@@ -987,7 +987,8 @@ readTable = function(path, autodetect = T, headerMap = NULL, extendedPath = T, c
 	# <p> read table raw
 	sp = splitPath(path);
 	reader = if (autodetect && !is.null(sp$ext)) 
-		tableFunctionForPathReader(path, 'readTable.%{ext}s', readTable.csv, forceReader) else defaultReader;
+		tableFunctionForPathReader(path, 'readTable.%{ext}s', readTable.csv, forceReader) else
+		list(fct = defaultReader, path = path);
 	r = reader$fct(reader$path, options = o, ...);
 
 	# <p> cleanup

@@ -83,10 +83,13 @@ my %Options = (
 	'-V' => '',	# pass environment variables
 	'-e' => 'QSUB_OUT', '-o' => 'QSUB_OUT',
 	'-p' => 'options_PRIORITY',
-	'-l' => 'h_vmem=options_MEMORY options_EXCLUDENODES',
+	'-l' => 'h_vmem=options_MEMORY',
+	'-lhost' => undef,
 	'-pe' => sub { return $_[0]->{Ncpu} == 1? undef: sprintf('BWA %d', $_[0]->{Ncpu}) },
 	'-r' => 'yes',	# job re-runnable
- );
+);
+# allow for double keys
+my %OptionsKeyRenames = ('-lhost' => '-l');
 my %OptionsOnOff = (
 	checkpointing => [ '-ckpt' =>  'check_userdefined']
 );
@@ -113,8 +116,6 @@ sub submitCommand { my ($cmd, $o) = @_;
 	my $setenv = join("\n", split(/\Q$o->{setenvsep}\E/, $o->{setenv}));
 
 	# <p> generic options
-	$o->{excludeNodes} = $o->{excludeNodes} eq ''? ''
-		: ('h=!('. join('|', split(/\s*,\s*/, $o->{excludeNodes})). ')');
 	my $mergeDict = makeHash([map { 'options_'. uc($_) } keys %$o], [values %$o]);
 	my %opts = (%{makeHash([keys %Options], [map { mergeDictToString($mergeDict, $_)} values %Options])});
 	# add fixed options based on
@@ -122,16 +123,21 @@ sub submitCommand { my ($cmd, $o) = @_;
 	# evaluate functions
 	%opts = (%opts, map { ($_, ref($opts{$_}) eq 'CODE'? $opts{$_}->($o): $opts{$_}) } keys %opts);
 	
+	# job dependencies
 	if (defined($o->{waitForJids})) {
 		my @jids = grep { !!$_ } (($o->{waitForJids} =~ m{^\d+\s*(,\s*\d+\s*)*$}so))
 			? split(/\s*,\s*/, $o->{waitForJids})
 			: split("\n", readFile($o->{waitForJids}));
 		$opts{'-hold_jid'} = join(',', @jids) if (!!@jids);
 	}
+	# exclude nodes
+	$opts{'-lhost'} = ('h=!('. join('|', split(/\s*,\s*/, $o->{excludeNodes})). ')')
+		if ($o->{excludeNodes} ne '');
+
 	# <p> construct script
 	# remove empty options
 	%opts = %{dict2defined({%opts})};
-	my @options = map { "#\$ $_ $opts{$_}" } keys %opts;
+	my @options = map { mergeDictToString(\%OptionsKeyRenames, "#\$ $_ $opts{$_}") } keys %opts;
 	my $script = $HEADER;
 	$script = mergeDictToString({
 		'QSUB_OUT' => $o->{outputDir},

@@ -423,12 +423,14 @@ Plot = function(..., file = NULL, .plotType = 'pdf', o = NULL, f = NULL) {
 	useDefaultTemplate = T
 );
 # create new, global reporter
-REP.new = function(templates = NULL, cache = NULL, parameters = .REP.defaultParameters, resetCache = F,
+REP.new = function(templates = NULL, cache = NULL, parameters = list(), resetCache = F,
 	latex = 'pdflatex', setup = 'setup.tex') {
+	copy.files = merge.lists(.REP.defaultParameters['copy.files'], list(copy.files = setup), concat = TRUE);
 	parameters = merge.lists(.REP.defaultParameters,
 		parameters,
-		list(copy.files = setup, latex = latex, setup = setup),
-	concat = TRUE);
+		list(latex = latex, setup = setup),
+		copy.files,
+	concat = FALSE);
 	if (!is.null(cache) && file.exists(cache) && !resetCache) {
 		REP.tex('SETUP', setup);
 		REP.setParameters(parameters);

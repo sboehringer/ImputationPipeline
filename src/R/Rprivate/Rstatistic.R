@@ -701,6 +701,13 @@ regressionMethods = list(
 	)
 );
 
+completeRows = function(f1, data) {
+	vars = all.vars(as.formula(f1));
+	rows = apply(data[, vars, drop = F], 1, function(r)all(!is.na(r)));
+	r = which(rows);
+	r
+}
+
 # <!> clusterIds is needed as argument although just forwarded
 regressionFit = function(f, data, type, ...) {
 	r = regressionMethods[[type]]$fit(f, data, ...);
@@ -797,6 +804,39 @@ regressionCompareModelsEmp = function(f1, f0, data, nuisanceCovariates = c(), ty
 	idName = "id", idClusterName = "cluster", .clRunLocal = T) {
 	r = regressionCompareModelsPermuted(f1, f0, type, ..., clusterCol = idClusterName, idCol = idName,
 		permute = list(Nchunk = M, nuisanceCovariates = nuisanceCovariates, .clRunLocal = .clRunLocal));
+	r
+}
+
+# data: data.frame
+# stat: function computing test statistic
+# vars: formula for permuation
+# Nperm: number of permutations
+# Pvalue: c('upper', 'lower', 'two.tailed')
+permute = function(data, stat, vars, ..., Nperm = 5e3, Pvalue = 'lower', na.rm = T, fracBadStatThres = .01,
+	returnT = TRUE) {
+	perm.vars = all.vars(as.formula(vars));
+	f = function(i, ...) {
+	};
+	Ts = Sapply(0:Nperm, function(i, data, ...) {
+		if (i > 0) data[, perm.vars] = data[sample(nrow(data)), perm.vars];
+		stat(data, ...)
+	}, data = data, ...);
+
+	fracBadStatistics = mean(is.na(Ts[-1]));
+	if (is.na(Ts[1]) || fracBadStatistics >= fracBadStatThres) return(list(p.value = NA));
+	Ts = Ts[!is.na(Ts)];
+	Tdata = Ts[1];
+	Ts = Ts[-1];
+	Plower = (1 + sum(Ts <= Tdata)) / Nperm;
+	Pupper = (1 + sum(Ts >= Tdata)) / Nperm;
+	p.value = switch(Pvalue,
+		lower = Plower,
+		upper = Pupper,
+		two.tailed = 2 * min(Plower, Pupper)
+	);
+	r = if (returnT)
+		list(p.value = p.value, t.data = Tdata, t.perm = Ts) else
+		list(p.value = p.value, t.data = Tdata);
 	r
 }
 
@@ -904,6 +944,16 @@ cross.imputer = function(imputationData, imputationVars = NULL, doExpandFactors 
 		d0
 	};
 	f
+}
+
+imputeMeanVar = function(col) {
+	mn = mean(col, na.rm = T);
+	col[is.na(col)] = mn;
+	col
+}
+imputeMean = function(data) {
+	d1 = apply(data, 2, imputeMeanVar);
+	d1
 }
 
 #
@@ -1026,14 +1076,16 @@ model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, re
 	f1 = formula.re(f, data = data, ignore.case = ignore.case);
 	f1vars = all.vars(f1);
 	response = formula.response(f1);
+	responseValues = if (length(response) > 0) data[[response]] else NULL;
 	row.names(data) = NULL;
-	complete = !apply(data[, f1vars], 1, function(r)any(is.na(r)));
-	d1 = data[complete, ];
+	complete = !apply(data[, f1vars, drop = F], 1, function(r)any(is.na(r)));
+	data = droplevels(data[complete, ]);
+	responseValues = responseValues[complete];
 	offset = if (!is.null(offset)) offset[complete] else NULL;
-	mm = model.matrix(f1, model.frame(f1, data = d1));
+	mm = model.matrix(f1, model.frame(f1, data = data));
 	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)')];
 
-	r = list(mm = mm, response = d1[[response]], offset = offset, indeces = as.integer(row.names(d1)));
+	r = list(mm = mm, response = responseValues, offset = offset, indeces = as.integer(row.names(data)));
 	r
 }
 complete_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F) {
@@ -1257,7 +1309,9 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			}, cv_train = cv_train, cv_test = cv_test,
 				data = data, cv_repeats = cv_repeats, ...);
 			# re-establish order
-			r = if (align_order && all(sapply(r, class) == 'numeric') && all(sapply(r, length) == 1)) {
+			r = if (align_order
+				&& all(sapply(r, class) %in% c('numeric', 'integer'))
+				&& all(sapply(r, length) == 1)) {
 				unlist(r)[o];
 			} else if (align_order && all(sapply(r, class) == 'data.frame') &&
 				sum(sapply(r, nrow)) == nrow(data)) {
@@ -1265,7 +1319,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 				#r = rbindDataFrames(r, colsFromFirstDf = T);
 				r = do.call(rbind, r);
 				r[o, ]
-			} else r;
+			} else if (align_order) stop("Crossvalidate: didn't know how to align order.") else r;
 			gc();
 			r
 	}, ...)});
@@ -1442,6 +1496,43 @@ quantileNormalization = function(reference, data, direction = 2,
 	dN
 }
 
+# quantile normalization based on samples picked on the basis of their medians (around the medians)
+# Nqn: number of reference samples
+quantileNormalizationMedians = function(data, direction = 2, Nqn = 5, impute = TRUE) {
+	# <p> determine median of medians, corresponding median, IQR
+	medians = apply(data, direction, median);
+	mediansO = order(medians);
+	medianOI = as.integer(length(mediansO)/2 + .5);
+	medianI = mediansO[medianOI];
+	refMed = summary(data[, medianI]);
+	refIQR = refMed[['3rd Qu.']] - refMed[['1st Qu.']];
+
+	# <p> reference samples
+	refL = as.integer(medianOI - Nqn/2 + .5);
+	refU = refL + Nqn - 1;
+	refSamples = mediansO[refL:refU];
+	#print(refSamples)
+
+	# <p> standardize reference samples wrt median, IQR
+	refSampleValues = sapply(refSamples, function(i) {
+		refI = summary(data[, i]);
+		refIIQR = refI[['3rd Qu.']] - refI[['1st Qu.']];
+		E = (data[, i] - refI[['Median']]) * refIQR/refIIQR + refMed[['Median']];
+		#refIE = summary(E);
+		#refIEIQR = refIE[['3rd Qu.']] - refIE[['1st Qu.']];
+		#print(list(refI = refI, refIIQR = refIIQR, refIE = refIE, refIEIQR = refIEIQR));
+		E
+	});
+	eQn = quantileNormalization(refSampleValues, data,
+		direction = direction, impute = impute, center = FALSE);
+	eQn
+}
+
+dataCentered = function(d, na.rm = T) {
+	dC = apply(d, 2, function(col)col - mean(col, na.rm = na.rm));
+	dC
+}
+
 #
 #	<p> distributions
 #
@@ -1480,4 +1571,17 @@ table.entropy = function(d) {
 	p = table.freq(d);
 	p = p[p != 0];
 	H = - sum(p * log(p));
+}
+
+#
+#	<p> qvalue
+#
+
+Qvalue = function(P.value, ...) {
+	require('qvalue');
+	P.valuesNotNA = na.omit(P.value);
+	qv = qvalue(P.valuesNotNA, ...);
+	r = qv;
+	r$qvalue = vector.embed(rep(NA, sum(is.na(P.value))), which(!is.na(P.value)), qv$qvalue);
+	r
 }

@@ -223,6 +223,7 @@ frozenCallWrap = function(freeze_file, freeze_control = FreezeThawControlDefault
 	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
 	sp = splitPath(freeze_file, ssh = freeze_ssh);
 	file = if (freeze_relative) sp$file else sp$path;
+browser();
 	#wrapperPath = sprintf("%s-wrapper.RData", splitPath(file)$fullbase);
 	r = sprintf("R.pl --template raw --no-quiet --loglevel %d --code 'eval(get(load(\"%s\")[[1]]))' --",
 		logLevel, file);

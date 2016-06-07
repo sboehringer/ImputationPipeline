@@ -87,8 +87,12 @@ gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do
 	# all P-values <N>
 	if (.do.run) {
 		psA = read.csv(sprintf('%s.pvalues', path), nrows = nrows);
-		REP.plot('QQ:ASSOCIATION', Qplot(sample = psA$P.value, dist = qunif,
-			file = sprintf('%s/%s-pvalues-QQ.jpg', outputDir, splitPath(path)$base)));
+		qq = ggplot_qqunif(psA$P.value);
+		qqPath = sprintf('%s/%s-pvalues-QQ.jpg', outputDir, splitPath(path)$base);
+		ggsave(qqPath, qq);
+		REP.plot('QQ:ASSOCIATION', qqPath);
+# 		REP.plot('QQ:ASSOCIATION', Qplot(sample = psA$P.value, dist = qunif,
+# 			file = sprintf('%s/%s-pvalues-QQ.jpg', outputDir, splitPath(path)$base)));
 		REP.tex('G:N_SNPs', nrow(psA));
 	}
 

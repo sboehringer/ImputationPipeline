@@ -42,7 +42,7 @@ qplot_qqunif = function() {
 manhattanPlot = function(data, output,  title = '', pp = list(width = 12, height = 6, dpi = 300))  {
 	#mhtplot(mhpdf1, usepos = F);
 	d = Df_(data, headerMap = list(chr = 'CHR', position = 'BP', P.value = 'P'));
-	p = manhattan(d, title = title, max.y = 'max', genomewideline = -log10(5e-8),
+	p = manhattan(d, title = title, max.y = 'max', significance = -log10(5e-8),
 		size.x.labels = 9, size.y.labels = 10);
 	ggsave(output, width = pp$width, height = pp$height, dpi = pp$dpi);
 	output

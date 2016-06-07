@@ -38,8 +38,10 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	}
 	#classes<-c("character","character","integer","character","character",rep("numeric",Nids*3));
 	#gens = read.table(genotypeFile, comment.char = "", colClasses = classes, nrows = N); #specify column classes decreases memory usage
-	Log(sprintf('#SNPs:%d file:%s', N, genotypeFile), 3);
-	chromosome = strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1];
+	#chromosome = strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1];
+	# <!> extract chromosome name from file
+	chromosome = fetchRegexpr("chr(\\d+)", genotypeFile, captures = T, globally = F);
+	Log(sprintf('#SNPs:%d file:%s chromosome:%s', N, genotypeFile, chromosome), 3);
 
 	# <p> source input script
 	script = file.locate(RfunctionSource, prefixes = prefixes);

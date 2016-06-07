@@ -87,7 +87,9 @@ gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do
 	# all P-values <N>
 	if (.do.run) {
 		psA = read.csv(sprintf('%s.pvalues', path), nrows = nrows);
-		qq = ggplot_qqunif(psA$P.value);
+		pValues = psA$P.value[psA$P.value > 0];
+		qq = ggplot_qqunif(pValues);
+		#qq = ggplot_qqunif(psA$P.value);
 		qqPath = sprintf('%s/%s-pvalues-QQ.jpg', outputDir, splitPath(path)$base);
 		ggsave(qqPath, qq);
 		REP.plot('QQ:ASSOCIATION', qqPath);

@@ -1,6 +1,12 @@
 #!/bin/sh
 
-cp ~/src/Rprivate/*.R $PIPELINEBASE/src/R/Rprivate
+cd $PIPELINEBASE/src/maintenance
+
+# <p> R scripts
+./pullin-R-sb.sh
+
+# <p> perl scripts
 ( cd ~/src/scripts ; cp System/qsub.pl System/R.pl System/qwait.pl Conversion/csv.pl Conversion/csv2.pl $PIPELINEBASE/src/perl )
 
+# <p> perl libraries
 ( cd ~/src/privatePerl ; cp TempFileNames.pm Set.pm PropertyList.pm BatchQueue.pm $PIPELINEBASE/src/perl-lib )

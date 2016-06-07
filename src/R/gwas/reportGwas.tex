@@ -1,0 +1,314 @@
+#
+#	<p> global gwas tempate
+#
+
+TEMPLATE_BEGIN:gwas
+\analysisreport{G:Title}{G:Analyst}{G:Department}{\href{}{G:Email}}
+\tableofcontents
+\newpage
+
+\section{Scope of analysis}
+
+This analysis concerns a genome wide association study (GWAS). The analysis involves quality checks on the data, data cleaning and the final association analysis. Analysis is performed iteratively, as results from some quality checks are judged manually. This is round {\it G:ROUNDNAME} of the analysis.\par
+G:DESCRIPTION
+
+\section{Data set}
+
+The data set contains G:Count_inidividuals samples. For G:Count_genotyped samples genotypes were available. Only these are used in the ensueing analysis. A-priori exclusions are summarized in the following table.
+
+\begin{center}
+	\begin{tabular}{l|rrr}
+	Component	& Total	& Exclusions& Remaining \\
+	\hline
+	Individuals	& G:Count_genotyped & QC:EXCL:excl_ind:baselineexcl_CNT & QC:EXCL:excl_ind:baseline_CNT\\
+	Markers		& QC:INCL:markers & QC:EXCL:excl_marker:external_CNT & QC:EXCL:excl_marker:baseline_CNT \\
+	\end{tabular}
+\end{center}
+
+\section{Quality control}
+
+\subsection{Marginal quality control}
+
+\subsubsection{Individuals: Missing data analysis}
+
+Missing genotypes were analyzed per individual.
+
+\begin{center}
+	\includegraphics[width=.45\textwidth]{QC:IND:missing_plot}
+\end{center}
+
+The missing value rate threshold was set at $QC:PAR:IMISS_CUTOFF\%$. $QC:IND:MISS_CNT$ individuals failed the QC ($QC:IND:MISS\%$).\par
+
+\vspace{3mm}
+{\bf Action:} Individuals failing this QC were excluded from the analysis.
+
+\subsubsection{Individuals: Sex check}
+
+The sex of individuals was extimated from genotypes of the X chromosome using the software \texttt{plink}. QC:IND:SEX_CNT individuals failed the sex check ($QC:IND:SEX\%$). The estimated sample mixup rate is therefore $QC:IND:MIXUP\%$. The list of failing individuals is given as (up to the first QC:PAR:SEX_REPCNT):\par
+
+{\tiny
+	QC:IND:SEX_IDS
+}\par
+
+\vspace{3mm}
+{\bf Action:} Individuals failing this QC were excluded from the analysis.
+
+\subsubsection{Individuals: Inbreeding}
+
+The inbreeding coefficient was calculated per individual.
+
+\begin{center}
+	\includegraphics[width=.45\textwidth]{QC:IND:inbreeding_plot}
+\end{center}
+
+Mean inbreeding coefficient is $QC:INBREEDING:MEAN \ (QC:INBREEDING:CIL, QC:INBREEDING:CIU)$ (95\%-confidence interval based on normality assumption).
+
+QC:IND:INBREEDING:JUDGEMENT
+
+% The inbreeding coefficient cutoff was set at $QC:PAR:INBREEDING_CUTOFF$. $QC:IND:INBREEDING_CNT$ individuals failed the QC ($QC:IND:INBREEDING\%$).\par
+
+{\bf Action:} Individuals failing this QC were excluded from the analysis.
+
+\subsubsection{Technical duplicates analysis}
+
+TEMPLATE:technical_duplicates
+
+\subsubsection{Individuals: Summary}
+
+QC:EXCL:excl_ind:external_CNT individuals were excluded based on external criteria ($QC:EXCL:excl_ind:external\%$). In total, QC:EXCL:excl_ind:baseline_CNT individuals entered the QC steps. 
+
+QC:EXCL:excl_ind:summary
+
+In total, an additional count of QC:EXCL:excl_ind:total_CNT individuals was excluded ($QC:EXCL:excl_ind:total\%$ from baseline).  QC:EXCL:excl_ind:included_CNT individuals remained in the analysis.
+
+
+\subsubsection{Markers}
+
+QC:INCL:markers were available. QC:EXCL:excl_marker:external_CNT markers were excluded based on external criteria ($QC:EXCL:excl_marker:external\%$). In total, QC:EXCL:excl_marker:baseline_CNT markers entered the QC steps. 
+
+\subsubsection{Markers: Allele frequencies}
+
+Allele frequencies were filtered at $QC:PAR:AF_CUTOFF\%$. QC:EXCL:excl_marker:maf_CNT markers were excluded based on this QC criterion ($QC:EXCL:excl_marker:maf\%$). The allele frequency distribution is shown in the following histograms. Part (a) shows the distribution before and part (b) after filtering.
+
+\begin{center}
+%\begin{table}[h]
+%	\caption{Histograms of marker allele frequencies}
+	\begin{tabular}{cc}
+		(a) & (b)\\
+		\includegraphics[width=.45\textwidth]{QC:MARKER:AF_plot}
+		&
+		\includegraphics[width=.45\textwidth]{QC:MARKER:AF_qc_plot}
+	\end{tabular}
+%\end{table}
+\end{center}
+
+{\bf Action:} Markers failing this QC were excluded from the analysis.
+
+\subsubsection{Markers: Missing data analysis}
+
+Missingness of genotypes was analyzed per marker.
+
+The missingness cut-off was set at $QC:PAR:LMISS_CUTOFF\%$. QC:EXCL:excl_marker:missing_CNT markers failed that QC criterion ($QC:EXCL:excl_marker:missing\%$). Distributions of missingness rates are show in the following histograms. Part (a) shows overall missingness and part (b) depicts distribution of missingness per chromosome.
+
+%\begin{table}[h]
+%	\caption{Histograms of marker missingness}
+	\begin{tabular}{cc}
+		(a) & (b)\\
+		\includegraphics[width=.45\textwidth]{QC:MARKER:MISS_plot}
+		&
+		IF_PLOT_MISSING_PER_CHROMOSOME
+			\includegraphics[width=.45\textwidth]{QC:MARKER:MISS_perChr_plot}
+		END_IF
+	\end{tabular}
+%\end{table}
+
+Missingness per chromosome was judged QC:MARKER:DIST_NOTO_TO show peculiarities.
+
+{\bf Action:} Markers failing this QC were excluded from the analysis.
+
+\subsubsection{Markers: Hardy-Weinberg equilibrium (HWE)}
+
+HWE was evaluated per marker for autosomal markers using a $\chi^2$ goodness-of-fit statistic. Markers had to pass the allele frequency QC in order to be evaluated. The QQ-plots of observed P-values against expected P-values are given below. Part (a) shows the full distribution and part (b) depicts the lower tail (smallest $QC:PAR:HWE_ZOOMQ\%$ of P-values).
+
+
+%\begin{table}[h]
+%	\caption{Histograms of marker missingness}
+	\begin{tabular}{cc}
+		(a) & (b)\\
+		\includegraphics[width=.45\textwidth]{QC:MARKER:HWE_plot}
+		&
+		\includegraphics[width=.45\textwidth]{QC:MARKER:HWEZ_plot}
+	\end{tabular}
+%\end{table}
+
+HWE $-log_{10}(P)$-values against $-log_{10}(AF)$ (a) and HWE $-log_{10}(P)$-values against $-log_{10}(\text{Miss})$-rate values (b).
+\begin{center}
+%\begin{table}[h]
+%	\caption{Histograms of marker allele frequencies}
+	\begin{tabular}{cc}
+		(a) & (b)\\
+		\includegraphics[width=.45\textwidth]{QC:MARKER:HWEbyAF_plot}
+		&
+		\includegraphics[width=.45\textwidth]{QC:MARKER:HWEbyMiss_plot}
+	\end{tabular}
+%\end{table}
+\end{center}
+
+Markers were excluded based on a P-value $\leq QC:PAR:HWE_CUTOFF$. QC:EXCL:excl_marker:hwe_CNT markers failed the QC ($QC:EXCL:excl_marker:hwe\%$). After exclusion the distribution a shows QC:MARKER:HWE_JUDGEMENT fit to the exected distribution.
+
+{\bf Action:} Markers failing this QC were excluded from the analysis.
+
+\subsubsection{Markers: Summary}
+
+QC:EXCL:excl_marker:baseline_CNT markers were subjected to marker QC. 
+
+QC:EXCL:excl_marker:summary
+
+In total, QC:EXCL:excl_marker:total_CNT markers were excluded ($QC:EXCL:excl_marker:total\%$ from baseline).  QC:EXCL:excl_marker:included_CNT markers remained in the analysis.
+
+\subsection{Integrative QC}
+
+For the integrative QC, markers and individuals identified by marginal QC steps were excluded.
+
+\subsubsection{Sample: Multi-dimensional scaling (MDS)}
+
+The sample was subjected to a MDS analysis in order to detect possible population stratification. MDS tries to find a low-dimensional map in which distances between original samples are optimally preserved. The distances between individuals is based on IBS similarity. QC:PAR:MDS:DIMS dimensions were used for the MDS map. The following plots plot set adjecent coordinates against each other.
+
+IF_MDS_PRE_PLOTS
+	QC:SAMPLE:MDS:PLOTS_PRE
+
+	QC:SAMPLE:MDS:JUDGEMENT
+END_IF
+
+QC:SAMPLE:MDS:PLOTS
+
+{\bf Action:} QC:SAMPLE:MDS:ACTION
+
+\subsubsection{Sample: IBD/IBS clustering}
+
+The sample was clustered on pair-wise IBS and IBD distances as computed by plink. Hierarchical clustering was performed using {\emph Ward's} minimum variance method.
+
+QC:SAMPLE:CLUST:ft
+
+{\bf Action:} QC:SAMPLE:CLUST:ACTION
+
+
+\subsubsection{Sample: IBS analysis}
+
+Pairwise IBS values form the basis for MDS and the IBD/IBS clustering. These pairwise IBS scores are plotted in the following figures. Each point represents a pair of individuals. Frequencies of IBS0, IBS1 and IBS2 genotype pairs are used for the coordinates. Pairwise plots, as well as a 3D-representation are plotted.
+
+QC:SAMPLE:IBS:ft
+
+IF_QC:SAMPLE:USED_IBS_RULE_IBS01
+Based on the rule \texttt{QC:SAMPLE:IBS_RULE_IBS01}, QC:SAMPLE:IBS_RULE_IBS01_cnt individuals were excluded from the sample (QC:SAMPLE:IBS_RULE_IBS01_percent\%). QC:SAMPLE:IBS_RULE_PAIRWISE_IBS01_cnt pairwise comparisons fitted the rule.
+END_IF
+
+IF_QC:SAMPLE:USED_IBS_RULE_RE
+Based on the rule \texttt{QC:SAMPLE:IBS_RULE_RE}, QC:SAMPLE:IBS_RULE_RE_cnt individuals were excluded from the sample (QC:SAMPLE:IBS_RULE_RE_percent\%). QC:SAMPLE:IBS_RULE_PAIRWISE_RE_cnt pairwise comparisons fitted the rule.
+END_IF
+
+\subsection{QC: Summary}
+
+In total, QC:EXCL:excl_ind:excl_all_CNT individuals were excluded from the analysis ($QC:EXCL:excl_ind:excl_all\%$). QC:EXCL:excl_ind:included_all_CNT individuals remained in the analysis ($QC:EXCL:excl_ind:included_all\%$).
+
+QC:EXCL:excl_ind:all
+
+\section{Association analysis}
+ASS:Nmodels models were analyzed.
+TEMPLATE:association
+
+TEMPLATE_END
+
+#
+#	</p> end global gwas tempate
+#
+
+#
+#	<p> template for analysis of technical duplicates
+#
+TEMPLATE_BEGIN:technical_duplicates_main
+
+Technical duplicates were analyzed based on column \texttt{QC:TECHNICAL_DUPLICATES:var}. The following table lists technical duplicates sorted by missingness. The sample with most complete data enters the ensuing analyses. 
+
+QC:TECHNICAL_DUPLICATES:table
+
+In total, QC:TECHNICAL_DUPLICATES:count samples were excluded from the analysis ($QC:TECHNICAL_DUPLICATES:countPerc\%$).
+
+The list of excluded samples is given as (up to the first QC:TECHNICAL_DUPLICATES:listCount):\par
+
+{\tiny
+	QC:TECHNICAL_DUPLICATES:list
+}\par
+
+TEMPLATE_END
+
+TEMPLATE_BEGIN:technical_duplicates_void
+No technical duplicates analysis was performed.
+TEMPLATE_END
+#
+#	</p> end template for analysis of technical duplicates
+#
+
+#
+#	<p> template for association models
+#
+TEMPLATE_BEGIN:association
+\subsection{Association analysis of model ASS:MODEL, ASS:GENMODEL}
+
+Formulas of association model:
+\begin{verbatim}
+ASS:Formula1
+
+  against nested formula
+
+ASS:Formula0
+\end{verbatim}
+Data subset used:
+\begin{verbatim}
+ASS:Subset
+\end{verbatim}
+
+For this model, ASS:N observations that were genotyped had complete information for all covariates (except genotypes). Sample size is reduced per SNP depending on missingness for this SNP. Only these individuals are included in the analysis. Missingness and distribution summaries are given for the model variables in the following table.
+
+ASS:VARS
+
+After removal of observations with missing values the distributions look as follows.
+
+ASS:VARSpost
+
+To avoid uninterpretable results, SNPs were filtered again based on minor allele frequency (MAF) after removal of missing data due to covariates. The MAF threshold was set to $ASS:assParMaf_perc\%$ leading to $ASS:NmafExcl$ excluded markers.
+
+\subsubsection{Manhattan plot}
+
+The manhattan-plot of the data for model \emph{ASS:MODEL} is given in the following figure. Significance level (red horizontal line) is set to ASS:PvalueCutoff. ASS:Nmarkers markers were analyzed.
+
+\begin{center}
+	\includegraphics[width=1\textwidth]{ASS:MANHATTEN_plot}
+\end{center}
+
+\subsubsection{QQ-plot of P-values}
+
+The corresponding QQ-plot is given as follows.
+
+\begin{center}
+	\includegraphics[width=.45\textwidth]{ASS:QQ:ASSOCIATION_plot}
+\end{center}
+
+\subsubsection{List of markers by decreasing association}
+
+The top QC:PAR:ASS:TopN number of association are listed in the following table.
+
+ASS:TABLE
+
+\subsubsection{Inflation factor}
+
+The inflation factor for model \emph{ASS:MODEL} is given as $\hat \lambda = (\mathrm{median}(T_1, ..., T_n)/0.675)^2 = ASS:QQ:INFLATION$. Here, $T_1, ..., T_n$ are square roots of $\chi^2$-quantiles for the P-values for variable \emph{ASS:VARIABLE}.
+TEMPLATE_END
+
+KEY_BEGIN:ASS:VARS:caption
+Summary of variables involved in the statistical model. {\it Miss.} denotes percentage missingness and {\it Distribution} summarizes frequencies (categories) or quantiles (continuous variables).
+KEY_END
+
+#
+#	</p> template for association models
+#

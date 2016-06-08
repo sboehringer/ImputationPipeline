@@ -21,4 +21,4 @@ done
 
 echo copying ~/src/Rscripts/gwas '->' $PIPELINEBASE/src/R
 mkdir $PIPELINEBASE/src/R/gwas
-cp -r ~/src/Rscripts/gwas/gwas* ~/src/Rscripts/gwas/report* ~/src/Rscripts/gwas/setup* $PIPELINEBASE/src/R/gwas
+cp -r ~/src/Rscripts/gwas/gwas* ~/src/Rscripts/gwas/report* `realpath ~/src/Rscripts/gwas/setup*` $PIPELINEBASE/src/R/gwas

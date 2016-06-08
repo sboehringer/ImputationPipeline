@@ -177,7 +177,7 @@ gwas_impuatation_summary = function(o, path, outputDir = splitPath(path)$dir, re
 	REP.new(
 		file.locate('gwas/reportGwasImputed.tex', scriptDirs),
 		cache = sprintf('%s/reportGWAS_cache_%s', outputDir, splitPath(path)$base),
-		setup = file.locate('gwas/setup-report.tex', scriptDirs), latex = 'lualatex',
+		setup = file.locate('gwas/setup-report-lua.tex', scriptDirs), latex = 'lualatex',
 		#parameters = list(copy.files = file.locate('gwas/setup.tex', scriptDirs)),
 		resetCache = resetCache
 	);

@@ -3,6 +3,21 @@
 #
 
 #
+#	<p> compute environment
+#
+
+# queue used on the batch queueing system
+ENV:QSUB_QUEUE	all.q
+ENV:QSUB_SOURCEFILES	$HOME/.env_profile
+ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
+ENV:RSCRIPTS			$RSCRIPTS:$PIPELINEBASE/R
+ENV:RINCLUDES			RgenericAll.R
+
+#
+#	<p> reference panels
+#
+
+#
 # hapmap3 release 22 (chr X)
 #
 ENV:referencepanel_hapmap3	/data/MolEpi/referencePanels/hapmap3/

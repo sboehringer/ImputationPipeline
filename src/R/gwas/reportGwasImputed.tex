@@ -1,0 +1,70 @@
+#
+#	<p> global gwas-imputation tempate
+#
+
+TEMPLATE_BEGIN:gwas
+\analysisreport{G:Title}{G:Analyst}{G:Department}{\href{}{G:Email}}
+\tableofcontents
+\newpage
+
+\section{Scope of analysis}
+
+Summary and quality information of an GWAS after imputation is reported. Technical parameters are reported in the following table.\par
+
+\begin{longtable}{p{3cm}p{10cm}}
+	\hline
+	Path			& G:PATH\\
+	\#SNPs			& G:N_SNPs\\
+	Pipeline-model	& \texttt{G:Model}\\
+	Model-formula alternative
+					& \texttt{ASS:MODEL1}\\
+	Model-formula null
+					& \texttt{ASS:MODEL0}\\
+	Number ot top SNPs
+					& G:Ntop
+	\hline
+\end{longtable}
+
+\subsection{Association analysis of model ASS:MODEL1}
+
+\subsubsection{Manhattan plot}
+
+The manhattan-plot of the data for model \emph{ASS:MODEL1} is given in the following figure.
+
+\begin{center}
+	\includegraphics[width=.9\textwidth]{ASS:MANHATTAN_plot}
+\end{center}
+
+\subsubsection{QQ-plot of P-values}
+
+The corresponding QQ-plot is given as follows.
+
+\begin{center}
+	\includegraphics[width=.45\textwidth]{QQ:ASSOCIATION_plot}
+\end{center}
+
+\subsubsection{List of markers by decreasing association for model \emph{ASS:MODEL1}}
+
+The top G:Ntop number of association are listed in the following table.
+
+ASS:TABLE
+
+\subsubsection{Inflation factor}
+
+The inflation factor for model \emph{ASS:MODEL1} is given as $\hat \lambda = (\mathrm{median}(T_1, ..., T_n)/0.675)^2 = ASS:QQ:INFLATION$. Here, $T_1, ..., T_n$ are square roots of $\chi^2$-quantiles.
+
+TEMPLATE_END
+
+#
+#	<p> template for single association model
+#
+TEMPLATE_BEGIN:variableAssociation
+TEMPLATE_END
+
+KEY_BEGIN:ASS:VARS:caption
+Summary of variables involved in the statistical model. {\it Miss.} denotes percentage missingness and {\it Distribution} summarizes frequencies (categories) or quantiles (continuous variables).
+KEY_END
+
+#
+#	</p> end template for single association model
+#

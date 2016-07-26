@@ -22,5 +22,5 @@ applyFunction = function(input, o) {
 	Log(sprintf("Calling function %s [exists: %d]\n", o$callFunction, exists(o$callFunction)), 3);
 	do.call(get(o$callFunction), c(functionArgs, list(prefixes = prefixes)));
 }
-Log.setLevel(4);
+#Log.setLevel(4);
 .globalTriggers = list(applyFunction = applyFunction);

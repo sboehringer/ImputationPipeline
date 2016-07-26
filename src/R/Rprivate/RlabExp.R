@@ -285,8 +285,8 @@ if (0) {
 	print(isSynchroneous(be));
 }
 
-if (T) {
-	source('Rparallel.R');
+if (0) {
+	require('parallelize.dynamic');
 	source('RlabParallel.R');
 	Lapply_config = list(max_depth = 5, parallel_count = 24, offline = T, backends = list(
 		snow = list(
@@ -865,6 +865,7 @@ if (0) {
 	#print(Substr("abc", 2, 1));
 }
 
+if (0) {
 Sprintf = sprintd = function(fmt, dict, ...) {
 	extraValues = list(...);
 	re = '(?x)(?:
@@ -887,7 +888,7 @@ Sprintf = sprintd = function(fmt, dict, ...) {
 	s = do.call(sprintf, c(list(fmt = fmt1), sprintfValues));
 	s
 }
-
+}
 
 if (0) {
 	fmt = '%{text}s %.3s %-.2s %{key} %% %%s';
@@ -919,4 +920,125 @@ if (0) {
 	s = Sprintf(fmt, list(text = 'ABC', key = 'KEY', num = 2.3e-2), 'abc');
 	print(s);
 }
+
+
+if (0) {
+	r = sapply(c("ab c", "ab'c"),
+		function(s)c(s, qs(s), qss(s), Sprintf("%{s}Q"), Sprintf("%{s}q")));
+	print(t(r));
+	cat("\n"); sapply(r, function(e)cat(e)); cat("\n");
+}
+if (0) {
+	print(s);
+	System('echo hello world');
+	System('echo hello world', patterns = 'ssh', ssh_host = 'localhost');
+	System("echo 'hello world'", patterns = 'ssh', ssh_host = 'localhost');
+}
+
+if (1) {
+  modelList2 = list(
+    #global = list(list(Niteration = 1e2, m=1)),
+    global = list(list(Niteration = 10, m=1)),
+    Ngen=c(500,1000),
+    Nsnp = 5e3,
+    N = c(1, 5) * 1e3,
+    Npop = c(1, 2, 3),
+    p = c(2,3,4)
+  );
+}
+
+if (0) {
+  result = iterateModels(modelList2, function(i)i);
+}
+
+# unify capture extraction for gregexpr, regexpr
+# pos == 0: grexepr, regexpr else by iterating pos as index into str
+matchRegexCapture = function(reg, str, pos = NULL) {
+	if (is.null(attr(reg, 'capture.start'))) return(NULL);
+	if (!is.null(pos)) str = str[pos] else pos = seq_along(reg);
+	captures = lapply(1:ncol(attr(reg, 'capture.start')), function(i) {
+		sapply(pos, function(j)Substr(str,
+			attr(reg, 'capture.start')[j, i], attr(reg, 'capture.length')[j, i]))
+	});
+	names(captures) = attr(reg, 'capture.names');
+	captures
+}
+matchRegexExtract = function(reg, str, pos = NULL) {
+	if (!length(reg)) return(character(0));
+	if (!is.null(pos)) str = str[pos] else pos = seq_along(reg);
+	matches = sapply(pos, function(i)Substr(str, reg[i], attr(reg, 'match.length')[i]));
+	matches
+}
+# <i> re nested list with sub-res for named captures
+# <!> globally == FALSE, removeNonMatch == FALSE
+matchRegex = function(re, str, ..., globally = TRUE, simplify = TRUE,
+	positions = FALSE, removeNonMatch = FALSE) {
+	if (length(re) == 0) return(NULL);
+	reg = if (globally) gregexpr(re, str, perl = T, ...) else regexpr(re, str, perl = T, ...);
+	ms = if (globally)
+		lapply(seq_along(reg), function(i)matchRegexExtract(reg[[i]], str[i])) else
+		lapply(seq_along(str), function(i)matchRegexExtract(reg, str, pos = i));
+	#	regmatches(str, reg);
+	captures = if (globally)
+		lapply(seq_along(reg), function(i)matchRegexCapture(reg[[i]], str[i])) else
+		lapply(seq_along(str), function(i)matchRegexCapture(reg, str, pos = i));
+	if (removeNonMatch) {
+		nonmatch = sapply(ms, length) == 0;
+		ms = ms[!nonmatch];
+		captures = captures[!nonmatch];
+		reg = reg[!nonmatch];
+	}
+	if (simplify && length(str) == 1) {
+		ms = ms[[1]];
+		captures = captures[[1]];
+		reg = reg[[1]];
+	}
+	r = if(positions) list(match = ms, capture = captures, positions = reg) else
+		list(match = ms, capture = captures);
+	r
+}
+
+if (0) {
+	s = '.X65.AVG_Signal.X67.AVG_Signal';
+	re = 'X(?<ID>(?<ID3>\\d)+)(?<ID1>\\d)*\\.AVG_Signal';
+	reg = gregexpr(re, s, perl = T);
+	ms = regmatches(s, reg)[[1]];
+	reg = reg[[1]];
+	captures = lapply(1:ncol(attr(reg, 'capture.start')), function(i) {
+		sapply(seq_along(ms), function(j)Substr(s,
+			attr(reg, 'capture.start')[j, i], attr(reg, 'capture.length')[j, i]))
+	});
+	names(captures) = attr(reg, 'capture.names');
+}
+if (0) {
+	s = c('.X65.AVG_Signal.X67.AVG_Signal', '.X68.AVG_Signal');
+	re = 'X(?<ID>(?<ID3>\\d)+)(?<ID1>\\d)*\\.AVG_Signal';
+	r = matchRegex(re, s);
+	print(r);
+	r1 = matchRegex(re, s, globally = F);
+	print(r1);
+	s1 = c('.X65.AVG_Signal.X67.AVG_Signal');
+	re = 'X(?<ID>(?<ID3>\\d)+)(?<ID1>\\d)*\\.AVG_Signal';
+	r2 = matchRegex(re, s1);
+	print(r2);
+	r3 = matchRegex(re, s1, globally = F);
+	print(r3);
+}
+if (0) {
+	re1 = 'X(?:\\d+)\\.AVG_Signal';
+	r4 = matchRegex(re1, s1);
+	print(r4);
+	re2 = 'X(\\d+)\\.AVG_Signal';
+	r5 = matchRegex(re2, s1);
+	print(r5);
+}
+if (1) {
+	s5 = c('.X68.AVG_Signal', '.X65.AVG_Signal .X66.AVG_Signal', '.Z67.AVG_Signal');
+	re5 = 'X(?<id>\\d+)\\.AVG_Signal';
+	r5.g = matchRegex(re5, s5);
+	print(r5.g);
+	r5 = matchRegex(re5, s5, globally = F);
+	print(r5);
+}
+
 

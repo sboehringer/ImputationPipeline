@@ -324,6 +324,8 @@ simulateDiplotypes = function(N = 1, hapDist = rep(2^-2, 2^2), names = 0:(length
 }
 
 simulateLocus = function(N, af)as.vector(0:2 %*% rmultinom(N, 1, af2hwe(af)));
+simulateStrata = function(Ns, afs)unlist(lapply(seq_along(Ns), function(i)simulateLocus(Ns[i], afs[i])))
+
 # simulate SNP-genotypes and phenotype for a single locus
 simulateLocusCaseControl = function(N, af, mu, beta, scores = scoresStd$add, O = 2, controlsRandom = T) {
 	# number of samples to simulate
@@ -373,8 +375,9 @@ powerLocusCaseControl = function(M = 1e2, N, af, mu, beta,
 	test = function(formula, data) {
 		cfs = coefficients(summary(glm(formula, family = binomial(), data = data)));
 		list(p.value =  if (length(row.names(cfs)) <= 1) NA else cfs['gtScores', 'Pr(>|z|)'])
-	}, ...){
+	}, ..., parallel = F){
 
+	if (!parallel) Sapply = sapply;
 	ps = Sapply(1:M, function(i, N, af, mu, beta, scoresSim, scoresTest, test, formula) {
 		d = simulateLocusCaseControl(N, af, mu, beta, scores = scoresSim);
 		testLocusCaseControl(d, scores = scoresTest, formula = formula, test = test, ...)

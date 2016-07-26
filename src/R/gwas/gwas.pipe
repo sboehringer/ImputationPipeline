@@ -1,0 +1,56 @@
+# GWAS Pipeline
+#
+# G:Pipeline : specify the pipeline
+#       run jobs seperated by '|' sequentially and
+#       jobs separated by ',' concurrently
+#       group jobs by parentheses '(', ..., ')'
+
+#
+#	<p> temporary overwrites
+#
+
+# input prefix
+G:input		/Library/ProjectData/2010-07-ColonCancer/cc
+# output prefix
+G:prefix	/home/pingu/tmp/cc-analysis/cc-pipeline
+
+#
+# <p> pipeline definition
+#
+G:Pipeline	G:GWAS_QC | G:GWAS_association
+G:GWAS_QC	QC_plink | ( QC_AF, QC_IND, QC_HWE) | QC_stratification
+
+#
+# <p> other global options
+#
+G:qsubOptions	--queue all.q
+
+#
+# <p> analysis options
+#
+
+# QC parameters individuals
+QC_IND:qcParIMissCutOff		.02
+QC_IND:qcParSex.RepN		50
+
+# QC parameters markers
+QC_AF:qcParAfCutoff			.05
+QC_AF:qcParHweCutoff		5e-7
+QC_AF:qcParMissingLcutoff	.02
+QC_AF:qcParHWEzoom			1e4
+QC_AF:qcParMDSDims			4
+
+# Association
+GWAS_association:assParNchunks	64
+GWAS_association:assParTopN		50
+
+#
+# <p> pipeline component options
+#
+QC_plink:cmd			R.pl gwas_plink.R --outputDir OUTPUT_DIR PIPE_PARAMETERS
+QC_AF:cmd				R.pl gwas_qc_af.R --outputDir OUTPUT_DIR INPUT_FILES PIPE_PARAMETERS
+QC_IND:cmd				echo INPUT_FILES
+QC_HWE:cmd				echo INPUT_FILES
+QC_stratification:cmd	echo INPUT_FILES
+
+GWAS_association:cmd	echo INPUT_FILES

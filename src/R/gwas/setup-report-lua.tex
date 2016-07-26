@@ -1,0 +1,339 @@
+% standard document
+%\begin{comment}
+	\documentclass[a4paper,oneside,11pt]{article}
+	\usepackage{amsmath,amssymb, amssymb, amsfonts, setspace, latexsym, epsfig, epsf, rotating, longtable, setspace, a4wide,verbatim, caption, hyperref}
+	\usepackage{amsthm}
+	\usepackage[utf8x]{inputenc}
+	\usepackage{graphicx, grffile}
+
+	\newcounter{global}
+	%\setcounter{global}{1}
+	\theoremstyle{definition} \newtheorem{exam}[global]{Example}%
+	\theoremstyle{definition} \newtheorem{rem}[global]{Remark}%
+	\theoremstyle{definition} \newtheorem{definition}[global]{Definition}%
+
+	\theoremstyle{plain} \newtheorem{lemma}[global]{Lemma}%
+	\theoremstyle{plain} \newtheorem{prop}[global]{Proposition}%
+	\theoremstyle{plain} \newtheorem{them}[global]{Theorem}
+	\theoremstyle{plain} \newtheorem{theorem}[global]{Theorem}%%
+	\theoremstyle{plain} \newtheorem{cor}[global]{Corollary}%
+%\end{comment}
+
+
+%
+%	<p> report template
+%
+
+\usepackage[tmargin=1in,bmargin=1in,lmargin=1.25in,rmargin=1.25in]{geometry}
+\usepackage{fontspec}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{datetime}
+\usepackage{lastpage}
+\defaultfontfeatures{Ligatures=TeX}
+\setsansfont{Droid Sans}
+%\setmainfont{CMU Serif}
+\definecolor{Blue}{rgb}{.204,.353,.541}
+\definecolor{LightBlue}{rgb}{.31,.506,.741}
+\newfontfamily\subsubsectionfont[Color=LightBlue]{CMU Sans Serif}
+\titleformat*{\section}{\Large\bfseries\sffamily\color{Blue}}
+\titleformat*{\subsection}{\large\bfseries\sffamily\color{LightBlue}}
+\titleformat*{\subsubsection}{\itshape\subsubsectionfont}
+%\titleformat*{\subsubsection}{\itshape\sffamily\color{LightBlue}}
+
+\newcommand{\analysisreport}[4]{
+\begin{center}
+	{\Large\bfseries\sffamily\color{Blue}
+		Analysis report\\
+		\vspace{1cm}
+		\large #1\\
+		\vspace{2cm}
+	}
+	\begin{tabular}{lp{8cm}}
+	Analyst: 				& #2\\
+	Project name:			& #1\\
+	Consulting department:	& #3\\
+	Contact email:			& #4\\
+	Report generation:		& \today, \ \currenttime\\
+	Number of pages: 		& \pageref{LastPage}
+	\end{tabular}
+\end{center}
+\newpage
+}
+
+\begin{comment}
+% allow spaces in file names
+\makeatletter
+\def\Ginclude@eps#1{%
+  \message{}%
+  \bgroup
+  \def\@tempa{!}%
+  \dimen@\Gin@req@width
+  \dimen@ii.1bp\relax
+  \divide\dimen@\dimen@ii
+  \@tempdima\Gin@req@height
+  \divide\@tempdima\dimen@ii
+    \special{PSfile=#1\space
+      llx=\Gin@llx\space
+      lly=\Gin@lly\space
+      urx=\Gin@urx\space
+      ury=\Gin@ury\space
+      \ifx\Gin@scalex\@tempa\else rwi=\number\dimen@\space\fi
+      \ifx\Gin@scaley\@tempa\else rhi=\number\@tempdima\space\fi
+      \ifGin@clip clip\fi}%
+  \egroup
+}
+\makeatother
+\end{comment}
+
+% annals of applied statistics
+\begin{comment}
+	\documentclass[a4paper,oneside,11pt]{article}
+	%\documentclass[referee]{biom}
+	%\usepackage{biometrics2}
+	\usepackage{amsmath,amssymb, amssymb, amsfonts, setspace, latexsym, epsfig, epsf, rotating, longtable, setspace, a4wide,verbatim, caption}
+	% not needed for biometrics
+	\usepackage{amsthm}
+	\usepackage[utf8x]{inputenc}
+	\usepackage{modnatbib}
+	%\usepackage[latin1]{inputenc}
+
+	\theoremstyle{plain} \newtheorem{cor}{Corollary}
+	\theoremstyle{plain} \newtheorem{theorem}{Theorem}
+	\theoremstyle{definition} \newtheorem{rem}{Remark}
+	% biometrics
+	\setlength{\voffset}{2cm}
+	\setlength{\hoffset}{0cm}
+	\setlength{\topmargin}{0cm}
+	\setlength{\headheight}{0cm}
+	\setlength{\headsep}{0cm}
+	\setlength{\oddsidemargin}{0cm}
+	\setlength{\evensidemargin}{0cm}
+	% text height: 297 - 2 * 25.4 - 5
+	\setlength{\textheight}{190mm}
+	\setcounter{page}{1}
+	\parindent = 0pt 
+	%	natbib punctutation
+	%\bibpunct{[}{]}{;}{a}{,}{;}
+	%	citation commands
+	%	\ct the standard cite (e.g. superscript number, of author name in parenthesis)
+	%	\ctp a plain cite (e.g. superscript number, or author name w/o parenthesis)
+	%	\ctt a text cite (e.g. author name even when superscript numbers are used)
+	%	\ctf a standard cite with all authors (c.f. \ct)
+	\newcommand{\ct}[1]{(\cite{#1})}
+	\newcommand{\ctp}[1]{\cite{#1}}
+	% %\newcommand{\ct}{\citep}
+	%\newcommand{\ctt}{\citet}
+	\newcommand{\ctt}[1]{\citet{#1}}
+	\newcommand{\ctpr}[2]{(#1 \citet{#2})}
+\end{comment}
+% end annals of applied statistics
+
+% biostatistics
+\begin{comment}
+	\documentclass{bio}
+	\usepackage{dcolumn,color}
+	\usepackage{amsmath,modamssymb,times,modlastpage,modamsfonts,modamsthm,modbm}
+	\usepackage{graphicx,lscape,rotating,longtable,verbatim,caption}
+	\usepackage[utf8x]{inputenc}
+	\usepackage{modnatbib}
+	\numberwithin{equation}{section}
+	\pyear{2010}
+	\jno{}
+
+	\theoremstyle{definition} \newtheorem{exam}{Example}%
+	%\theoremstyle{definition} \newtheorem{rem}{Remark}%
+	\theoremstyle{definition} \newtheorem{definition}{Definition}%
+
+	%\theoremstyle{plain} \newtheorem{lemma}{Lemma}%
+	\theoremstyle{plain} \newtheorem{prop}{Proposition}%
+	%\theoremstyle{plain} \newtheorem{them}{Theorem}
+	%\theoremstyle{plain} \newtheorem{theorem}{Theorem}%%
+	\theoremstyle{plain} \newtheorem{cor}{Corollary}%
+	\theoremstyle{definition} \newtheorem{rem}{Remark}%
+
+	% standard cite
+	\newcommand{\ct}[1]{\citep{#1}}
+	% cite in parantheses
+	\newcommand{\ctp}[1]{\citet{#1}}
+	% cite in the text
+	\newcommand{\ctt}[1]{\citet{#1}}
+	% cite with prefix (in paretheses
+	\newcommand{\ctpr}[2]{(#1 \citet{#2})}
+	\newcommand{\bibnamefont}[1]{\scshape #1 \normalfont}
+\end{comment}
+% end biostatistics
+
+% biometrics
+\begin{comment}
+	\documentclass[a4paper,oneside,11pt]{article}
+	%\documentclass[referee]{biom}
+	%\usepackage{biometrics2}
+	\usepackage{amsmath,amssymb, amssymb, amsfonts, setspace, latexsym, epsfig, epsf, rotating, longtable, setspace, a4wide,verbatim, caption}
+	% not needed for biometrics
+	\usepackage{amsthm}
+	\usepackage[utf8x]{inputenc}
+	%\usepackage{jasa}
+	%\usepackage[latin1]{inputenc}
+
+	% biometrics
+	\setlength{\voffset}{2cm}
+	\setlength{\hoffset}{0cm}
+	\setlength{\topmargin}{0cm}
+	\setlength{\headheight}{0cm}
+	\setlength{\headsep}{0cm}
+	\setlength{\oddsidemargin}{0cm}
+	\setlength{\evensidemargin}{0cm}
+	% text height: 297 - 2 * 25.4 - 5
+	\setlength{\textheight}{190mm}
+	\setcounter{page}{1}
+	\parindent = 0pt 
+	%	natbib punctutation
+	\bibpunct{[}{]}{;}{a}{,}{;}
+	%	citation commands
+	%	\ct the standard cite (e.g. superscript number, of author name in parenthesis)
+	%	\ctp a plain cite (e.g. superscript number, or author name w/o parenthesis)
+	%	\ctt a text cite (e.g. author name even when superscript numbers are used)
+	%	\ctf a standard cite with all authors (c.f. \ct)
+	\newcommand{\ct}[1]{(\cite{#1})}
+	\newcommand{\ctp}[1]{\cite{#1}}
+	% %\newcommand{\ct}{\citep}
+	\newcommand{\ctt}{\citet}
+\end{comment}
+% end biometrics
+
+
+%jasa
+\begin{comment}	% not needed for biometrics packages
+	\documentclass[a4paper,oneside,11pt]{article}
+	\usepackage{amsmath,amssymb, amssymb, amsfonts, setspace, latexsym, epsfig, epsf, rotating, longtable, setspace, a4wide,verbatim, caption}
+	\usepackage{amsthm}
+	\usepackage[utf8x]{inputenc}
+	\usepackage{jasa}
+	\theoremstyle{definition} \newtheorem{exam}{Example}%
+	\theoremstyle{definition} \newtheorem{rem}{Remark}%
+	\theoremstyle{definition} \newtheorem{definition}{Definition}%
+
+	\theoremstyle{plain} \newtheorem{lemma}{Lemma}%
+	\theoremstyle{plain} \newtheorem{prop}{Proposition}%
+	\theoremstyle{plain} \newtheorem{them}{Theorem}
+	\theoremstyle{plain} \newtheorem{theorem}{Theorem}%%
+	\theoremstyle{plain} \newtheorem{cor}{Corollary}%
+	\theoremstyle{definition} \newtheorem{rem}{Remark}%
+\end{comment}
+% end jasa
+
+\newcommand{\sN}{\mathcal{N}}
+
+\begin{comment}
+\newcommand{\G}{\ensuremath{\mathcal{G}}}%
+\newcommand{\R}{\ensuremath{\mathbb{R}}}%
+\newcommand{\N}{\ensuremath{\mathbb{N}}}%
+\newcommand{\FJ}{\ensuremath{\mathcal{J}_0^{-1}}}%
+\newcommand{\FJI}{\ensuremath{\mathcal{J}_0}}%
+\newcommand{\FI}{\ensuremath{\mathcal{I}_0^{-1}}}%
+\newcommand{\FIjoi}{\ensuremath{\mathcal{I}_{Joint}^{-1}}}%
+\newcommand{\FIjoor}{\ensuremath{\mathcal{I}_{Joint}}}%
+\newcommand{\FIcom}{\ensuremath{\mathcal{I}_{comp}^{-1}}}%
+
+
+\newcommand{\tr}{\mbox{tr}}
+\newcommand{\vms}[1]{\mbox{\hspace{#1}}}
+\newcommand{\Lower}[1]{\smash{\lower 1.5ex \hbox{#1}}}
+\def\mapright#1{\mathbin{\overset{#1}{\longrightarrow}}}
+\def\mapequal#1{\mathbin{\overset{#1}{=}}}
+\def\pr{\mbox{pr}}
+\def\lg{\mbox{logit }}   
+\def\am{\mbox{ arg min } }
+\def\refhg{\hangindent=20pt\hangafter=1}
+\def\refmark{\par\vskip 2mm\noindent\refhg}
+ 
+\newcommand{\indep}{\;\, \rule[0em]{.03em}{.6em} \hspace{-.25em}
+\rule[0em]{.65em}{.03em} \hspace{-.25em} \rule[0em]{.03em}{.6em}\;\,}
+
+\newcommand{\E}{\mathrm{E}}
+\newcommand{\Es}{\mbox{\scriptsize{E}}}
+\newcommand{\var}{\mbox{var}} %% Use for variances
+\newcommand{\vecc}{\mbox{vec}}
+\newcommand{\cov}{\mbox{cov}}
+\newcommand{\rank}{\mbox{rank}}
+\newcommand{\ols}{\mbox{{\sc los}}}
+\newcommand{\sir}{\mbox{SIR}}
+\newcommand{\cdf}{\mbox{{\sc cf}}}
+\newcommand{\doc}{\mbox{{\sc doc}}}
+\newcommand{\phd}{\mbox{p{\sc h}d}}
+\newcommand{\e}{\mbox{$\varepsilon$}}
+\newcommand{\greg}{\mbox{{\sc Greg}}}
+\newcommand{\CERES}{\mbox{{\sc ceres}}}
+\newcommand{\SAVE}{\mbox{{\sc save}}}
+\newcommand{\save}{\mbox{{\sc save}}}
+\newcommand{\sate}{\mbox{{\sc sate}}}
+\newcommand{\diag}{\mbox{diag}}
+\newcommand{\spc}{{\mathcal S}}
+
+\newcommand{\0}{{\bf 0}}
+
+\def\pr{\mbox{P}}
+\newcommand{\spn}{\mbox{span}}
+\newcommand{\scov}[1]{{\mathcal S}^{(#1)}_{{\mathrm Cove}}}
+\newcommand{\MMM}{{\mathcal M}}
+\newcommand{\X}{{X}} %% Use for BNF X
+\newcommand{\x}{{x}} %% Use for BNF x
+\newcommand{\Y}{{Y}}
+\newcommand{\y}{y}
+\newcommand{\el}{L}
+\newcommand{\Z}{{Z}}
+\newcommand{\grkp}{{\pi}}
+\newcommand{\Q}{{Q}}
+\newcommand{\z}{{z}}
+\newcommand{\bb}{{b}}
+\newcommand{\ba}{{a}}
+\newcommand{\B}{{B}}
+\newcommand{\A}{{A}}
+\newcommand{\m}{{m}}
+\newcommand{\br}{{r}}
+\newcommand{\M}{{M}}
+\newcommand{\K}{{K}}
+\newcommand{\W}{{W}}
+\newcommand{\F}{{F}}
+\newcommand{\bk}{{k}}
+\newcommand{\f}{{f}}
+\newcommand{\D}{{\mbox{D}}}
+\newcommand{\I}{{I}}
+\newcommand{\U}{{\mbox{U}}}
+\newcommand{\bu}{{u}}
+\newcommand{\V}{{V}}
+\newcommand{\ebs}{{e}}
+\newcommand{\J}{{J}}
+\newcommand{\bv}{{v}}
+\newcommand{\Proj}{{P}}
+\newcommand{\im}{i}
+\newcommand{\p}{{P}}
+\newcommand{\Rbf}{{\mbox{R}}}
+\newcommand{\spcsave}{\spc^{\mathrm{\scriptscriptstyle SAVE}}}
+\newcommand{\Spp}{\Sigma_{i}^{1/2}}
+\newcommand{\Sm}{\Sigma_{i}^{-1/2}}
+\newcommand{\simu}{\mathrm ism}
+\newcommand{\Kbf}{K}
+\newcommand{\Hbf}{{H}}
+
+\newcommand{\vn}[1]{\mbox{\sl #1}}
+
+\newcommand{\greekbold}[1]{\mbox{\boldmath $#1$}}
+\newcommand{\betabf}{{\beta}}
+\newcommand{\nubf}{{\nu}}
+\newcommand{\etabf}{{\eta}}
+\newcommand{\lambdabf}{{\lambda}}
+\newcommand{\mubf}{{\mu}}
+\newcommand{\deltabf}{{\delta}}
+\newcommand{\Deltabf}{{\Delta}}
+ 
+\newcommand{\alphabf}{{\alpha}}
+\newcommand{\xibf}{{\xi}}
+\newcommand{\gammabf}{{\gamma}}
+\newcommand{\varepsilonbf}{{\varepsilon}}
+\newcommand{\betahatbf}{\hat{\beta}}
+\newcommand{\betahat}{\hat{\beta}}
+\newcommand{\etahat} {\hat{\eta}}
+\newcommand{\set}[1]{\{\,#1\,\}}
+\end{comment}

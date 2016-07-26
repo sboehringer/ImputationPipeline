@@ -423,12 +423,14 @@ Plot = function(..., file = NULL, .plotType = 'pdf', o = NULL, f = NULL) {
 	useDefaultTemplate = T
 );
 # create new, global reporter
-REP.new = function(templates = NULL, cache = NULL, parameters = .REP.defaultParameters, resetCache = F,
+REP.new = function(templates = NULL, cache = NULL, parameters = list(), resetCache = F,
 	latex = 'pdflatex', setup = 'setup.tex') {
+	copy.files = merge.lists(.REP.defaultParameters['copy.files'], list(copy.files = setup), concat = TRUE);
 	parameters = merge.lists(.REP.defaultParameters,
 		parameters,
-		list(copy.files = setup, latex = latex, setup = setup)
-	);
+		list(latex = latex, setup = setup),
+		copy.files,
+	concat = FALSE);
 	if (!is.null(cache) && file.exists(cache) && !resetCache) {
 		REP.tex('SETUP', setup);
 		REP.setParameters(parameters);
@@ -705,7 +707,7 @@ REP.finalizeSubTemplate = function(subTemplate) {
 	REP.save();
 }
 
-REP.finalize = function(conditionals = list(), verbose = F, cycles = 1, output = NULL) {
+REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, output = NULL) {
 	# <p> vars
 	ri = .REPORTER.ITEMS;
 	
@@ -747,7 +749,7 @@ REP.finalize = function(conditionals = list(), verbose = F, cycles = 1, output =
 		r = System(Sprintf('cd %{dir}s ; %{latexCmd}s -interaction=nonstopmode \"%{tn}s\"'),
 			4, return.output = T);
 		if (r$error > 0) Log(Sprintf("%{latexCmd}s exited with error."), 1);
-		if (r$error > 0 || verbose) Log(r$output, 1);
+		if (r$error > 0 || (verbose && i == 1)) Log(r$output, 1);
 		#if (r$error > 0) break;
 	}
 

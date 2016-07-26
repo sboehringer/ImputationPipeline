@@ -3,6 +3,54 @@
 #Mon 27 Jun 2005 10:52:17 AM CEST
 
 require('grid');
+#
+#	<p> unit model
+#
+#	base unit is cm
+setGeneric("factorToBase", function(this) standardGeneric("factorToBase"));
+setGeneric("fromUnitToUnit", function(thisA, thisB) standardGeneric("fromUnitToUnit"));
+setClass('unitGeneric', representation = list(value = 'numeric'), prototype = list(value = as.numeric(NA)));
+setMethod('initialize', 'unitGeneric', function(.Object, value = as.numeric(NA)) {
+	.Object@value = value;
+	.Object
+});
+setMethod('fromUnitToUnit', c('unitGeneric', 'unitGeneric'), function(thisA, thisB)
+	new(class(thisB), value = thisA@value * factorToBase(thisA) / factorToBase(thisB)));
+
+setClass('unitCm', contains = 'unitGeneric');
+setMethod('initialize', 'unitCm', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitCm', function(this)1);
+
+setClass('unitInch', contains = 'unitGeneric');
+setMethod('initialize', 'unitInch', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitInch', function(this)cm(1));
+
+setClass('unitDpi150', contains = 'unitGeneric');
+setMethod('initialize', 'unitDpi150', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitDpi150', function(this)cm(1)/150);
+
+setClass('unitDpi200', contains = 'unitGeneric');
+setMethod('initialize', 'unitDpi200', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitDpi200', function(this)cm(1)/200);
+
+setClass('unitDpi300', contains = 'unitGeneric');
+setMethod('initialize', 'unitDpi300', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitDpi300', function(this)cm(1)/300);
+
+setClass('unitPoints', contains = 'unitGeneric');
+setMethod('initialize', 'unitPoints', function(.Object, value)callNextMethod(.Object, value = value));
+setMethod('factorToBase', 'unitPoints', function(this)cm(1)/72);
+
+valueU = valueUnited = function(value, unit) {
+	class = getClass(Sprintf('unit%{unit}u'));
+	new(class, value = value)
+}
+toUnit = function(value, unit)fromUnitToUnit(value, valueU(as.numeric(NA), unit));
+ToUnit = function(value, unit)toUnit(value, unit)@value;
+
+#
+#	</p> unit model
+#
 
 cm2in = function(i) (i/2.54)
 
@@ -131,19 +179,47 @@ ggplot_qqunif = function(p.values, alpha = .05, fontsize = 6,
 	# (Casella & Berger, 2002, 2nd edition, pg 230, Duxbury)
 	ciU = tr(qbeta(1 - alpha/2, Ns, N - Ns + 1));
 	ciL = tr(qbeta(    alpha/2, Ns, N - Ns + 1));
-	d = data.frame(theoretical = tr(Ns/N), ciU = ciU, ciL = ciL, p.value = p.values);
+	d = data.frame(theoretical = tr(Ns/N), ciU = ciU, ciL = ciL, p.value = p.values, colorCI = colorCI);
 	p = ggplot(d) +
 		geom_line(aes(x = theoretical, y = ciU, colour = colorCI)) +
 		geom_line(aes(x = theoretical, y = ciL, colour = colorCI)) +
 		geom_point(aes(x = theoretical, y = p.value), size = 1) +
-		theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(p.values)*1.1)) +
+		theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(p.values)*1.1)) +
 		scale_y_continuous(name = trName) +
 		theme(text = element_text(size = fontsize));
 	p
 }
+#ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
+
 
 vp_at = function(x, y)viewport(layout.pos.row = x, layout.pos.col = y);
-plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL) {
+plot_grid_grid = function(plots, coords) {
+	# <p> do plotting
+	grid.newpage();
+	# <!> layout might not be respected
+	nrow = max(coords[, 1]);
+	ncol = max(coords[, 2]);
+	pushViewport(viewport(layout = grid.layout(nrow, ncol)));
+
+	sapply(1:length(plots), function(i) {
+		print(plots[[i]], vp = vp_at(coords[i, 1], coords[i, 2]));
+	});
+}
+
+plot_grid_base = function(plots, coords, envirPlotVar = 'plot') {
+	# <p> do plotting
+	coordMat0 = matrix(0, nrow = max(coords[, 1]), ncol = max(coords[, 2]));
+	coordMat = matrix.assign(coordMat0, coords, 1:length(plots));
+	layout(coordMat);
+
+	sapply(1:length(plots), function(i) {
+		eval(get(envirPlotVar, plots[[i]]));
+	});
+# 			if (is.environment(plots[[i]])) eval(get(envirPlotVar, plots[[i]])) else print(plots[[i]]);
+}
+
+
+plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar = 'plot') {
 	if (missing(nrow)) {
 		if (missing(ncol)) {
 			ncol = 1;
@@ -157,18 +233,36 @@ plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL) {
 		merge.multi(1:nrow, 1:ncol, .first.constant = byrow) else
 		mapper(1:length(plots));
 		
-	# <p> do plotting
-	grid.newpage();
-	pushViewport(viewport(layout = grid.layout(nrow, ncol)));
-
-	sapply(1:length(plots), function(i) {
-		print(plots[[i]], vp = vp_at(coords[i, 1], coords[i, 2]));
-	});
+	if (is.environment(plots[[1]]))
+		plot_grid_base(plots, coords, envirPlotVar) else
+		plot_grid_grid(plots, coords)
 }
 
-plot_grid_to_path =  function(plots, ..., path, width = 8, height = 8) {
-	pdf(path, width = width, height = height);
-		plot_grid(plots, ...);
+plot_grid_to_path =  function(plots, ..., path,
+	width = valueU(21, 'cm'), height = valueU(29.7, 'cm'), NperPage = NULL, pdfOptions = list(paper = 'a4')) {
+
+	if (class(width) == 'numeric') width = valueU(width, 'inch');
+	if (class(height) == 'numeric') height = valueU(height, 'inch');
+	Nplots = length(plots);
+
+	pages = if (!is.null(NperPage)) {
+		Npages = ceiling(Nplots / NperPage);
+		lapply(1:Npages, function(i) {
+			Istrt = (i - 1) * NperPage + 1;
+			Istop = min(i * NperPage, Nplots);
+			Istrt:Istop
+		})
+	} else list(1:length(plots));
+
+	pdfArgs = c(list(
+		file = path, onefile = TRUE, width = ToUnit(width, 'inch'), height = ToUnit(height, 'inch')
+	), pdfOptions);
+	do.call(pdf, pdfArgs);
+
+	lapply(pages, function(plotIdcs) {
+		plot_grid(plots[plotIdcs], ...);
+	});
+
 	dev.off();
 }
 
@@ -416,22 +510,24 @@ histograms_alpha = function(data, palette = histogram_colors, log10 = F,
 #	<p> saving of plots
 #
 
+
 # base unit is 600dpi
 units_conv = list(
 	cm = list(from = function(cm)(cm/2.54*600), to = function(b)(b/600*2.54)),
+	points = list(from = function(points)(points/72*600), to = function(b)(b/600*72)),
 	inch = list(from = function(i)(i*600), to = function(b)(b/600)),
 	dpi150 = list(from = function(dpi)(dpi/150*600), to = function(b)(b*150/600))
 );
-units_default = list(jpeg = 'dpi150', pdf = 'inch');
+units_default = list(jpeg = 'dpi150', pdf = 'cm', png = 'points');
 
 plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	type = NULL, options = list(), unit = 'cm', unit_out = NULL, envir = parent.frame()) {
 
 	device = get(type);
-	unit_out = if (is.null(unit_out)) units_default[[type]];
-	width = units_conv[[unit_out]]$to(units_conv[[unit]]$from(width));
-	height = units_conv[[unit_out]]$to(units_conv[[unit]]$from(height));
-	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 4);
+	if (is.null(unit_out)) unit_out = units_default[[type]];
+	width = toUnit(width, unit_out)@value;
+	height = toUnit(height, unit_out)@value;
+	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 5);
 
 	device(plot_path, width = width, height = height, ...);
 		#ret = eval(object, envir = envir);
@@ -443,17 +539,40 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	dev.off();
 }
 
-plot_save = function(object, ..., width = 20, height = 20, plot_path = NULL,
+plot_typeMap = list(jpg = 'jpeg');
+plot_save = function(object, ..., width = valueU(20, 'cm'), height = valueU(20, 'cm'), plot_path = NULL,
 	type = NULL,
-	envir = parent.frame(), options = list(), simplify = T, unit = 'cm', unit_out = NULL) {
+	envir = parent.frame(), options = list(), simplify = T, unit_out = NULL, createDir = TRUE) {
 
-	if (is.null(plot_path)) file = tempFileName('plat_save', 'pdf', inRtmp = T);
+	if (class(width) == 'numeric') width = valueU(width, 'cm');
+	if (class(height) == 'numeric') height = valueU(height, 'cm');
+	if (is.null(plot_path)) file = tempFileName('plot_save', 'pdf', inRtmp = T);
 	ret = lapply(plot_path, function(plot_path) {
-		if (is.null(type)) type = splitPath(plot_path)$ext;
+		if (createDir) Dir.create(plot_path, recursive = T, treatPathAsFile = T);
+		if (is.null(type) && !is.null(plot_path)) {
+			ext = splitPath(plot_path)$ext;
+			type = firstDef(plot_typeMap[[ext]], ext);
+		}
+		Logs("plot_path: %{plot_path}s, device: %{type}s", logLevel = 5);
 		plot_save_raw(object, ..., type = type, width = width, height = height, plot_path = plot_path,
-			options = options, unit = unit, unit_out = unit_out);
+			options = options, unit_out = unit_out, envir = envir);
 	});
 	if (length(plot_path) == 1 && simplify) ret = ret[[1]];
 	r = list(path = plot_path, ret = ret);
 	r
+}
+
+# USAGE:
+# plts = exprR1$Eapply(function(data, probe_name) {
+# 	delayedPlot({
+# 		boxplot(model, data, main = main);
+# 		beeswarm(model, data, add = T)
+# 	})
+# });
+# eval(plts[[1]])
+
+delayedPlot = function(plotExpr, envir = parent.frame()) {
+	e = new.env(parent = envir);
+	delayedAssign('plot', plotExpr, assign.env = e)
+	e
 }

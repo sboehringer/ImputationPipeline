@@ -208,11 +208,14 @@ sub createImputationBatch { my ($i, $o) = @_;
 			# prephasing was done per chunk
 			$prephased = splitPathDict(defined($prp)? $prp->{files}[$prpI++]{name}: '')
 				if (!$o->{'prephasing-per-chromosome'});
-			my $cmd = mergeDictToString({%pars,
+			my $merge = {%pars,
 				NUMBER_START => ($chunk - 1) * $chunkSize + 1,
 				NUMBER_STOP => $chunk * $chunkSize,	NUMBER_CHUNK => $chunk,
 				PREPHASED_FILE => $prephased->{path}
-				}, $pars{CMD}, {iterate => 'yes'});
+			};
+			#Log("Merge Dict:". Dumper($merge), 1);
+			my $cmd = mergeDictToString($merge, $pars{CMD}, {iterate => 'yes'});
+			#Log("Command:". $cmd, 1);
 			{
 				cmd => $cmd,
 				file => { %$f,

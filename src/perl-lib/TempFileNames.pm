@@ -758,32 +758,26 @@ sub pipeStringToCommandSystem { my ($strRef, $cmd, $logLevel)=@_;
 # flags:
 #	maxIterations: for iterate eq 'YES' iterate that often. 0: 2^(bitWidth - 1) iterations
 sub mergeDictToString { my ($hash, $str, $flags)=@_;
-	my $maxIterations = firstDef($flags->{maxIterations}, 20);
+	my $maxIterations = firstDef($flags->{maxIterations}, 100);
 	my @keys = grep { defined($hash->{$_}) } keys(%{$hash});
 	my $doIterate = uc($flags->{iterate}) eq 'YES';
+	my $keysRe = uc($flags->{keysAreREs}) eq 'YES';
 	if (uc($flags->{sortKeys}) eq 'YES' || $doIterate)
-	{	@keys = sort { length($b) <=> length($a); } @keys;
+	{	@keys = sort { length($b) <=> length($a) } @keys;
 	}
 	if (uc($flags->{sortKeysInOrder}) eq 'YES')
-	{	@keys = sort { length($a) <=> length($b); } @keys;
+	{	@keys = sort { $a <=> $b } @keys;
 	}
 	my $str0;
 	do {
 		$str0 = $str;
-		if (uc($flags->{keysAreREs}) eq 'YES')
-		{	foreach $key (@keys)
-			{	$str =~ s/$key/$hash->{$key}/g;
-				# need to start from beginning to retain length order
-				last if ($doIterate && $str ne $str0);
-			}
-		} else {
-			foreach $key (@keys)
-			{	$str=~s/\Q$key\E/$hash->{$key}/g;
-				# need to start from beginning to retain length order
-				last if ($doIterate && $str ne $str0);
-			}
+		foreach $key (@keys)
+		{	if ($keysRe) {	$str =~ s/$key/$hash->{$key}/sg; }
+			else {			$str =~ s/\Q$key\E/$hash->{$key}/sg; }
+			# need to start from beginning to retain length order
+			last if ($doIterate && $str ne $str0);
 		}
-	} while (uc($flags->{iterate}) eq 'YES' && ($str ne $str0) && --$maxIterations);
+	} while ($doIterate && ($str ne $str0) && --$maxIterations);
 	return $str;
 }
 

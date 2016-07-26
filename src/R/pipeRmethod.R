@@ -11,7 +11,8 @@
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
-	by = NULL, do_debug = F){
+	by = NULL, do_debug = F, skipToAndBrowseAtLine = NULL,
+	entropyLimit = 2e-2, entropyCuts = c(0, .5, 1.5, 2+1e-3)){
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);
@@ -37,8 +38,10 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	}
 	#classes<-c("character","character","integer","character","character",rep("numeric",Nids*3));
 	#gens = read.table(genotypeFile, comment.char = "", colClasses = classes, nrows = N); #specify column classes decreases memory usage
-	Log(sprintf('#SNPs:%d file:%s', N, genotypeFile), 3);
-	chromosome = strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1];
+	#chromosome = strsplit(strsplit(genotypeFile,"chr")[[1]][2],"_")[[1]][1];
+	# <!> extract chromosome name from file
+	chromosome = fetchRegexpr("chr(\\d+)", genotypeFile, captures = T, globally = F);
+	Log(sprintf('#SNPs:%d file:%s chromosome:%s', N, genotypeFile, chromosome), 3);
 
 	# <p> source input script
 	script = file.locate(RfunctionSource, prefixes = prefixes);
@@ -52,12 +55,20 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	Ifile = file(genotypeInfofile, "r")
 	infocols = scan(Ifile, what=character(0), n=10, quiet=T) #discard header
 	r = lapply(1:N, function(i) {
+		# <p> scan SNP meta data
 		firstcols = scan(Tfile, what = character(0), n = 5, quiet=T)
 		infocols = scan(Ifile, what = character(0), n = 10, quiet=T)
 		snpname = firstcols[2];
 		snpinfo = firstcols[3:5];
 		snpinfo2 = infocols[4:5];
 		genos = scan(Tfile, what=numeric(0), n = 3 * Nids, quiet=T)
+		# <p> first part of return value
+		r0 = c(snpname, chromosome, snpinfo, snpinfo2);
+		names(r0) = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
+
+		# <p> debugging
+		if (!is.null(skipToAndBrowseAtLine) && i < skipToAndBrowseAtLine) return(r0);
+
 		# <p> read impute file format <A>
 		#genos <- gens[i, 6:ncol(gens)];
 		genoarray = t(array(unlist(genos), dim = c(3, length(genos)/3)));
@@ -74,15 +85,19 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		if (do_debug) print(head(data));
 		
 		# <p> call function
-		Log(sprintf('Calling %s for snp %s', RfunctionName, snpname), 5);
-		r = try(
+		gtCat = cut(data$MARKER_dosage, entropyCuts, right = F);
+		H = table.entropy(gtCat);
+		Log(sprintf('Calling %s for snp %s [#%d] [Entropy:%.1e]', RfunctionName, snpname, i, H), 5);
+		if (is.na(H)) print(table(gtCat));
+		if (!is.null(skipToAndBrowseAtLine) && skipToAndBrowseAtLine == i) browser();
+		# <!> avoid analysis of degenerate data, cox-regression might core-dump
+		r = if (H > entropyLimit) try(
 			do.call(get(RfunctionName), c(list(data = data, snp = snpname), list(...)))
 			#do.call(get(RfunctionName), c(list(data = data, snp = snpname), formula0=formula0, formula1=formula1))
-		);
-		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
+		) else NA;
 		if (class(r) == 'try-error') r = NA;
-		r = c(snpname, chromosome, snpinfo, snpinfo2, r);
-		names(r)[1:7] = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
+		if (i %% 5e2 == 0) Log(sprintf('Processed %d snps', i), 3);
+		r = c(r0, r);
 		r
 	});
 	close(Tfile);

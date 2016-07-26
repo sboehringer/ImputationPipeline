@@ -4,16 +4,19 @@
 
 # test stuff not needing RgenericAll.R
 
-library('devtools');
-
-if (1) {
+if (0) {
+	require('devtools');
 	#install_github('parallelize.dynamic', 'sboehringer');
 	install_local('/home/pingu/src/Rpackages/parallelize.dynamic');
 	require('parallelize.dynamic');
 	#parallelize_initialize(list(sourceFiles = 'abc.R'), backend = 'local');
 }
 
-if (1) {
+#
+#	R-journal example
+#
+
+if (0) {
 #library(parallelize.dynamic);
 Parallelize_config = list(
 	libraries = 'sets',
@@ -64,4 +67,3 @@ subsetRegression = function() {
 }
 print(parallelize_call(subsetRegression()))
 }
-

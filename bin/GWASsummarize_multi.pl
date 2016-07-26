@@ -1,0 +1,1 @@
+../src/perl/GWASsummarize_multi.pl

@@ -223,6 +223,7 @@ frozenCallWrap = function(freeze_file, freeze_control = FreezeThawControlDefault
 	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
 	sp = splitPath(freeze_file, ssh = freeze_ssh);
 	file = if (freeze_relative) sp$file else sp$path;
+browser();
 	#wrapperPath = sprintf("%s-wrapper.RData", splitPath(file)$fullbase);
 	r = sprintf("R.pl --template raw --no-quiet --loglevel %d --code 'eval(get(load(\"%s\")[[1]]))' --",
 		logLevel, file);
@@ -295,12 +296,12 @@ callEvalArgs = function(call_, env_eval = FALSE) {
 }
 
 #callWithFunctionArgs = function(f, args, envir__ = parent.frame(), name = NULL) {
-callWithFunctionArgs = function(f, args, envir__ = environment(f), name = NULL, env_eval = FALSE) {
-	if (env_eval) f = environment_eval(f, functions = T);
+callWithFunctionArgs = function(f__, args__, envir__ = environment(f__), name = NULL, env_eval = FALSE) {
+	if (env_eval) f = environment_eval(f__, functions = FALSE, recursive = FALSE);
 	call_ = list(
-		fct = f,
-		envir = environment(f),
-		args = args,
+		fct = f__,
+		envir = environment(f__),
+		args = args__,
 		name = name
 	);
 	call_

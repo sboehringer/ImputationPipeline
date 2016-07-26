@@ -34,6 +34,11 @@ pipeline.pl mypipeline.pipe
 ```
 Inspect the templates subfolder for example or get personal help.
 
+Often it is required to install ```Module::Load`` manually.
+
+```
+cpanm Module::Load
+```
 
 Getting Help
 --------------------

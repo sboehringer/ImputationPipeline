@@ -20,7 +20,7 @@ ENV:RINCLUDES			RgenericAll.R
 #
 # hapmap3 release 22 (chr X)
 #
-ENV:referencepanel_hapmap3	/data/MolEpi/referencePanels/hapmap3/
+ENV:referencepanel_hapmap3	/exports/molepi/referencePanels/hapmap3/
 ENV:hapmap3_genotypes		hapmap3_r2_b36_chrNUMBER_CHR.haps.gz
 # physical map
 ENV:hapmap3_legend			hapmap3_r2_b36_chrNUMBER_CHR.legend
@@ -31,7 +31,7 @@ ENV:hapmap3_mapMeta			genetic_map_chrMETA:chromosome_combined_b36.txt
 #
 # hapmap2 release 22
 #
-ENV:referencepanel_hapmap2b22	/data/MolEpi/referencePanels/hapmap2_r22/
+ENV:referencepanel_hapmap2b22	/exports/molepi/referencePanels/hapmap2_r22/
 ENV:hapmap2b22_genotypes		genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_phased_by_snp
 # physical map
 ENV:hapmap2b22_legend			genotypes_chrNUMBER_CHR_CEU_r22_nr.b36_fwd_legend_by_snp
@@ -42,7 +42,7 @@ ENV:hapmap2b22_mapMeta			genetic_map_chrMETA:chromosome_CEU_b36.txt
 #
 # 1000 genomes jun2011
 #
-ENV:referencepanel_1000genomes  /data/MolEpi/referencePanels/ALL_1000G_phase1interim_jun2011_impute
+ENV:referencepanel_1000genomes  /exports/molepi/referencePanels/ALL_1000G_phase1interim_jun2011_impute
 ENV:1000genomes_genotypes		ALL_1000G_phase1interim_jun2011_chrNUMBER_CHR_impute.hap
 # physical map
 ENV:1000genomes_legend			ALL_1000G_phase1interim_jun2011_chrNUMBER_CHR_impute.legend
@@ -53,7 +53,7 @@ ENV:1000genomes_mapMeta			genetic_map_chrMETA:chromosome_combined_b37.txt
 #
 # 1000 genomes oct2011
 #
-ENV:referencepanel_1000genomes1oct  /data/MolEpi/referencePanels/ALL_1000G_phase1integrated_oct2011_impute
+ENV:referencepanel_1000genomes1oct  /exports/molepi/referencePanels/ALL_1000G_phase1integrated_oct2011_impute
 ENV:1000genomes1oct_genotypes		ALL_1000G_phase1_chrNUMBER_CHR_impute.hap.gz
 # physical map
 ENV:1000genomes1oct_legend			ALL_1000G_phase1_chrNUMBER_CHR_impute.legend.gz
@@ -64,7 +64,7 @@ ENV:1000genomes1oct_mapMeta			genetic_map_chrMETA:chromosome_combined_b37.txt
 #
 # 1000 genomes v3
 #
-ENV:referencepanel_1000genomesv3 /data/MolEpi/referencePanels/ALL_1000G_phase1integrated_v3_impute_macGT1
+ENV:referencepanel_1000genomesv3 /exports/molepi/referencePanels/ALL_1000G_phase1integrated_v3_impute_macGT1
 ENV:1000genomesv3_genotypes		ALL_1000G_phase1integrated_v3_chrNUMBER_CHR_impute_macGT1.hap.gz
 # physical map
 ENV:1000genomesv3_legend			ALL_1000G_phase1integrated_v3_chrNUMBER_CHR_impute_macGT1.legend.gz
@@ -75,7 +75,7 @@ ENV:1000genomesv3_mapMeta			genetic_map_chrMETA:chromosome_combined_b37.txt
 #
 # gonl release4
 #
-ENV:referencepanel_gonl4 /data/MolEpi/referencePanels/gonl_release4
+ENV:referencepanel_gonl4 /exports/molepi/referencePanels/gonl_release4
 ENV:gonl4_genotypes		chrNUMBER_CHR.hap.gz
 # physical map
 ENV:gonl4_legend			chrNUMBER_CHR.legend.gz

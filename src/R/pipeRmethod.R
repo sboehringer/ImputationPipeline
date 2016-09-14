@@ -12,7 +12,9 @@
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
 	by = NULL, do_debug = F, skipToAndBrowseAtLine = NULL,
-	entropyLimit = 2e-2, entropyCuts = c(0, .5, 1.5, 2+1e-3)){
+	entropyLimit = 2e-2, entropyCuts = c(0, .5, 1.5, 2+1e-3),
+	select = NULL) {
+
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);
@@ -82,6 +84,10 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 
 		# <p> merge to produce output
 		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);
+		if (!is.null(select)) {
+			Logs('Subsetting with expression %{Select}s', Select = select, logLevel = 3);
+			data = subset(data, with(data, eval(parse(text = select))));
+		}
 		if (do_debug) print(head(data));
 		
 		# <p> call function

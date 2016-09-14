@@ -29,7 +29,7 @@ $main::o = ['+print-example', '+print-pipeline', '+print-progress', '+print-para
 ];
 $main::usage = 'pipeline-spec.pipe ...';
 $main::helpText = <<HELP_TEXT;
-	(c) 2010-2011 by Stefan Boehringer, Statistical Genetics, LUMC
+	(c) 2010-2016 by Stefan Boehringer, Statistical Genetics, LUMC
 
 	Options:
 	--print-pipeline	print the pipeline as specified in the spec file

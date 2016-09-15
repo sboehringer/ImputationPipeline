@@ -33,7 +33,7 @@ G:PipeInput_example		LLS_Offspring_Partnerschr21
 # imputation + testing
 G:Name			imputation
 G:imputation	G:Convert | GWASimpute
-G:Convert		InputPlink | MapReplace | GWASconvertBatch:tped | GWASconvertBatch:3col
+G:Convert		InputPlink | MapReplace | reorder | GWASconvertBatch:tped | GWASconvertBatch:3col
 
 # imputation + snp-extraction
 G:imputation_sel  G:Convert | GWASimpute | selectSnpsImpute2 | SummarizeImpute2select

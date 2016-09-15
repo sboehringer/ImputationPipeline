@@ -1,0 +1,24 @@
+#	Pipe name:
+#		reorder
+#	Creation date:
+#		Thu Sep 15 17:54:21 CEST 2016
+#	Description:
+#		reorder snps according to phyical position using plink
+#	Pipe instances:
+#		NAME:SUBNAME function
+#	Input:
+#		ped
+#	Output:
+#		ped
+
+#
+#	Pipe parameters
+#
+
+#
+#	Pipe definition
+#
+
+reorder:cmd_isTransform	1
+reorder:cmd_isSummary	0
+reorder:cmd		plink --file INPUT --recode --out OUTPUT

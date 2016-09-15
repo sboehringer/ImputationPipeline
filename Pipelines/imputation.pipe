@@ -16,6 +16,7 @@
 @include	selectSnps.pipe
 @include	copy.pipe
 @include	prephasing.pipe
+@include	reorder.pipe
 
 #
 #	<p> input definition

@@ -131,7 +131,7 @@ gwasFormula2tag = function(f1) {
 	tag = mergeDictToString(list(
 		`\\s+` = '',
 		`_` = '-',
-		`Surv\\(.*?\\)` = 'surv',
+		`Surv\\(\\s*([^,\\s]+)\\s*,.*?\\)` = 'surv-\\1',
 		MARKER = 'snp',
 		# <p> MDS covariates
 		# less obfuscated version
@@ -291,6 +291,7 @@ analyzeChunk = function(i, input, outputDir, d, o, indExcl, markerExcl,
 	# <!><%> shorten analysis
 	#snps = snps[1:min(10, length(snps))]
 	#snps = gsub('[-?]', '.', snps);	# replace special characters
+	if (o$assAnalyzeNsnpsPerChunk > 0) snps = snps[1:o$assAnalyzeNsnpsPerChunk];
 	r = lapply(snps, function(snp) {
 		snpInf = plinkGetSnpInfo(o, snp);
 		gtsRaw = gtsFromPlinkAlleles(dG[, which(ns[[2]] == snp), drop = F],
@@ -311,13 +312,15 @@ analyzeChunk = function(i, input, outputDir, d, o, indExcl, markerExcl,
 		if (nrow(d2) == 0) {
 			stop('No unmissing data in association analysis');
 		}
-
 		# <p> recheck maf
 		af = afForGts(d2[[snp]]);
+		if (min(af, 1 - af) < o$assParMafTest) return(list(marker = snp, mafExcl = T));
+		# <p> check gtfs
+		gtfs = table.n(d2[[snp]], 2, 0);
+		if (sum(gtfs < o$assParGtfsTest) >= 2) return(list(marker = snp, mafExcl = T));
 # 		if (snp %in% snps[as.integer(seq(1, length(snps), length.out = 50))]) {
 # 			print(list(snp = snp, af = af, snpInf, minor = gtsRaw$allele));
 # 		}
-		if (min(af, 1 - af) < o$assParMafTest) return(list(marker = snp, mafExcl = T));
 
 		# <p> perform statistical testing
 		print(snp);
@@ -326,7 +329,9 @@ analyzeChunk = function(i, input, outputDir, d, o, indExcl, markerExcl,
 		r = list(marker = snp, mafExcl = F, af = af, allele = gtsRaw$allele, r = r);
 		r
 	});
-	save(r, file = resultsFileRaw(o, tag, i));
+	pathResults = resultsFileRaw(o, tag, i);
+	save(r, file = pathResults);
+	Logs('%{pathResults}s written.', logLevel = 5);
 	NULL
 }
 
@@ -448,8 +453,10 @@ collectResults = function(chunks, o, tag) {
 
 writeTopData = function(markers, file, gtsNameReplace = list(sex = 'sex.plink')) {
 	d = plink.fetchSnpsByName(pathGenotypes, markers,
-		exclInd = con(qcIndExclPath, '.csv'),
-		exclMarkers = con(qcMarkerExclPath, '.csv')
+		#exclInd = con(qcIndExclPath, '.csv'),
+		#exclMarkers = con(qcMarkerExclPath, '.csv')
+		exclInd = readExclusionsInds(o = NULL, 'all'),
+		exclMarkers = readExclusionsMarkers(o = NULL, 'all')
 	);
 	names(d) = vector.replace(names(d), c(gtsNameReplace, list(iid = 'id')));
 	# assume dR (response data) to exist
@@ -507,7 +514,7 @@ associationAnalysisWriteSummariesForModel = function(input, outputDir = NULL, d,
 
 
 summarizePvalues = function(outputDir,
-	ps, Evars, map, tag, assParTopN = 50, afHwe = NULL, writeTopData = NULL, o, alpha = 0.05) {
+	ps, Evars, map, tag, assParTopN = 50, afHwe = NULL, doWriteTopData = FALSE, o, alpha = 0.05) {
 #summarizePvaluesForVar  = function(ps, Pvar, Pvars, Evars, map, tag, assParTopN = 50, afHwe = NULL,
 #	modelName = '', writeTopData = NULL) {
 	# <p> embracing sub-template
@@ -549,14 +556,18 @@ summarizePvalues = function(outputDir,
 	REP.plot('ASS:MANHATTEN',
 		manhattanPlot(mhp, title = sprintf('Model %s', tag), significance = PvalueCutoff,
 			file = exportFileName(o, tag, 'manhattan.jpg')));
+	REP.tex('ASS:PAR:TopN', nrow(psTop));
 	# <p> table/table files
 	write.csv(psTop, file = resultFileNameAssTopList(outputDir, tag));
 	write.csv(mappedPs[order(mappedPs$P), ], file = resultFileNameAss(outputDir, tag));
 	Log('... manhattenplot finished.', 1);
 
 	#
-	#	<p> report table
+	#	<p> report tables
 	#
+	# as of 2016/07 reporting is split into two table: association, effect sizes
+
+	# variables describing markers (from map file)
 	varsMap = c('marker', 'chr', 'posPhy', 'allele');
 	varsAf = 'afD';
 	varsBeta = names(psTop)[regexIdcs('^B.*', names(psTop))];
@@ -565,31 +576,48 @@ summarizePvalues = function(outputDir,
 	varsAll = c(varsMap, varsAf, varsBeta, varsHwe, varsP);
 	# remove CIs from reported frame
 	psTop = psTop[, varsAll];
-	# names of reported data frame
-	rep.names = c(
-		varsMap,	# variables describing markers
-		'af',
-		sapply(1:length(Evars), function(i)sprintf('$\\beta_%d$', i)),
-		'P(hwe)',
-		'P(snp)'
-	);
+
+	#
+	#	<p> table association
+	#
+	psTopP = psTop[, c(varsP, varsMap, varsAf, varsHwe, 'B.marker')];
+	rep.names = c('P(snp)', varsMap, 'af', 'P(hwe)', '\\beta_M');
 	rep.names = vector.replace(rep.names, list(chr = 'C', allele = 'A'));
 	caption = sprintf(con(
 		'Top associations according to model \\texttt{%s}. ',
-		'Effect size parameters correspond to variables as follows: (%s) = (%s). ',
 		'{\\it P(snp)} association P-value, {\\it af} allele frequency in complete data. ',
-		'{\\it C} chromosome, {\\it A} effect allele, {\\it af} allele frequency of effect allele.'),
-		tag2tex(tag),
-		join(sapply(1:length(Evars), function(i)sprintf('$\\beta_%d$', i)), ', '),
-		join(sapply(Evars, function(n)sprintf('$\\beta(%s)$', n)), ', ')
+		'{\\it C} chromosome, {\\it A} effect allele, {\\it af} allele frequency of effect allele. ',
+		'$\\beta_M$: effect size of the marker, '),
+		tag2tex(abbr(tag, 30))
 	);
-	REP.tex('ASS:TABLE', report.data.frame.toString(
-		psTop,
-		digits = c(rep(NA, length(varsMap)), 2, rep(2, length(Evars)), '#2', '#2'),
-		names.as = rep.names, quoteHeader = F,
-		caption = caption
+	REP.tex('ASS:TABLE:P', report.data.frame.toString(psTopP,
+		digits = c('#2', rep(NA, length(varsMap)), 2, '#2', 2),
+		names.as = rep.names, quoteHeader = F, caption = caption
 	), fmt = 'tiny');
-	if (!is.null(writeTopData)) writeTopData(markers = as.character(psTop$marker),
+
+	#
+	#	<p> table effect sizes
+	#
+	covCols = names(psTop)[grep('^B\\.', names(psTop))];
+	psTopE = psTop[, c(varsP, 'marker', covCols)];
+	rep.names = c('P(snp)', 'marker',
+		sapply(1:length(covCols), function(i)sprintf('$\\beta_{%d}$', i))
+	);
+	rep.names = vector.replace(rep.names, list(chr = 'C', allele = 'A'));
+	caption = sprintf(con(
+		'Effect sizes for model \\texttt{%s}. ',
+		'Effect size parameters correspond to variables as follows: (%s) = (%s). '),
+		tag2tex(abbr(tag, 30)),
+		join(sapply(1:length(covCols), function(i)sprintf('$\\beta_{%d}$', i)), ', '),
+		join(sapply(covCols, function(n)sprintf('$\\beta(%s)$', n)), ', ')
+	);
+	REP.tex('ASS:TABLE:Coeff', report.data.frame.toString(psTopE,
+		digits = c('#2', NA, rep(2, length(covCols))),
+		names.as = rep.names, quoteHeader = F, caption = caption
+	), fmt = 'tiny');
+
+	# <p> write data for top SNPs
+	if (doWriteTopData) writeTopData(markers = as.character(psTop$marker),
 		file = sprintf('%s/association-%s-topData.csv', outputDir, tag2fn(tag)));
 
 	# fix latex bug: only one '.' allowed per file name
@@ -609,8 +637,7 @@ summarizePvalues = function(outputDir,
 rmn = replaceMarkerName = function(v, m)vector.replace(v, f = m, t = 'marker', regex = T);
 summarizeResults = function(chunks, input, outputDir, d, o,
 	f1, f0, tag = NULL, geneticModel = 'additive', 
-	effectSizes = c(),
-	assParTopN = 50, afHwe = NULL, writeTopData = NULL, model = list()) {
+	effectSizes = c(), afHwe = NULL, doWriteTopData = FALSE, model = list()) {
 
 	REP.tex('ASS:MODEL', sprintf('\\texttt{%s}', tag2tex(abbr(tag, 20))));
 	REP.tex('ASS:Formula1', f1);
@@ -624,7 +651,6 @@ summarizeResults = function(chunks, input, outputDir, d, o,
 
 	# <p> read summaries
 	r0 = collectResults(chunks, o, tag);
-if (any(NULL == 'CHILDREP50')) browser();
 	# <A> cleanup code
 	if (!length(r0)) {
 		REP.reportSubTemplate('association', tag);
@@ -672,7 +698,13 @@ if (any(NULL == 'CHILDREP50')) browser();
 	# <p>> report results
 	# reflect data frame naming conventions by using .dfns
 	summarizePvalues(outputDir,
-		ps, .dfns(Evars), getMap(input), tag, assParTopN, readHwe(input, outputDir), writeTopData, o = o);
+		ps, .dfns(Evars), getMap(input), tag = tag, assParTopN = o$assParTopN,
+		afHwe = readHwe(input, outputDir), doWriteTopData = doWriteTopData, o = o);
+
+	# <p> based on reported P-values, report failed analyses
+	Mstat = qcMarkerStatistics(input, o);
+
+	REP.tex('ASS:NanalysisFail', Mstat$NpostQc - REP.get('ASS:NmafExcl') - REP.get('ASS:Nmarkers'));
 
 	REP.reportSubTemplate('association', tag);
 }
@@ -815,7 +847,7 @@ associationAnalysisSummary = function(input, outputDir = NULL, d, o = list()) wi
 			tag = analysisTag(m),
 			effectSizes = firstDef(m$assParEffectSizes,
 				o$assParEffectSizes, setdiff(formula.covariates(m$f1), 'MARKER')),
-			assParTopN, afHwe = NULL, geneticModel = m$geneticModel, model = m);
+			afHwe = NULL, geneticModel = m$geneticModel, model = m);
 	});
 	#})), input = input, outputDir = outputDir, o = o);
 	REP.finalizeSubTemplate('association');

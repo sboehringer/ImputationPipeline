@@ -92,7 +92,8 @@ callPlink = function(input, output, command, o = NULL, pattern = NULL, ...) {
 		options = join(c(options, sprintf('--exclude %s', pathMarkers)));
 	}
 	#inds = firstDef(o$exclusions$inds, o$exclusions$individuals);
-	inds = o$exclusions$inds;
+	# <!> inds -> individuals 15.9.2016
+	inds = o$exclusions$individuals;
 	if (!is.null(inds)) {
 		pathInds = plinkPedFileForIds(input, inds, tempfile());
 		options = join(c(options, sprintf('--remove %s', pathInds)));

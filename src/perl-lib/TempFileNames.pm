@@ -3,7 +3,7 @@ require 5.000;
 require Exporter;
 
 @ISA       = qw(Exporter);
-@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix);
+@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix);
 
 #@EXPORT_OK = qw($sally @listabob %harry func3);
 
@@ -182,6 +182,9 @@ sub readFileFirstLocation { my ($filePath, $c, @dirs) = @_;
 	return $c->{returnPath}? { path => $location, file => $f }: $f;
 }
 
+# search for filename $fileName in @paths
+# if not found use $c->{default} if defined
+# if $c->{configPaths} is defined prepend to @paths
 sub readConfigFile { my ($fileName, $c, @paths) = @_;
 	@paths = ('.', "$ENV{HOME}/MyLibrary/Configs", "$ENV{HOME}/Library/Configs",
 		"/Library/Configs", "/MyLibrary/Configs", '/'
@@ -191,6 +194,8 @@ sub readConfigFile { my ($fileName, $c, @paths) = @_;
 		push(@paths, $c) if (defined($c));
 		$c = {};
 	}
+	unshift(@paths, @{$c->{paths}}) if (defined($c->{paths}));
+	Log('readConfigFile: pathes: '. join(':', @paths), 7);
 	my $plistFile = readFileFirstLocation($fileName, $c, @paths);
 	my $plist;
 	if (!defined($plistFile)) {
@@ -202,7 +207,9 @@ sub readConfigFile { my ($fileName, $c, @paths) = @_;
 	return $c->{returnPath}
 	? { path => $plistFile->{path}, propertyList => $plist } : $plist;
 }
-
+sub writeConfigFile { my ($path, $config) = @_;
+	writeFile($path, stringFromProperty($config));
+}
 
 sub interpolatedPropertyFromString { my ($s, $hashNames) = @_;
 	return undef() if ($s eq '');
@@ -798,6 +805,16 @@ sub removeWS { my($str)=@_;	#remove all whitespace inside string
 	return $str;
 }
 
+sub prefix { my ($s, $sep) = @_;
+	($s eq '')? '': $sep.$s;
+}
+sub postfix { my ($s, $sep) = @_;
+	($s eq '')? '': $s.$sep;
+}
+sub circumfix { my ($s, $sepPre, $sepPost) = @_;
+	postfix(prefix($s, $sepPre), $sepPost)
+}
+
 sub lcPrefix { my (@s) = @_;
 	my $minL = min(map { length($_) } @s);
 	for (my $i = 0; $i < $minL; $i++) {
@@ -1040,7 +1057,8 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 		exit(!$result);
 	}
 	my $c = {};
-	$c = readConfigFile($o->{config}, { default => {} }) if (defined($o->{config}));
+	$c = readConfigFile($o->{config}, { default => {}, paths => $o->{configPaths} })
+		if (defined($o->{config}));
 	my $cred = undef;
 	if (defined($o->{credentials})) {
 		load('KeyRing');
@@ -1298,6 +1316,5 @@ sub formatTable { my ($d, $rows, $cols) = @_;
 sub dateReformat { my ($date, $fmtIn, $fmtOut) = @_;
 	return strftime($fmtOut, strptime($date, $fmtIn));
 }
-
 
 1;

@@ -58,14 +58,20 @@ gwasParameterDefaults = list(
 	assParTopN = 70,
 	assParMafTest = 0.00,	# maf for complete data to be tested (0 for compatibility as default)
 							# reasonably 0.01 or 0.05 depending on sample size
+	assParGtfsTest = 0.005,	# if two genotypes have frequency less than assParGtfsTest,
+							# exclude SNP; relevant when only heterozygotes are observed
+							# should be filtered by earlier steps
 	assManhattenCutoff = 5e-8,
-	assPerfModels = NULL,	# perform all models by default, otherwise model indeces are given
 
 	# as per default, take sex from ped file
 	filesFamFormat = '[HEADER=F,SEP=S,NAMES=fid.gt;id;pid.gt;mid.gt;sex.gt;affected.gt,CONST=genotyped:1]',
 	filesMergeBy = 'id',
 
-	outputFileTemplate = '%{outputDir}s/reportGwas-%{runName}s.pdf'
+	outputFileTemplate = '%{outputDir}s/reportGwas-%{runName}s.pdf',
+
+	# <p> debugging parameters
+	assAnalyzeNsnpsPerChunk = 0,	# if > 0, only analzyze that many SNPs per chunk (splitting step
+	assPerfModels = NULL			# perform all models by default, otherwise model indeces are given
 );
 
 gwasParameterEraser = list(
@@ -383,8 +389,8 @@ readExclusionsMarkers = function(o, type = 'all', do.union = T) {
 
 readExclusions = function(o, type = 'all', do_union = T) {
 	r = list(
-		individuals = readExclusionsInds(o, type, do_union = do_union),
-		markers = readExclusionsMarkers(o, type, do_union = do_union)
+		individuals = readExclusionsInds(o, type, do.union = do_union),
+		markers = readExclusionsMarkers(o, type, do.union = do_union)
 	);
 	r
 }
@@ -442,6 +448,13 @@ gwasCheckInput = function(o, d) {
 	Logs('Number of complete cases: %{Ncomplete}s', level = 4);
 	if (Ncomplete == 0) {
 		stop('No non-missing data (except genotypes, response)');
+	}
+
+	# <p> check data types
+	classes = lapply(d, class);
+	if (any(classes %in% c('list', 'matrix'))) {
+		print(classes);
+		stop('Forbidden column classes found in covariate data.');
 	}
 	NULL
 }
@@ -508,15 +521,54 @@ gwasRun = function(optionsFile, run = NULL, opts = NULL, resetCache = F) {
 }
 
 gwasPublish = function(optionsFile, runs = c('R01', 'R02', 'R03')) {
-	sapply(runs, function(run) {
-		publishFile(Sprintf('results/%{run}s/reportGwas-%{run}s.pdf'));
-		publishDir(Sprintf('results/%{run}s/export'), into = Sprintf('export-%{run}s'));
-	})
+	sapply(runs, function(runName) with(gwasInitialize(optionsFile, run = runName)$options, {
+		publishFile(Sprintf(outputFileTemplate), into = Sprintf('%{runName}s'));
+	}))
 }
 
 #
 #	<p> post-GWAS
 #
+
+createPipeline = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
+	referencePanel = '1000genomesv3', doRunPipeline = FALSE, extraInterpolation = list(), templatePath = 'gwas/gwasImputationTemplate.pipe') {
+	writePipeFile(exportPath, optionsFile = optionsFile, run = run, referencePanel = referencePanel,
+		extraInterpolation = extraInterpolation, templatePath = templatePath);
+
+	transferPipeline(exportPath, optionsFile = optionsFile, run = run, doCopy = T);
+	if (doRunPipeline) startPipeline(exportPath, optionsFile = optionsFile, run = run);
+}
+imputationFetchResult = function(exportPath, optionsFile, run = 'R03') {
+	# assume initPublishing having been called
+	#initPublishing('gwasHuidtoxiciteit201103', '201407');
+	pipelineGetReports(exportPath, optionsFile = optionsFile, run = run);
+	pipelineResultFiles(exportPath, optionsFile = optionsFile, run = run);
+}
+
+#	exportPath = 'results/export/destination';
+# 	exportCleanedData(exportPath, optionsFile = optionsFile, run = 'R03');
+# 	writePipeFile(exportPath, optionsFile = optionsFile, run = 'R03',
+# 		referencePanel = c('gonl4', '1000genomesv3'));
+# 	transferPipeline(exportPath, optionsFile = optionsFile, run = 'R03', doCopy = T);
+# 	startPipeline(exportPath, optionsFile = optionsFile, run = 'R03');
+
+# referencePanel %in% c('gonl4', '1000genomesv3')
+postGWASimputation = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
+	referencePanel = '1000genomesv3') {
+	exportCleanedData(exportPath, optionsFile = optionsFile, run = run);
+	createPipeline(exportPath, optionsFile, run = run, referencePanel,
+		templatePath = 'gwas/gwasImputationTemplate.pipe');
+}
+
+postGWASdoAll = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
+	referencePanel = '1000genomesv3', doFetchResults = FALSE) {
+	exportCleanedData(exportPath, optionsFile = optionsFile, run = run);
+	writePipeFile(exportPath, optionsFile = optionsFile, run = run, referencePanel = referencePanel);
+	transferPipeline(exportPath, optionsFile = optionsFile, run = run, doCopy = T);
+	startPipeline(exportPath, optionsFile = optionsFile, run = run);
+
+	if (doFetchResults) imputationFetchResult(exportPath, optionsFile, run);
+}
 
 exportCleanedData = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03') {
 	# <p> initialize
@@ -542,25 +594,29 @@ exportCleanedData = function(prefix = 'results/data-cleaned-%D', optionsFile = o
 	);
 }
 
-testTypes = list(glmBin = 'applyLogisticPerSnp', glmOrd = NULL);
+testTypes = list(glmBin = 'applyLogisticPerSnp', glmSurv = 'applyCoxPerSnp', glmOrd = NULL);
 
 pipelineModels = function(models) {
-	r = lapply(seq_along(models), function(i) {
-		m = models[[i]];
-		if (is.null(testTypes[[m$stat]])) return(list());
+	r = ilapply(models, function(m, i) {
+		if (is.null(testTypes[[m$stat]]))
+			stop(Sprintf('Pipeline function for test statistic: %{stat}s undefined', stat = m$stat));
 		r = list(name = Sprintf('%{testType}s:model%{i}d', testType = testTypes[[m$stat]]),
-			formulas = listKeyValue( c(Sprintf('model%{i}d:formula1'), Sprintf('model%{i}d:formula0')),
+			# null2na (Nina) due to listKeyValue
+			formulas = listKeyValue(
+				c(	Sprintf('model%{i}d:formula1'), Sprintf('model%{i}d:formula0'),
+					Sprintf('model%{i}d:select')),
 				c(	mergeDictToString(list(MARKER = 'MARKER_dosage'), m$f1),
-					mergeDictToString(list(MARKER = 'MARKER_dosage'), m$f0)))
+					mergeDictToString(list(MARKER = 'MARKER_dosage'), m$f0),
+					ifelse(is.null(m$subset), NA, Deparse(m$subset)))
+				)
 		);
-		r
+		List_(r, rm.na = T)
 	});
-	r = r[sapply(r, length) > 0];
-	formulas = join(sapply(r, function(e) {
+	#r = r[sapply(r, length) > 0];
+	formulas = join(c(sapply(r, function(e) {
 		ns = names(e$formulas);
-		Sprintf('%{n1}s\t%{v1}s\n%{n2}s\t%{v2}s\n',
-			n1 = ns[1], v1 = e$formulas[[1]], n2 = ns[2], v2 = e$formulas[[2]])
-	}), sep = "\n");
+		join(nelapply(e$formulas, function(n, v)Sprintf('%{n}s\t%{v}s')), sep = '\n')
+	}), ''), sep = "\n\n");
 
 	pipeline = join(sapply(list.kp(r, 'name', do.unlist = T), function(p)
 		Sprintf('%{p}s | GWASsummarize')), ', ');
@@ -568,23 +624,28 @@ pipelineModels = function(models) {
 	r0
 }
 
+# 	# assume data to be cleaned, MDS variables will be fed through data export
+# 	expandedModels = expandModels(o$assParModels, input = NULL, o, d = NULL, noMDS = TRUE)$models;
+# 	models = pipelineModels(expandedModels);
 writePipeFile = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
-	referencePanel = 'hapmap2b22', headerMap = 'id:iid') {
+	referencePanel = 'hapmap2b22', headerMap = 'id:iid', templatePath = 'gwas/gwasImputationTemplate.pipe',
+	extraInterpolation = list()) {
 	# <p> initialize
 	Dir.create(prefix, treatPathAsFile = T);
 	o = gwasInitialize(optionsFile, run = run)$options;
 	sp = splitPath(prefix);
+	if (is.null(o$remotePath)) stop('No remote path specified in config file.');
 	spR = splitPath(o$remotePath);
 
 	# <p> template interpolation
-	models = pipelineModels(o$assParModels);
-	template = readFile('gwas/gwasImputationTemplate.pipe');
-	pipe = mergeDictToString(c(
+	template = readFile(templatePath);
+	substDict = c(
 		list(PREFIX = sp$file, REMOTE_PATH = spR$path,
 			REFPANEL = referencePanel,
 			`__HEADERMAP__` = headerMap),
-		models
-	), template);
+		extraInterpolation
+	);
+	pipe = mergeDictToString(substDict, template);
 	cat(pipe);
 	writeFile(Sprintf('%{prefix}s.pipe'), pipe);
 	pipe

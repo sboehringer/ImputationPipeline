@@ -360,9 +360,11 @@ trimString = function(s) {
 	)
 }
 
+# <N> maxIterations needs to be large as a new iteration is entered after each successful substitution
+#	this is necessary, as 
 mergeDictToString = function(d, s, valueMapper = function(s)
 	ifelse(is.na(d[[n]]), '{\\bf Value missing}', d[[n]]),
-	iterative = F, re = F, maxIterations = 100, doApplyValueMap = T, doOrderKeys = T, maxLength = 1e7) {
+	iterative = F, re = F, maxIterations = 1e4, doApplyValueMap = T, doOrderKeys = T, maxLength = 1e7) {
 	ns = names(d);
 	# proceed in order of decreasing key lengthes
 	if (doOrderKeys) ns = ns[rev(order(sapply(ns, nchar)))];
@@ -1338,7 +1340,9 @@ rep.each.row = function(m, n) {
 	if (class(m) == 'data.frame') r = Df_(r, names = names(m));
 	r
 }
-rep.list = function(l, n) lapply(1:length(l), function(e)l);
+#rep.list = function(l, n) lapply(1:length(l), function(e)l);
+# <!> changed as of 23.8.2016; n not used before
+rep.list = function(l, n) lapply(1:n, function(e)l);
 matrix.intercalate = function(..., direction = 1) {
 	l = list(...);
 	# <!> assume same dimension
@@ -1587,14 +1591,14 @@ DfAsInteger = function(dataFrame, as_integer) {
 	#dfn = apply(dataFrame[, as_integer, drop = F], 2, function(col)as.integer(avu(col)));
 	# <!> 6.6.2016 as.integer first needed to retain factor status on factors
 	dfn = nlapply(as_integer, function(col)avu(as.integer(dataFrame[[col]])));
-	dataFrame[, as_integer] = do.call(cbind, dfn);
+	dataFrame[, as_integer] = as.data.frame(do.call(cbind, dfn));
 	dataFrame
 }
 DfAsCharacter = function(dataFrame, as_character) {
 	#dfn = apply(dataFrame[, as_character, drop = F], 2, function(col)as.character(avu(col)));
 	#dataFrame[, as_character] = as.data.frame(dfn, stringsAsFactors = FALSE);
 	dfn = nlapply(as_character, function(col)avu(as.character(dataFrame[[col]])));
-	dataFrame[, as_character] = do.call(cbind, dfn);
+	dataFrame[, as_character] = as.data.frame(do.call(cbind, dfn), stringsAsFactors = FALSE);
 	dataFrame
 }
 
@@ -1607,11 +1611,12 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	as_numeric = NULL, as_character = NULL, as_factor = NULL, as_integer = NULL,
 	row.names = NA, valueMap = NULL, Df_as_is = TRUE, simplify_ = FALSE,
 	deep_simplify_ = FALSE, t_ = FALSE, unlist_cols = F, transf_log = NULL, transf_m1 = NULL,
-	Df_doTrimValues = FALSE, Df_mapping_value = '__df_mapping_value__') {
+	Df_doTrimValues = FALSE, Df_mapping_value = '__df_mapping_value__',
+	Df_mapping_empty = '__DF_EMPTY__', Do_Df_mapping_empty = TRUE) {
 	#r = as.data.frame(df0);
 	if (t_) df0 = t(df0);
 	r = data.frame(df0, stringsAsFactors = !Df_as_is);
-	if (!is.null(min_)) {
+	if (notE(min_)) {
 		is = which.indeces(min_, names(r));
 		if (length(is) > 0) r = r[, -is, drop = F];
 	}
@@ -1619,27 +1624,29 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	if (deep_simplify_) r = as.data.frame(
 		nlapply(r, function(col)sapply(r[[col]], unlist)), stringsAsFactors = !Df_as_is
 	);
-	if (!is.null(names)) {
+	if (notE(names)) {
 		if (class(names) == 'character') names(r)[1:length(names)] = names;
 		if (class(names) == 'list') names(r) = vector.replace(names(r), names);
 	}
-	if (!is.null(headerMap)) names(r) = vector.replace(names(r), headerMap);
-	if (!is.null(valueMap)) {
+	if (notE(headerMap)) names(r) = vector.replace(names(r), headerMap);
+	if (notE(valueMap)) {
 		for (n in names(valueMap)) {
 			vs = if (Df_doTrimValues)
 				nina(trimString(as.character(r[[n]])), Df_mapping_value) else
 				as.character(r[[n]]);
+			if (Do_Df_mapping_empty) vs = ifelse(nit(vs == ''), Df_mapping_empty, vs)
 			vs = nina(valueMap[[n]][vs], Df_mapping_value);
-			r[[n]] = ifelse(vs == Df_mapping_value, as.character(r[[n]]), vs);
+			vs = ifelse(vs == Df_mapping_value, as.character(r[[n]]), vs)
+			r[[n]] = vs;
 		}
 	}
-	if (!is.null(as_numeric)) {
+	if (notE(as_numeric)) {
 		dfn = apply(r[, as_numeric, drop = F], 2, function(col)as.numeric(avu(col)));
 		r[, as_numeric] = as.data.frame(dfn);
 	}
-	if (!is.null(as_integer)) r = DfAsInteger(r, as_integer);
-	if (!is.null(as_character)) r = DfAsCharacter(r, as_character);
-	if (!is.null(as_factor)) {
+	if (notE(as_integer)) r = DfAsInteger(r, as_integer);
+	if (notE(as_character)) r = DfAsCharacter(r, as_character);
+	if (notE(as_factor)) {
 		# <N> does not work
 		#dfn = apply(r[, as_factor, drop = F], 2, function(col)as.factor(col));
 		#r[, as_factor] = dfn;
@@ -1648,8 +1655,8 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	#
 	#	<p> transformations
 	#
-	if (!is.null(transf_log)) r[, transf_log] = log(r[, transf_log, drop = F]);
-	if (!is.null(transf_m1)) r[, transf_m1] = r[, transf_m1, drop = F] - 1;
+	if (notE(transf_log)) r[, transf_log] = log(r[, transf_log, drop = F]);
+	if (notE(transf_m1)) r[, transf_m1] = r[, transf_m1, drop = F] - 1;
 
 	if (!all(is.na(row.names))) row.names(r) = row.names;
 	if (unlist_cols) for (n in names(r)) r[[n]] = avu(r[[n]]);
@@ -1680,7 +1687,7 @@ Dfselect = function(data, l, na.rm = nif) {
 
 
 List_ = .List = function(l, min_ = NULL, sel_ = NULL,
-	rm.null = F, names_ = NULL, null2na = F, simplify_ = F) {
+	rm.null = F, names_ = NULL, null2na = F, simplify_ = F, rm.na = F) {
 	if (!is.null(min_)) {
 		i = which.indeces(min_, names(l));
 		if (length(i) > 0) l = l[-i];
@@ -1696,6 +1703,9 @@ List_ = .List = function(l, min_ = NULL, sel_ = NULL,
 	if (null2na) {
 		nullI = which(sapply(l, is.null));
 		l[nullI] = NA;
+	}
+	if (rm.na) {
+		l = l[!is.na(l)];
 	}
 	if (!is.null(names_)) names(l)[Seq(1, length(names_))] = names_;
 	if (simplify_) l = sapply(l, identity);
@@ -1840,8 +1850,10 @@ data.frame.union = function(l) {
 }
 
 # levels: take levels in that order, unmentioned levels are appended
-# setLevels: set to these levels, else to NA
-recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevels = NULL) {
+# setLevels: restrict to these levels, else set to NA
+# setLevelsTo: set names of levels to argument, set excess levels to NA
+recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevels = NULL,
+	setLevelsTo = NULL) {
 	r = f;
 	if (!is.null(map)) {
 		# map others to NA
@@ -1864,8 +1876,13 @@ recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevel
 		levlsN0 = firstDef(setLevels, levels, levls);
 		levlsN = c(levlsN0, setdiff(levls, levlsN0));
 
-		# <p> remove unwanted factors
+		# <p> remove unwanted levels
 		if (!is.null(setLevels)) r = ifelse(r %in% setLevels, r, NA);
+		# <p> rename levels
+		if (!is.null(setLevelsTo)) {
+			r = drop.levels(ifelse(as.integer(r) <= length(setLevels), r, NA));
+			levels(r) = setLevelsTo;
+		}
 		r = factor(r, levels = if (!is.null(setLevels)) levlsN0 else levlsN);
 	}
 	r
@@ -1947,6 +1964,13 @@ nif = function(b) {
 	if (length(b) == 0) return(F);
 	!(is.null(b) | is.na(b) | !b)
 }
+Nif = function(b, allnif = T, nonLogicalIsTrue = T) {
+	bLog = sapply(b, as.logical);
+	b = ifelse(is.na(b) | sapply(b, class) == 'logical', bLog, nonLogicalIsTrue);
+	summ = (if (allnif) all else any);
+	r = summ(sapply(b, nif));
+	r
+}
 # null is true
 #nit = function(b)(is.null(b) | is.na (b) | b)
 #nit = function(b)sapply(b, function(b)(is.null(b) || is.na (b) || b))
@@ -1961,6 +1985,10 @@ niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
 # null is na (or other special value
 #niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
 nina = function(e, value = NA)sapply(e, function(e)ifelse(is.null(e), value, e))
+Nina = function(e, value = NA)if (length(e) == 0) value else nina(e, value);
+
+# not empty
+notE = function(e)(length(e) > 0);
 
 #
 #	<p> complex structures
@@ -2182,7 +2210,7 @@ Do.callIm = function(im__f, args, ..., restrictArgs = TRUE, callMode = 'inline')
 	if (callMode == 'inlist') {
 		.do.call(im__f, c(args, list(...)), restrictArgs = restrictArgs)
 	} else if (callMode == 'list') {
-		im__f(args, ...)
+		im__f(unlist.n(args, 1, reset = T), ...)
 	} else if (callMode == 'inline') {
 		args = c(merge.lists(args, listOfLists = TRUE), list(...));
 		.do.call(im__f, args, restrictArgs = restrictArgs)
@@ -2225,7 +2253,8 @@ iterateModels_raw = function(modelList, models, f_iterate = function(...)list(..
 	# model indeces contains the original positions in models
 	# this allows reordering of execution, eg with reverseEvaluationOrder
 	r = Lapply(1:nrow(models), function(i, ..., im__f, im__model_idcs) {
-		args = c(Inlist(i = im__model_idcs[i]), list.takenFrom(modelList, unlist(models[i, ])));
+		args = c(list(i = list(i = im__model_idcs[i])), list.takenFrom(modelList, unlist(models[i, ])));
+#if (callMode == 'list') browser();
 		Do.callIm(im__f, args, ..., restrictArgs = restrictArgs, callMode = callMode);
 	}, ..., im__f = f_iterate, im__model_idcs = as.integer(row.names(models)));
 	r
@@ -2268,6 +2297,7 @@ iterateModelsSymbolizer = function(i, ..., im_symbolizer, im_symbolizerMode) {
 	r
 }
 
+# <i> make name of supplied model index, currently 'i', configurable
 iterateModels = function(modelList, f = function(...)list(...), ...,
 	.constraint = NULL, .clRunLocal = TRUE, .resultsOnly = FALSE, .unlist = 0,
 	callWithList = FALSE, callMode = NULL,
@@ -2324,6 +2354,9 @@ iterateModelsExpand = function(modelList, .constraint = NULL) {
 	r
 }
 
+IterateModelsExpand = function(modelList, .constraint = NULL) {
+	iterateModels(modelList, identity, .constraint = .constraint, callWithList = TRUE)$results
+}
 
 # reverse effect of .retern.lists = T
 #	list.to.df(merge.multi.list(..., .return.lists = T)) === merge.multi.list(..., .return.lists = F)
@@ -2822,7 +2855,8 @@ dirList = function(dir, regex = T, case = T) {
 	}
 	files
 }
-
+list_files_with_exts = function(path, exts, full.names = T)
+	list.files(path, pattern = Sprintf('.(%{Exts}s)$', Exts = join(exts, '|')), full.names = full.names);
 
 write.csvs = function(t, path, semAppend = "-sem", ...) {
 	s = splitPath(path);
@@ -2985,6 +3019,9 @@ fileName = function(output, extension = NULL, subtype = NULL) {
 .globalOutputDefault = .globalOutput = list(prefix = '', tag = NULL, tagFirst = F);
 GlobalOutput_env__ = new.env();
 # .fn.set(prefix = 'results/predictionTesting-')
+# @par prefix character, start path name with this character string
+# @par tag character, add dashed string to all files (defaults to appending to filename)
+# @par tagFirst boolean, put tag as a prefix to the file name instead
 .fn.set = function(...) {
 	.globalOutput = merge.lists(.globalOutputDefault, list(...));
 	assign('.globalOutput', .globalOutput, envir = GlobalOutput_env__);
@@ -3275,11 +3312,14 @@ Snow_cluster_env__ = new.env();
 specifyCluster = function(localNodes = 8, sourceFiles = NULL, cfgDict = list(), hosts = NULL,
 	.doSourceLocally = F, .doCopy = T, splitN = NULL, reuseCluster = F, libraries = NULL,
 	evalEnvironment = F) {
+	#<!> might not be available/outdated
+	require('parallel');
 	cfg = merge.lists(.defaultClusterConfig,
 		cfgDict,
 		list(splitN = splitN, reuseCluster = reuseCluster, evalEnvironment = evalEnvironment),
 		list(local = F, source = sourceFiles, libraries = libraries, hosts = (if(is.null(hosts))
-			list(list(host = "localhost", count = localNodes, type = "PSOCK", environment = list())) else
+			list(list(host = "localhost", count = localNodes, type = "PSOCK",
+				environment = list(setwd = getwd()))) else
 				hosts)
 	));
 	assign(".globalClusterSpecification", cfg, envir = Snow_cluster_env__);
@@ -3300,16 +3340,14 @@ specifyCluster = function(localNodes = 8, sourceFiles = NULL, cfgDict = list(), 
 	}
 }
 
-#<!> might not be available/outdated
-library('parallel');
 # l: list, f: function, c: config
 # <i><!> test clCfg$reverseEvaluationOrder before uncommenting
 clapply_cluster = function(l, .f, ..., clCfg = NULL) {
 	#if (clCfg$reverseEvaluationOrder) l = rev(l);
 
 	# only support SOCK type right now <!><i>
-	hosts = unlist(sapply(clCfg$hosts, function(h){
-		if (h$type == "PSOCK") rep(h$host, h$count) else NULL}));
+	hosts = as.vector(unlist(sapply(clCfg$hosts, function(h){
+		if (h$type == "PSOCK") rep(h$host, h$count) else NULL})));
 	master = ifelse(all(hosts == "localhost"), "localhost", ipAddress("eth0"));
 	establishEnvironment = T;
 	cl = if (clCfg$reuseCluster) {
@@ -3326,7 +3364,8 @@ clapply_cluster = function(l, .f, ..., clCfg = NULL) {
 
 	# <p> establish node environment
 	envs = listKeyValue(list.key(clCfg$hosts, "host"), list.key(clCfg$hosts, "environment", unlist = F));
-	Log(clCfg, 7);
+	if (Log.level() >= 7) print(clCfg);
+
 	if (establishEnvironment) r = clusterApply(cl, hosts, function(host, environments, cfg){
 		env = environments[[host]];
 		if (!is.null(env$setwd)) setwd(env$setwd);
@@ -3513,7 +3552,7 @@ Source = function(file, ...,
 
 compressPathBz2 = function(pathRaw, path, doRemoveOrig = TRUE) {
 	cmd = Sprintf("cat %{pathRaw}q | bzip2 -9 > %{path}q");
-	r = System(cmd, 2);
+	r = System(cmd, 5);
 	if (doRemoveOrig && !get('.system.doLogOnly', envir = System_env__)) file.remove(pathRaw);
 	r
 }
@@ -3525,7 +3564,7 @@ compressPath = function(pathRaw, path, extension = NULL, doRemoveOrig = TRUE) {
 }
 decompressPathBz2 = function(path, pathTmp, doRemoveOrig = FALSE) {
 	cmd = Sprintf("cat %{path}q | bunzip2 > %{pathTmp}q");
-	r = System(cmd, 2);
+	r = System(cmd, 5);
 	if (doRemoveOrig && !get('.system.doLogOnly', envir = System_env__)) file.remove(pathRaw);
 	r
 }
@@ -3591,7 +3630,8 @@ optionParser = list(
 		unlist.n(r, 1)
 	},
 	COLNAMESFILE = identity,
-	SHEET = as.integer
+	SHEET = as.integer,
+	SKIP = as.integer
 );
 
 splitExtendedPath = function(path) {
@@ -3615,13 +3655,13 @@ readTable.ods = function(path, options = NULL) {
 
 # <!> changed SEP default "\t" -> ",", 20.5.2015
 #readTable.csv.defaults = list(HEADER = T, SEP = "\t", `NA` = c('NA'), QUOTE = '"');
-readTable.csv.defaults = list(HEADER = T, SEP = ",", `NA` = c('NA'), QUOTE = '"');
+readTable.csv.defaults = list(HEADER = T, SEP = ",", `NA` = c('NA'), QUOTE = '"', SKIP = 0);
 readTable.txt = readTable.csv = function(
 	path, options = readTable.csv.defaults, headerMap = NULL, setHeader = NULL, ...) {
 
 	options = merge.lists(readTable.csv.defaults, options);
 	t = read.table(path, header = options$HEADER, sep = options$SEP, as.is = T,
-		na.strings = options$`NA`, comment.char = '', quote = options$QUOTE, ...);
+		na.strings = options$`NA`, comment.char = '', quote = options$QUOTE, skip = options$SKIP, ...);
 	if (!is.null(options$NAMES)) names(t)[1:length(options$NAMES)] = options$NAMES;
 	if (!is.null(headerMap)) names(t) = vector.replace(names(t), headerMap);
 	if (!is.null(setHeader)) names(t) =  c(setHeader, names(t)[(length(setHeader)+1): length(names(t))]);
@@ -3642,9 +3682,9 @@ readTable.RData = function(path, options = NULL, headerMap = NULL) {
 	t
 }
 
-readTable.xls = function(path, options = NULL, ..., sheet = 1) {
+readTable.xls = function(path, options = NULL, ..., row.names = NULL, sheet = 1) {
 	require('gdata');
-	read.xls(path, sheet = sheet, verbose = FALSE);
+	read.xls(path, sheet = sheet, ..., row.names = row.names, verbose = FALSE);
 }
 
 tableFunctionConnect = c('csv', 'RData');
@@ -3763,7 +3803,9 @@ writeTable.csv = function(dataFrame, path, ..., doCompress = NULL, row.names = T
 writeTableRaw = function(object, path, ..., doCompress = NULL, row.names = TRUE, autodetect = TRUE,
 	defaultWriter = writeTable.csv, options = list()) {
 	sp = splitPath(path);
-	if (!is.null(doCompress) && sp$ext %in% c('bz2', 'gz')) doCompress = sp$ext;
+	if (is.null(doCompress) && !is.null(sp$ext) && sp$ext %in% c('bz2', 'gz')) {
+		doCompress = sp$ext;
+	}
 	writer = if (autodetect && !is.null(sp$ext)) 
 		tableFunctionForPath(path, 'writeTable.%{ext}s', writeTable.csv) else defaultWriter;
 	if (is.null(writer))
@@ -4124,6 +4166,8 @@ sqliteQuery = function(db, query, table = NULL) {
 # 	initPublishing('expressionMonocytes201404', '201405');
 # 	publishFile('results/expressionMonocytesReportGO.pdf');
 # }
+# # force as subdir in the reporting dir
+# publishDir('results/BAP1IHCgekoppeldaanWelofGeenMonosomie3', asSubdir = T);
 
 Publishing_env__ <- new.env();
 initPublishing = function(project, currentIteration, publicationPath = '/home/Library/ProjectPublishing') {
@@ -4146,16 +4190,20 @@ publishFctEnv = function(path, into = NULL, as = NULL) with(as.list(Publishing_e
 })
 
 
-publishFile = function(file, into = NULL, as = NULL) with(publishFctEnv(file, into, as), {
-	if (!is.null(into)) Dir.create(destination, treatPathAsFile = T);
+publishFileRaw = function(file, into = NULL, as = NULL) with(publishFctEnv(file, into, as), {
+	if (!is.null(into)) Dir.create(destination, treatPathAsFile = T, recursive = T);
 	Logs('Publishing %{file} --> "%{destination}s', 3);
 	Dir.create(splitPath(destination)$dir, recursive = T);
 	System(Sprintf("chmod -R a+rX %{dir}s", dir = qs(projectFolder)), 4);
-	file.copy(file, destination, overwrite = T);
+	r = file.copy(file, destination, overwrite = T);
+	if (any(!r)) Logs("Copying of '%{file}s' failed.", 3);
 	Sys.chmod(destination, mode = '0755', use_umask = F);
 	destination
 })
 
+publishFiles = publishFile = function(files, into = NULL, as = NULL) {
+	lapply(files, publishFileRaw, into = into, as = as)
+}
 
 publishCsv = function(table, as, ..., into = NULL) {
 	file = tempfile('publish', fileext = 'csv');
@@ -4164,7 +4212,9 @@ publishCsv = function(table, as, ..., into = NULL) {
 }
 
 publishDir = function(dir, into = NULL, as = NULL, asSubdir = FALSE) with(publishFctEnv('', into, as), {
-	if (asSubdir) into = splitPath(dir)$file;
+	sp = splitPath(dir);
+	# if 'dir' is a slashed dir itself, use the last dir-component
+	if (asSubdir) into = if (sp$file == '') splitPath(sp$dir)$file else file;
 	if (!is.null(into)) {
 		destination = splitPath(Sprintf('%{destination}s/%{into}s/'))$fullbase;	# remove trailing slash
 	}
@@ -4221,7 +4271,24 @@ Install_local = function(path, ...) {
 
 # misc
 
-clearWarnings = function()assign('last.warning', NULL, envir = baseenv())#
+clearWarnings = function()assign('last.warning', NULL, envir = baseenv())
+
+#
+#	<p> packages
+#
+
+Library = function(name, ...) {
+	if (!require(name, ...)) {
+		r = install.packages(name);
+		# if installation from CRAN fails, try bioconductor
+		if (is.null(r)) {
+			if (!exists('biocLite')) source("http://bioconductor.org/biocLite.R");
+			biocLite(name)
+		}
+	}
+	library(name, ...)
+}
+#
 #	Rmeta.R
 #Wed Jun  3 15:11:27 CEST 2015
 
@@ -4579,6 +4646,8 @@ encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate
 #
 #	</p> freeze/thaw functions
 #
+
+Deparse = function(o)join(deparse(o));
 #
 #	Rgraphics.R
 #Mon 27 Jun 2005 10:52:17 AM CEST
@@ -4973,8 +5042,7 @@ kaplanMeierStrat = function(d1, f1, levels = NULL, title = NULL) {
 	if (!is.null(levels)) {
 		d1[[stratVar]] = as.factor(quantileBinning(d1[[stratVar]], levels));
 	}
-
-	stratValue = levels(d1[[stratVar]]);
+	stratValue = levels(drop.levels(d1[[stratVar]]));
 	# <p> log-rank test
 	lr = survdiff(as.formula(f1), data = d1);
 	p.lr = pchisq(lr$chisq, df = dim(lr$n) - 1, lower.tail = F)
@@ -4983,20 +5051,27 @@ kaplanMeierStrat = function(d1, f1, levels = NULL, title = NULL) {
 	fit.frame = createSurvivalFrame(fit);
 	titleCooked = if (is.null(title))
 		sprintf('%s, [P = %.2e]', stratVar, p.lr) else
-		Sprintf('%{title}s, [P = %.2e]', p.lr)
+		Sprintf('%{title}s, [P = %{p}.2e]', p = p.lr)
 	p = qplot_survival(fit.frame, F, 20, title = titleCooked,
 		layers = theme_bw());
 	list(plot = p, level = stratValue)
 }
 
 kaplanMeierNested = function(d, f1, strata, combine = FALSE) {
-	dStrat = d[, strata];
-	cbs = valueCombinations(dStrat);
-	
+	require('gdata');
+	# <!><b> fix special case of length(strata) == 1
+	d = Df(d, dummy_comb__kaplanMeierNested = 1);
+	dStrat = d[, c(strata, 'dummy_comb__kaplanMeierNested'), drop = F];
+	cbs = Df_(valueCombinations(dStrat), min_ = 'dummy_comb__kaplanMeierNested');
+	dStrat = Df_(dStrat, min_ = 'dummy_comb__kaplanMeierNested');
+
 	plots = apply(cbs, 1, function(r) {
 		sel1 = nif(apply(dStrat == r, 1, all));
-		sel = nif(sapply(1:nrow(d), function(i)all(dStrat[i,] == r)));
-		if (sum(sel) == 0) browser();
+		sel = nif(sapply(1:nrow(d), function(i)all(dStrat[i, ] == r)));
+		if (sum(sel) == 0) {
+			warning('empty group selected');
+			return(NULL);
+		}
 		#if (sum(sel) == 0) return(NULL);
 		dSel = d[sel, , drop = F];
 		N = sum(sel);
@@ -5156,6 +5231,92 @@ delayedPlot = function(plotExpr, envir = parent.frame()) {
 	e = new.env(parent = envir);
 	delayedAssign('plot', plotExpr, assign.env = e)
 	e
+}
+
+#
+#	<p> legacy function from other packages
+#
+
+# gridExtra
+ebimageGrob = function (pic, x = 0.5, y = 0.5, scale = 1, raster = FALSE, angle = NULL, ...) {
+    dims <- dim(pic)
+    colours = t(channel(pic, "x11"))
+    width = unit(scale * dims[1], "points")
+    height = unit(scale * dims[2], "points")
+    angle <- if (is.null(angle)) 
+        0
+    else angle
+    vp <- viewport(x = x, y = y, width = width, height = height, 
+        angle = angle)
+    if (raster) {
+        child <- rasterGrob(colours, vp = vp, ...)
+    }
+    else {
+        colours <- colours[rev(seq_len(nrow(colours))), ]
+        require(RGraphics)
+        child <- imageGrob(dims[2], dims[1], cols = colours, 
+            gp = gpar(col = colours), byrow = FALSE, vp = vp, 
+            ...)
+    }
+    gTree(width = width[[1]], height = height[[1]], children = gList(child), 
+        cl = "ebimage")
+}
+
+#
+#	<p> transformations
+#
+
+# <p> helper functions
+
+# apply transformations on coordinates (given as row-wise points of a nx2 matrix)
+applyT = function(coords, transf)t(transf %*% t(cbind(coords, 1)))[, -3]
+# rectangle of width/height
+rectWH = function(width, height)
+	t(c(width, height) * (c(-.5, -.5) + t(matrix(c(0,0, 1,0, 1,1, 0,1), byrow = T, ncol = 2))))
+# caculate circumference radius of rectangle
+rectRad = function(width, aspectRatio, margin) {
+	width = width * (1 + margin);
+	height = width/aspectRatio;
+	radius = norm(matrix(c(width, height)), '2') / 2;
+}
+
+# <p> actual transformations
+# transformations are applied right to left (see applyT)
+
+transform2dTranslate = function(delta) {
+	matrix(c(1, 0, 0, 0, 1, 0, delta[1], delta[2], 1), ncol = 3)
+}
+
+transform2dRotation = function(alpha) {
+	matrix(c(cos(alpha), sin(alpha), 0, -sin(alpha), cos(alpha), 0, 0, 0, 1), ncol = 3)
+}
+
+# tranlation after rotation
+transform2dRotTrans = function(alpha, delta) {
+	transform2dTranslate(delta) %*% transform2dRotation(alpha)
+}
+
+# move in direction of rotation after rotation
+transform2dMoveYRot = function(dist, alpha) {
+	transl = transform2dTranslate(c(0, dist));
+	rot = transform2dRotation(alpha);
+	r = rot %*% transl;
+	r
+}
+
+# move in direction of rotation after rotation
+transform2dRotMove = transform2dRotMoveY = function(alpha, dist) {
+	rot = transform2dRotation(alpha);
+	v = rot %*% c(dist, 0, 1);
+	transform2dTranslate(v[1:2]) %*% rot
+}
+
+
+# create transformation that is created by rotating a points
+#	the destination of the point is used to create a translation
+transform2dRot2Move = function(alpha, point) {
+	p = applyT(matrix(point, ncol = 2), transform2dRotation(alpha));
+	transform2dTranslate(p);
 }
 #
 #	Rreporting.R
@@ -5469,13 +5630,14 @@ Qplot_defaults = list(
 	dimx = c(0, 1), dimy = c(0, 100)
 );
 
-Qplot = function(..., file = NULL, pp = Qplot_defaults) {
+Qplot = function(..., file = NULL, pp = Qplot_defaults, theme = theme_bw()) {
 	pp = merge.lists(Qplot_defaults, pp);
 	args = list(...);
 	geom = firstDef(args$geom, 'default');
 	# <b> workaround for QQ-plot instead of the expected qplot(...)
 	p = if (any(class(args[[1]]) == 'ggplot')) {
-		args[[1]]
+		plot = args[[1]];
+		
 	} else if (
 		# histogram
 		(all(is.na(args[[1]])) && geom == 'histogram')
@@ -5676,6 +5838,10 @@ REP.setConditional = function(name, v) {
 	REP.save();
 }
 
+REP.get = function(name) {
+	get('.REPORTER.ITEMS', envir = .GlobalEnv)$patterns[[name]];
+}
+
 outputOf = function(code, print = T, envir = parent.frame()) {
 	tempFile = tempFileName('reporter', inRtmp = T);
 	sink(tempFile);
@@ -5796,6 +5962,7 @@ REP.plot = function(name, code, ..., file = NULL, type = 'pdf', envir = parent.f
 	setREPentry(sprintf('%s_code', name), c$text);
 	NULL
 }
+
 # tag allows to search for overloading templates (_tag). This can be used in reportSubTemplate to
 #	conditionally report templates
 .REP.interpolateTemplate = function(templName, conditionals = list(), tag = NULL) {
@@ -6006,13 +6173,29 @@ callWithArgs = function(fctName, args) {
 	eval(parse(text = fhead))
 }
 
-.do.call = function(f, args, restrictArgs = T) {
-	if (restrictArgs) {
-		fargs = names(as.list(args(f)));
-		fargs = fargs[fargs != ''];
-		if (all(fargs != '...')) args = args[which.indeces(fargs, names(args))];
+.do.call = function(f, args, restrictArgs = T, usePositional = T, restrictPositional = F) {
+	# <p> function arguments
+	fargs = names(as.list(args(f)));
+	# remove spurious arguments
+	fargs = fargs[fargs != ''];
+
+	if (restrictArgs && all(fargs != '...')) {
+		idcs = which.indeces(fargs, names(args));
+		if (usePositional) {
+			positional = which(names(args) == '');
+			Npositional = (length(fargs) - length(idcs));
+			if (!restrictPositional && length(positional) > Npositional)
+				stop(".do.call: unmachted positional arguments");
+			idcs = c(idcs, positional[1:Npositional]);
+		}
+		args = args[sort(idcs)];
 	}
 	do.call(f, args)
+}
+
+callDelegate = function(functionBase, delegation, args, restrictArgs = T) {
+	f = get(Sprintf('%{functionBase}s%{delegation}u'));
+	.do.call(f, args, restrictArgs = restrictArgs)
 }
 
 #
@@ -7344,9 +7527,10 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			# re-establish order
 			r = if (align_order
 				&& all(sapply(r, class) %in% c('numeric', 'integer'))
-				&& all(sapply(r, length) == 1)) {
+				#&& all(sapply(r, length) == 1)) {
+				&& sum(sapply(r, length)) == nrow(data)) {
 				unlist(r)[o];
-			} else if (align_order && all(sapply(r, class) == 'data.frame') &&
+			} else if (align_order && all(sapply(r, class) %in% c('data.frame', 'matrix')) &&
 				sum(sapply(r, nrow)) == nrow(data)) {
 				#<!> untested
 				#r = rbindDataFrames(r, colsFromFirstDf = T);
@@ -7363,7 +7547,15 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 #	<p> data standardization
 #
 
-standardize = function(v)(v / sd(v));
+standardize = function (x, ...)UseMethod("standardize", x);
+standardize.numeric = function(v, na.rm = TRUE, orig.mean = FALSE) {
+	vM = mean(v, na.rm = na.rm);
+	vC = v - vM;
+	vS = vC / sd(vC, na.rm = na.rm);
+	if (orig.mean) vS + vM else vS
+}
+standardize.data.frame = function(df, na.rm = TRUE)apply(df, 2, standardize.numeric, na.rm = na.rm);
+standardize.matrix = function(m, na.rm = TRUE)apply(m, 2, standardize.numeric, na.rm = na.rm);
 
 df2z = function(data, vars = names(as.data.frame(data))) {
 	data = as.data.frame(data);

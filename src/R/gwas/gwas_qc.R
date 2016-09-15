@@ -83,6 +83,7 @@ qcImissing = function(input, output = NULL, o = list(), pattern = NULL) with(o, 
 		Qplot(missInd$F_MISS, geom = "histogram", xlab = 'missingness', file = outputP)
 	);
 	qcIndMiss = missInd$F_MISS > qcParIMissCutOff | is.nan(missInd$F_MISS);
+	#qcIndMiss = nit(missInd$F_MISS > qcParIMissCutOff);
 	qcIndMissExcluded = missInd$IID[qcIndMiss];
 	REP.tex('QC:IND:MISS', fraction(qcIndMiss), fmt = 'percent');
 	REP.tex('QC:IND:MISS_CNT', sum(qcIndMiss));
@@ -254,14 +255,17 @@ qcExclusionSummary = function(N, o = list(), category = 'excl_ind', type = 'marg
 
 	# <p> characteristics of exclusions
 	exclBase = readExclusionsRaw(o, category, type = 'baseline', do_union = T);
+	exclExt = readExclusionsRaw(o, category, type = 'external', do_union = T);
 	Ncurated = N - length(exclBase);
+	Nin 	 = N - length(exclExt);
 	exclCum = unionCum(excl);
 	exclPars = lapply(1:length(excl), function(i) {
 		# <p> individual parameters
 		name = names(excl)[i];
 		Ne = length(excl[[i]]);
-		perc = Ne / Ncurated;
-		Ncum = length(exclCum[[i]]);
+		# <!> 7.9.2016: Ncurated -> N (should not make a difference as N is from a curated dataset)
+		perc = if (name == 'external') NA else Ne / N;
+		Ncum = if (name == 'external') NA else (length(exclCum[[i]]) - length(exclExt));
 
 		REP.tex(Sprintf('QC:EXCL:%{category}s:%{name}s_CNT'), Ne);
 		REP.tex(Sprintf('QC:EXCL:%{category}s:%{name}s'), perc, fmt = 'percent');
@@ -278,13 +282,13 @@ qcIsummary = function(input, output = NULL, d, o = list(), pattern = NULL) {
 	REP.tex('QC:EXCL:excl_ind:summary', report.data.frame.toString(
 		es, digits = c(0, '%1', 0, rep(0, nrow(es))), bars = c(F, F, T),
 		quoteHeader = T, ignoreRowNames = F,
-		caption = 'Summary of exclusions of individuals for QC steps. {\\it Ne}: number of exclusions. {\\it perc}: percentage of exclusions from total sample after accounting for external exclusions and non-genotyped individuals. {\\it Ncum}: cumulative number of excluded individuals. The second part of the table contains pairwise overlap between QC steps.'
+		caption = 'Summary of exclusions of individuals for QC steps. {\\it Ne}: number of exclusions. {\\it perc}: percentage of exclusions from total sample after accounting for external exclusions. {\\it Ncum}: cumulative number of excluded individuals. The second part of the table contains pairwise overlap between QC steps.'
 	));
 	NbaselineExcl = length(readExclusionsRaw(o, 'excl_ind', type = 'baseline', do_union = T));
 	REP.tex('QC:EXCL:excl_ind:baselineexcl_CNT', NbaselineExcl);
 	Nbaseline = nrow(d);
 	REP.tex('QC:EXCL:excl_ind:baseline_CNT', Nbaseline);
-	Nexcl = unlist(es$Ncum[nrow(es)]) - NbaselineExcl;
+	Nexcl = unlist(es$Ncum[nrow(es)]);
 	REP.tex('QC:EXCL:excl_ind:total_CNT', Nexcl);
 	REP.tex('QC:EXCL:excl_ind:total', Nexcl/Nbaseline, fmt = 'percent');
 	REP.tex('QC:EXCL:excl_ind:included_CNT', nrow(d) - Nexcl);
@@ -360,7 +364,7 @@ qcMmissing = function(input, output = NULL, o = list(), pattern = NULL) with(o, 
 qcMaf = function(input, output = NULL, o = list(), pattern = NULL) with(o, {
 	prefix = sprintf('%s/%s', output, splitPath(input)$file);
 	# <p> load from prepare step
-	hwe = get(load(sprintf('%s-qc-markers-hwe.RData', prefix))[1]);
+	hwe = get(load(sprintf('%s-qc-markers-hwe.RData', outputPrefixQc))[1]);
 
 	# <p> allele frequencies
 	qcMarkerAf = hwe$af < qcParAfCutoff;
@@ -384,6 +388,7 @@ qcMhwe = function(input, output = NULL, o = list(), pattern = NULL) with(o, {
 	# <p> hwe
 	hwe1 = hwe[hwe$af >= qcParAfCutoff & hwe$CHR <= 22, ];
 	qcMarkerHWE = !is.na(hwe1$hwe) & hwe1$hwe < qcParHweCutoff;
+	#qcMarkerHWE = nif(hwe1$hwe < qcParHweCutoff);
 	qcMarkerHWEExcl = hwe1$SNP[qcMarkerHWE];
 	Sow(hwe = qcMarkerHWEExcl, sow_field = 'excl_marker');
 
@@ -396,18 +401,30 @@ qcMhwe = function(input, output = NULL, o = list(), pattern = NULL) with(o, {
 		sort(hwe1$hwe)[1:qcParHWEzoom], xlab = 'expected', ylab = 'observed',
 		file = sprintf('%s-qc-markers-hwe_qqz.jpg', outputPrefixQc)));
 
-	REP.plot('QC:MARKER:HWEbyAF', Qplot(-log10(hwe1$af), -log10(hwe1$P),
+	REP.plot('QC:MARKER:HWEbyAF', Qplot(-log10(hwe1$af), -log10(hwe1$hwe),
 		xlab = '-log10(af)', ylab = '-log10(hwe)',
 		file = sprintf('%s-qc-markers-hweByAf.jpg', outputPrefixQc)));
 	hwe2 = merge(hwe1, qcMreadMissing(input, output));
 	REP.plot('QC:MARKER:HWEbyMiss', Qplot(
 		-log10(minimax(hwe2$F_MISS, min = 1e-10)),
-		-log10(hwe2$P),
+		-log10(hwe2$hwe),
 		xlab = '-log10(Mmiss)', ylab = '-log10(hwe)',
 		file = sprintf('%s-qc-markers-hweByMiss.jpg', outputPrefixQc)));
 
 	REP.tex('QC:MARKER:HWE_JUDGEMENT', 'an excellent');
 })
+
+qcMarkerStatistics = function(input, o) {
+	Nmarkers = nrow(plinkMapFile(input));
+	Nbaseline = Nmarkers - length(readExclusionsRaw(o, 'excl_marker', type = 'baseline', do_union = T));
+	NpostQc = Nmarkers - length(readExclusionsRaw(o, 'excl_marker', type = 'all', do_union = T));
+	r = list(
+		Nall = Nmarkers,
+		Nbaseline = Nbaseline,
+		NpostQc = NpostQc
+	);
+	r
+}
 
 qcMsummary = function(input, output = NULL, d, o = list(), pattern = NULL) with(o, {
 	Nmarkers = nrow(plinkMapFile(input));

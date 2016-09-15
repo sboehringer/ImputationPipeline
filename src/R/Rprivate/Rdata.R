@@ -350,9 +350,11 @@ trimString = function(s) {
 	)
 }
 
+# <N> maxIterations needs to be large as a new iteration is entered after each successful substitution
+#	this is necessary, as 
 mergeDictToString = function(d, s, valueMapper = function(s)
 	ifelse(is.na(d[[n]]), '{\\bf Value missing}', d[[n]]),
-	iterative = F, re = F, maxIterations = 100, doApplyValueMap = T, doOrderKeys = T, maxLength = 1e7) {
+	iterative = F, re = F, maxIterations = 1e4, doApplyValueMap = T, doOrderKeys = T, maxLength = 1e7) {
 	ns = names(d);
 	# proceed in order of decreasing key lengthes
 	if (doOrderKeys) ns = ns[rev(order(sapply(ns, nchar)))];
@@ -1328,7 +1330,9 @@ rep.each.row = function(m, n) {
 	if (class(m) == 'data.frame') r = Df_(r, names = names(m));
 	r
 }
-rep.list = function(l, n) lapply(1:length(l), function(e)l);
+#rep.list = function(l, n) lapply(1:length(l), function(e)l);
+# <!> changed as of 23.8.2016; n not used before
+rep.list = function(l, n) lapply(1:n, function(e)l);
 matrix.intercalate = function(..., direction = 1) {
 	l = list(...);
 	# <!> assume same dimension
@@ -1577,14 +1581,14 @@ DfAsInteger = function(dataFrame, as_integer) {
 	#dfn = apply(dataFrame[, as_integer, drop = F], 2, function(col)as.integer(avu(col)));
 	# <!> 6.6.2016 as.integer first needed to retain factor status on factors
 	dfn = nlapply(as_integer, function(col)avu(as.integer(dataFrame[[col]])));
-	dataFrame[, as_integer] = do.call(cbind, dfn);
+	dataFrame[, as_integer] = as.data.frame(do.call(cbind, dfn));
 	dataFrame
 }
 DfAsCharacter = function(dataFrame, as_character) {
 	#dfn = apply(dataFrame[, as_character, drop = F], 2, function(col)as.character(avu(col)));
 	#dataFrame[, as_character] = as.data.frame(dfn, stringsAsFactors = FALSE);
 	dfn = nlapply(as_character, function(col)avu(as.character(dataFrame[[col]])));
-	dataFrame[, as_character] = do.call(cbind, dfn);
+	dataFrame[, as_character] = as.data.frame(do.call(cbind, dfn), stringsAsFactors = FALSE);
 	dataFrame
 }
 
@@ -1597,11 +1601,12 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	as_numeric = NULL, as_character = NULL, as_factor = NULL, as_integer = NULL,
 	row.names = NA, valueMap = NULL, Df_as_is = TRUE, simplify_ = FALSE,
 	deep_simplify_ = FALSE, t_ = FALSE, unlist_cols = F, transf_log = NULL, transf_m1 = NULL,
-	Df_doTrimValues = FALSE, Df_mapping_value = '__df_mapping_value__') {
+	Df_doTrimValues = FALSE, Df_mapping_value = '__df_mapping_value__',
+	Df_mapping_empty = '__DF_EMPTY__', Do_Df_mapping_empty = TRUE) {
 	#r = as.data.frame(df0);
 	if (t_) df0 = t(df0);
 	r = data.frame(df0, stringsAsFactors = !Df_as_is);
-	if (!is.null(min_)) {
+	if (notE(min_)) {
 		is = which.indeces(min_, names(r));
 		if (length(is) > 0) r = r[, -is, drop = F];
 	}
@@ -1609,27 +1614,29 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	if (deep_simplify_) r = as.data.frame(
 		nlapply(r, function(col)sapply(r[[col]], unlist)), stringsAsFactors = !Df_as_is
 	);
-	if (!is.null(names)) {
+	if (notE(names)) {
 		if (class(names) == 'character') names(r)[1:length(names)] = names;
 		if (class(names) == 'list') names(r) = vector.replace(names(r), names);
 	}
-	if (!is.null(headerMap)) names(r) = vector.replace(names(r), headerMap);
-	if (!is.null(valueMap)) {
+	if (notE(headerMap)) names(r) = vector.replace(names(r), headerMap);
+	if (notE(valueMap)) {
 		for (n in names(valueMap)) {
 			vs = if (Df_doTrimValues)
 				nina(trimString(as.character(r[[n]])), Df_mapping_value) else
 				as.character(r[[n]]);
+			if (Do_Df_mapping_empty) vs = ifelse(nit(vs == ''), Df_mapping_empty, vs)
 			vs = nina(valueMap[[n]][vs], Df_mapping_value);
-			r[[n]] = ifelse(vs == Df_mapping_value, as.character(r[[n]]), vs);
+			vs = ifelse(vs == Df_mapping_value, as.character(r[[n]]), vs)
+			r[[n]] = vs;
 		}
 	}
-	if (!is.null(as_numeric)) {
+	if (notE(as_numeric)) {
 		dfn = apply(r[, as_numeric, drop = F], 2, function(col)as.numeric(avu(col)));
 		r[, as_numeric] = as.data.frame(dfn);
 	}
-	if (!is.null(as_integer)) r = DfAsInteger(r, as_integer);
-	if (!is.null(as_character)) r = DfAsCharacter(r, as_character);
-	if (!is.null(as_factor)) {
+	if (notE(as_integer)) r = DfAsInteger(r, as_integer);
+	if (notE(as_character)) r = DfAsCharacter(r, as_character);
+	if (notE(as_factor)) {
 		# <N> does not work
 		#dfn = apply(r[, as_factor, drop = F], 2, function(col)as.factor(col));
 		#r[, as_factor] = dfn;
@@ -1638,8 +1645,8 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	#
 	#	<p> transformations
 	#
-	if (!is.null(transf_log)) r[, transf_log] = log(r[, transf_log, drop = F]);
-	if (!is.null(transf_m1)) r[, transf_m1] = r[, transf_m1, drop = F] - 1;
+	if (notE(transf_log)) r[, transf_log] = log(r[, transf_log, drop = F]);
+	if (notE(transf_m1)) r[, transf_m1] = r[, transf_m1, drop = F] - 1;
 
 	if (!all(is.na(row.names))) row.names(r) = row.names;
 	if (unlist_cols) for (n in names(r)) r[[n]] = avu(r[[n]]);
@@ -1670,7 +1677,7 @@ Dfselect = function(data, l, na.rm = nif) {
 
 
 List_ = .List = function(l, min_ = NULL, sel_ = NULL,
-	rm.null = F, names_ = NULL, null2na = F, simplify_ = F) {
+	rm.null = F, names_ = NULL, null2na = F, simplify_ = F, rm.na = F) {
 	if (!is.null(min_)) {
 		i = which.indeces(min_, names(l));
 		if (length(i) > 0) l = l[-i];
@@ -1686,6 +1693,9 @@ List_ = .List = function(l, min_ = NULL, sel_ = NULL,
 	if (null2na) {
 		nullI = which(sapply(l, is.null));
 		l[nullI] = NA;
+	}
+	if (rm.na) {
+		l = l[!is.na(l)];
 	}
 	if (!is.null(names_)) names(l)[Seq(1, length(names_))] = names_;
 	if (simplify_) l = sapply(l, identity);
@@ -1830,8 +1840,10 @@ data.frame.union = function(l) {
 }
 
 # levels: take levels in that order, unmentioned levels are appended
-# setLevels: set to these levels, else to NA
-recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevels = NULL) {
+# setLevels: restrict to these levels, else set to NA
+# setLevelsTo: set names of levels to argument, set excess levels to NA
+recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevels = NULL,
+	setLevelsTo = NULL) {
 	r = f;
 	if (!is.null(map)) {
 		# map others to NA
@@ -1854,8 +1866,13 @@ recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevel
 		levlsN0 = firstDef(setLevels, levels, levls);
 		levlsN = c(levlsN0, setdiff(levls, levlsN0));
 
-		# <p> remove unwanted factors
+		# <p> remove unwanted levels
 		if (!is.null(setLevels)) r = ifelse(r %in% setLevels, r, NA);
+		# <p> rename levels
+		if (!is.null(setLevelsTo)) {
+			r = drop.levels(ifelse(as.integer(r) <= length(setLevels), r, NA));
+			levels(r) = setLevelsTo;
+		}
 		r = factor(r, levels = if (!is.null(setLevels)) levlsN0 else levlsN);
 	}
 	r
@@ -1937,6 +1954,13 @@ nif = function(b) {
 	if (length(b) == 0) return(F);
 	!(is.null(b) | is.na(b) | !b)
 }
+Nif = function(b, allnif = T, nonLogicalIsTrue = T) {
+	bLog = sapply(b, as.logical);
+	b = ifelse(is.na(b) | sapply(b, class) == 'logical', bLog, nonLogicalIsTrue);
+	summ = (if (allnif) all else any);
+	r = summ(sapply(b, nif));
+	r
+}
 # null is true
 #nit = function(b)(is.null(b) | is.na (b) | b)
 #nit = function(b)sapply(b, function(b)(is.null(b) || is.na (b) || b))
@@ -1951,6 +1975,10 @@ niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
 # null is na (or other special value
 #niz = function(e)ifelse(is.null(e) | is.na(e), 0, e)
 nina = function(e, value = NA)sapply(e, function(e)ifelse(is.null(e), value, e))
+Nina = function(e, value = NA)if (length(e) == 0) value else nina(e, value);
+
+# not empty
+notE = function(e)(length(e) > 0);
 
 #
 #	<p> complex structures
@@ -2172,7 +2200,7 @@ Do.callIm = function(im__f, args, ..., restrictArgs = TRUE, callMode = 'inline')
 	if (callMode == 'inlist') {
 		.do.call(im__f, c(args, list(...)), restrictArgs = restrictArgs)
 	} else if (callMode == 'list') {
-		im__f(args, ...)
+		im__f(unlist.n(args, 1, reset = T), ...)
 	} else if (callMode == 'inline') {
 		args = c(merge.lists(args, listOfLists = TRUE), list(...));
 		.do.call(im__f, args, restrictArgs = restrictArgs)
@@ -2215,7 +2243,8 @@ iterateModels_raw = function(modelList, models, f_iterate = function(...)list(..
 	# model indeces contains the original positions in models
 	# this allows reordering of execution, eg with reverseEvaluationOrder
 	r = Lapply(1:nrow(models), function(i, ..., im__f, im__model_idcs) {
-		args = c(Inlist(i = im__model_idcs[i]), list.takenFrom(modelList, unlist(models[i, ])));
+		args = c(list(i = list(i = im__model_idcs[i])), list.takenFrom(modelList, unlist(models[i, ])));
+#if (callMode == 'list') browser();
 		Do.callIm(im__f, args, ..., restrictArgs = restrictArgs, callMode = callMode);
 	}, ..., im__f = f_iterate, im__model_idcs = as.integer(row.names(models)));
 	r
@@ -2258,6 +2287,7 @@ iterateModelsSymbolizer = function(i, ..., im_symbolizer, im_symbolizerMode) {
 	r
 }
 
+# <i> make name of supplied model index, currently 'i', configurable
 iterateModels = function(modelList, f = function(...)list(...), ...,
 	.constraint = NULL, .clRunLocal = TRUE, .resultsOnly = FALSE, .unlist = 0,
 	callWithList = FALSE, callMode = NULL,
@@ -2314,6 +2344,9 @@ iterateModelsExpand = function(modelList, .constraint = NULL) {
 	r
 }
 
+IterateModelsExpand = function(modelList, .constraint = NULL) {
+	iterateModels(modelList, identity, .constraint = .constraint, callWithList = TRUE)$results
+}
 
 # reverse effect of .retern.lists = T
 #	list.to.df(merge.multi.list(..., .return.lists = T)) === merge.multi.list(..., .return.lists = F)

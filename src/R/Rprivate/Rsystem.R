@@ -107,7 +107,8 @@ dirList = function(dir, regex = T, case = T) {
 	}
 	files
 }
-
+list_files_with_exts = function(path, exts, full.names = T)
+	list.files(path, pattern = Sprintf('.(%{Exts}s)$', Exts = join(exts, '|')), full.names = full.names);
 
 write.csvs = function(t, path, semAppend = "-sem", ...) {
 	s = splitPath(path);
@@ -270,6 +271,9 @@ fileName = function(output, extension = NULL, subtype = NULL) {
 .globalOutputDefault = .globalOutput = list(prefix = '', tag = NULL, tagFirst = F);
 GlobalOutput_env__ = new.env();
 # .fn.set(prefix = 'results/predictionTesting-')
+# @par prefix character, start path name with this character string
+# @par tag character, add dashed string to all files (defaults to appending to filename)
+# @par tagFirst boolean, put tag as a prefix to the file name instead
 .fn.set = function(...) {
 	.globalOutput = merge.lists(.globalOutputDefault, list(...));
 	assign('.globalOutput', .globalOutput, envir = GlobalOutput_env__);
@@ -560,11 +564,14 @@ Snow_cluster_env__ = new.env();
 specifyCluster = function(localNodes = 8, sourceFiles = NULL, cfgDict = list(), hosts = NULL,
 	.doSourceLocally = F, .doCopy = T, splitN = NULL, reuseCluster = F, libraries = NULL,
 	evalEnvironment = F) {
+	#<!> might not be available/outdated
+	require('parallel');
 	cfg = merge.lists(.defaultClusterConfig,
 		cfgDict,
 		list(splitN = splitN, reuseCluster = reuseCluster, evalEnvironment = evalEnvironment),
 		list(local = F, source = sourceFiles, libraries = libraries, hosts = (if(is.null(hosts))
-			list(list(host = "localhost", count = localNodes, type = "PSOCK", environment = list())) else
+			list(list(host = "localhost", count = localNodes, type = "PSOCK",
+				environment = list(setwd = getwd()))) else
 				hosts)
 	));
 	assign(".globalClusterSpecification", cfg, envir = Snow_cluster_env__);
@@ -585,16 +592,14 @@ specifyCluster = function(localNodes = 8, sourceFiles = NULL, cfgDict = list(), 
 	}
 }
 
-#<!> might not be available/outdated
-library('parallel');
 # l: list, f: function, c: config
 # <i><!> test clCfg$reverseEvaluationOrder before uncommenting
 clapply_cluster = function(l, .f, ..., clCfg = NULL) {
 	#if (clCfg$reverseEvaluationOrder) l = rev(l);
 
 	# only support SOCK type right now <!><i>
-	hosts = unlist(sapply(clCfg$hosts, function(h){
-		if (h$type == "PSOCK") rep(h$host, h$count) else NULL}));
+	hosts = as.vector(unlist(sapply(clCfg$hosts, function(h){
+		if (h$type == "PSOCK") rep(h$host, h$count) else NULL})));
 	master = ifelse(all(hosts == "localhost"), "localhost", ipAddress("eth0"));
 	establishEnvironment = T;
 	cl = if (clCfg$reuseCluster) {
@@ -611,7 +616,8 @@ clapply_cluster = function(l, .f, ..., clCfg = NULL) {
 
 	# <p> establish node environment
 	envs = listKeyValue(list.key(clCfg$hosts, "host"), list.key(clCfg$hosts, "environment", unlist = F));
-	Log(clCfg, 7);
+	if (Log.level() >= 7) print(clCfg);
+
 	if (establishEnvironment) r = clusterApply(cl, hosts, function(host, environments, cfg){
 		env = environments[[host]];
 		if (!is.null(env$setwd)) setwd(env$setwd);
@@ -798,7 +804,7 @@ Source = function(file, ...,
 
 compressPathBz2 = function(pathRaw, path, doRemoveOrig = TRUE) {
 	cmd = Sprintf("cat %{pathRaw}q | bzip2 -9 > %{path}q");
-	r = System(cmd, 2);
+	r = System(cmd, 5);
 	if (doRemoveOrig && !get('.system.doLogOnly', envir = System_env__)) file.remove(pathRaw);
 	r
 }
@@ -810,7 +816,7 @@ compressPath = function(pathRaw, path, extension = NULL, doRemoveOrig = TRUE) {
 }
 decompressPathBz2 = function(path, pathTmp, doRemoveOrig = FALSE) {
 	cmd = Sprintf("cat %{path}q | bunzip2 > %{pathTmp}q");
-	r = System(cmd, 2);
+	r = System(cmd, 5);
 	if (doRemoveOrig && !get('.system.doLogOnly', envir = System_env__)) file.remove(pathRaw);
 	r
 }
@@ -876,7 +882,8 @@ optionParser = list(
 		unlist.n(r, 1)
 	},
 	COLNAMESFILE = identity,
-	SHEET = as.integer
+	SHEET = as.integer,
+	SKIP = as.integer
 );
 
 splitExtendedPath = function(path) {
@@ -900,13 +907,13 @@ readTable.ods = function(path, options = NULL) {
 
 # <!> changed SEP default "\t" -> ",", 20.5.2015
 #readTable.csv.defaults = list(HEADER = T, SEP = "\t", `NA` = c('NA'), QUOTE = '"');
-readTable.csv.defaults = list(HEADER = T, SEP = ",", `NA` = c('NA'), QUOTE = '"');
+readTable.csv.defaults = list(HEADER = T, SEP = ",", `NA` = c('NA'), QUOTE = '"', SKIP = 0);
 readTable.txt = readTable.csv = function(
 	path, options = readTable.csv.defaults, headerMap = NULL, setHeader = NULL, ...) {
 
 	options = merge.lists(readTable.csv.defaults, options);
 	t = read.table(path, header = options$HEADER, sep = options$SEP, as.is = T,
-		na.strings = options$`NA`, comment.char = '', quote = options$QUOTE, ...);
+		na.strings = options$`NA`, comment.char = '', quote = options$QUOTE, skip = options$SKIP, ...);
 	if (!is.null(options$NAMES)) names(t)[1:length(options$NAMES)] = options$NAMES;
 	if (!is.null(headerMap)) names(t) = vector.replace(names(t), headerMap);
 	if (!is.null(setHeader)) names(t) =  c(setHeader, names(t)[(length(setHeader)+1): length(names(t))]);
@@ -927,9 +934,9 @@ readTable.RData = function(path, options = NULL, headerMap = NULL) {
 	t
 }
 
-readTable.xls = function(path, options = NULL, ..., sheet = 1) {
+readTable.xls = function(path, options = NULL, ..., row.names = NULL, sheet = 1) {
 	require('gdata');
-	read.xls(path, sheet = sheet, verbose = FALSE);
+	read.xls(path, sheet = sheet, ..., row.names = row.names, verbose = FALSE);
 }
 
 tableFunctionConnect = c('csv', 'RData');
@@ -1048,7 +1055,9 @@ writeTable.csv = function(dataFrame, path, ..., doCompress = NULL, row.names = T
 writeTableRaw = function(object, path, ..., doCompress = NULL, row.names = TRUE, autodetect = TRUE,
 	defaultWriter = writeTable.csv, options = list()) {
 	sp = splitPath(path);
-	if (!is.null(doCompress) && sp$ext %in% c('bz2', 'gz')) doCompress = sp$ext;
+	if (is.null(doCompress) && !is.null(sp$ext) && sp$ext %in% c('bz2', 'gz')) {
+		doCompress = sp$ext;
+	}
 	writer = if (autodetect && !is.null(sp$ext)) 
 		tableFunctionForPath(path, 'writeTable.%{ext}s', writeTable.csv) else defaultWriter;
 	if (is.null(writer))
@@ -1409,6 +1418,8 @@ sqliteQuery = function(db, query, table = NULL) {
 # 	initPublishing('expressionMonocytes201404', '201405');
 # 	publishFile('results/expressionMonocytesReportGO.pdf');
 # }
+# # force as subdir in the reporting dir
+# publishDir('results/BAP1IHCgekoppeldaanWelofGeenMonosomie3', asSubdir = T);
 
 Publishing_env__ <- new.env();
 initPublishing = function(project, currentIteration, publicationPath = '/home/Library/ProjectPublishing') {
@@ -1431,16 +1442,20 @@ publishFctEnv = function(path, into = NULL, as = NULL) with(as.list(Publishing_e
 })
 
 
-publishFile = function(file, into = NULL, as = NULL) with(publishFctEnv(file, into, as), {
-	if (!is.null(into)) Dir.create(destination, treatPathAsFile = T);
+publishFileRaw = function(file, into = NULL, as = NULL) with(publishFctEnv(file, into, as), {
+	if (!is.null(into)) Dir.create(destination, treatPathAsFile = T, recursive = T);
 	Logs('Publishing %{file} --> "%{destination}s', 3);
 	Dir.create(splitPath(destination)$dir, recursive = T);
 	System(Sprintf("chmod -R a+rX %{dir}s", dir = qs(projectFolder)), 4);
-	file.copy(file, destination, overwrite = T);
+	r = file.copy(file, destination, overwrite = T);
+	if (any(!r)) Logs("Copying of '%{file}s' failed.", 3);
 	Sys.chmod(destination, mode = '0755', use_umask = F);
 	destination
 })
 
+publishFiles = publishFile = function(files, into = NULL, as = NULL) {
+	lapply(files, publishFileRaw, into = into, as = as)
+}
 
 publishCsv = function(table, as, ..., into = NULL) {
 	file = tempfile('publish', fileext = 'csv');
@@ -1449,7 +1464,9 @@ publishCsv = function(table, as, ..., into = NULL) {
 }
 
 publishDir = function(dir, into = NULL, as = NULL, asSubdir = FALSE) with(publishFctEnv('', into, as), {
-	if (asSubdir) into = splitPath(dir)$file;
+	sp = splitPath(dir);
+	# if 'dir' is a slashed dir itself, use the last dir-component
+	if (asSubdir) into = if (sp$file == '') splitPath(sp$dir)$file else file;
 	if (!is.null(into)) {
 		destination = splitPath(Sprintf('%{destination}s/%{into}s/'))$fullbase;	# remove trailing slash
 	}
@@ -1507,3 +1524,19 @@ Install_local = function(path, ...) {
 # misc
 
 clearWarnings = function()assign('last.warning', NULL, envir = baseenv())
+
+#
+#	<p> packages
+#
+
+Library = function(name, ...) {
+	if (!require(name, ...)) {
+		r = install.packages(name);
+		# if installation from CRAN fails, try bioconductor
+		if (is.null(r)) {
+			if (!exists('biocLite')) source("http://bioconductor.org/biocLite.R");
+			biocLite(name)
+		}
+	}
+	library(name, ...)
+}

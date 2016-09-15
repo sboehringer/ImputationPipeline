@@ -310,13 +310,14 @@ Qplot_defaults = list(
 	dimx = c(0, 1), dimy = c(0, 100)
 );
 
-Qplot = function(..., file = NULL, pp = Qplot_defaults) {
+Qplot = function(..., file = NULL, pp = Qplot_defaults, theme = theme_bw()) {
 	pp = merge.lists(Qplot_defaults, pp);
 	args = list(...);
 	geom = firstDef(args$geom, 'default');
 	# <b> workaround for QQ-plot instead of the expected qplot(...)
 	p = if (any(class(args[[1]]) == 'ggplot')) {
-		args[[1]]
+		plot = args[[1]];
+		
 	} else if (
 		# histogram
 		(all(is.na(args[[1]])) && geom == 'histogram')
@@ -517,6 +518,10 @@ REP.setConditional = function(name, v) {
 	REP.save();
 }
 
+REP.get = function(name) {
+	get('.REPORTER.ITEMS', envir = .GlobalEnv)$patterns[[name]];
+}
+
 outputOf = function(code, print = T, envir = parent.frame()) {
 	tempFile = tempFileName('reporter', inRtmp = T);
 	sink(tempFile);
@@ -637,6 +642,7 @@ REP.plot = function(name, code, ..., file = NULL, type = 'pdf', envir = parent.f
 	setREPentry(sprintf('%s_code', name), c$text);
 	NULL
 }
+
 # tag allows to search for overloading templates (_tag). This can be used in reportSubTemplate to
 #	conditionally report templates
 .REP.interpolateTemplate = function(templName, conditionals = list(), tag = NULL) {

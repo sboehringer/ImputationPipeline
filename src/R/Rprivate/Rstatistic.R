@@ -1311,9 +1311,10 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			# re-establish order
 			r = if (align_order
 				&& all(sapply(r, class) %in% c('numeric', 'integer'))
-				&& all(sapply(r, length) == 1)) {
+				#&& all(sapply(r, length) == 1)) {
+				&& sum(sapply(r, length)) == nrow(data)) {
 				unlist(r)[o];
-			} else if (align_order && all(sapply(r, class) == 'data.frame') &&
+			} else if (align_order && all(sapply(r, class) %in% c('data.frame', 'matrix')) &&
 				sum(sapply(r, nrow)) == nrow(data)) {
 				#<!> untested
 				#r = rbindDataFrames(r, colsFromFirstDf = T);
@@ -1330,7 +1331,15 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 #	<p> data standardization
 #
 
-standardize = function(v)(v / sd(v));
+standardize = function (x, ...)UseMethod("standardize", x);
+standardize.numeric = function(v, na.rm = TRUE, orig.mean = FALSE) {
+	vM = mean(v, na.rm = na.rm);
+	vC = v - vM;
+	vS = vC / sd(vC, na.rm = na.rm);
+	if (orig.mean) vS + vM else vS
+}
+standardize.data.frame = function(df, na.rm = TRUE)apply(df, 2, standardize.numeric, na.rm = na.rm);
+standardize.matrix = function(m, na.rm = TRUE)apply(m, 2, standardize.numeric, na.rm = na.rm);
 
 df2z = function(data, vars = names(as.data.frame(data))) {
 	data = as.data.frame(data);

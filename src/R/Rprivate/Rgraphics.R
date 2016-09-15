@@ -392,8 +392,7 @@ kaplanMeierStrat = function(d1, f1, levels = NULL, title = NULL) {
 	if (!is.null(levels)) {
 		d1[[stratVar]] = as.factor(quantileBinning(d1[[stratVar]], levels));
 	}
-
-	stratValue = levels(d1[[stratVar]]);
+	stratValue = levels(drop.levels(d1[[stratVar]]));
 	# <p> log-rank test
 	lr = survdiff(as.formula(f1), data = d1);
 	p.lr = pchisq(lr$chisq, df = dim(lr$n) - 1, lower.tail = F)
@@ -402,20 +401,27 @@ kaplanMeierStrat = function(d1, f1, levels = NULL, title = NULL) {
 	fit.frame = createSurvivalFrame(fit);
 	titleCooked = if (is.null(title))
 		sprintf('%s, [P = %.2e]', stratVar, p.lr) else
-		Sprintf('%{title}s, [P = %.2e]', p.lr)
+		Sprintf('%{title}s, [P = %{p}.2e]', p = p.lr)
 	p = qplot_survival(fit.frame, F, 20, title = titleCooked,
 		layers = theme_bw());
 	list(plot = p, level = stratValue)
 }
 
 kaplanMeierNested = function(d, f1, strata, combine = FALSE) {
-	dStrat = d[, strata];
-	cbs = valueCombinations(dStrat);
-	
+	require('gdata');
+	# <!><b> fix special case of length(strata) == 1
+	d = Df(d, dummy_comb__kaplanMeierNested = 1);
+	dStrat = d[, c(strata, 'dummy_comb__kaplanMeierNested'), drop = F];
+	cbs = Df_(valueCombinations(dStrat), min_ = 'dummy_comb__kaplanMeierNested');
+	dStrat = Df_(dStrat, min_ = 'dummy_comb__kaplanMeierNested');
+
 	plots = apply(cbs, 1, function(r) {
 		sel1 = nif(apply(dStrat == r, 1, all));
-		sel = nif(sapply(1:nrow(d), function(i)all(dStrat[i,] == r)));
-		if (sum(sel) == 0) browser();
+		sel = nif(sapply(1:nrow(d), function(i)all(dStrat[i, ] == r)));
+		if (sum(sel) == 0) {
+			warning('empty group selected');
+			return(NULL);
+		}
 		#if (sum(sel) == 0) return(NULL);
 		dSel = d[sel, , drop = F];
 		N = sum(sel);
@@ -575,4 +581,90 @@ delayedPlot = function(plotExpr, envir = parent.frame()) {
 	e = new.env(parent = envir);
 	delayedAssign('plot', plotExpr, assign.env = e)
 	e
+}
+
+#
+#	<p> legacy function from other packages
+#
+
+# gridExtra
+ebimageGrob = function (pic, x = 0.5, y = 0.5, scale = 1, raster = FALSE, angle = NULL, ...) {
+    dims <- dim(pic)
+    colours = t(channel(pic, "x11"))
+    width = unit(scale * dims[1], "points")
+    height = unit(scale * dims[2], "points")
+    angle <- if (is.null(angle)) 
+        0
+    else angle
+    vp <- viewport(x = x, y = y, width = width, height = height, 
+        angle = angle)
+    if (raster) {
+        child <- rasterGrob(colours, vp = vp, ...)
+    }
+    else {
+        colours <- colours[rev(seq_len(nrow(colours))), ]
+        require(RGraphics)
+        child <- imageGrob(dims[2], dims[1], cols = colours, 
+            gp = gpar(col = colours), byrow = FALSE, vp = vp, 
+            ...)
+    }
+    gTree(width = width[[1]], height = height[[1]], children = gList(child), 
+        cl = "ebimage")
+}
+
+#
+#	<p> transformations
+#
+
+# <p> helper functions
+
+# apply transformations on coordinates (given as row-wise points of a nx2 matrix)
+applyT = function(coords, transf)t(transf %*% t(cbind(coords, 1)))[, -3]
+# rectangle of width/height
+rectWH = function(width, height)
+	t(c(width, height) * (c(-.5, -.5) + t(matrix(c(0,0, 1,0, 1,1, 0,1), byrow = T, ncol = 2))))
+# caculate circumference radius of rectangle
+rectRad = function(width, aspectRatio, margin) {
+	width = width * (1 + margin);
+	height = width/aspectRatio;
+	radius = norm(matrix(c(width, height)), '2') / 2;
+}
+
+# <p> actual transformations
+# transformations are applied right to left (see applyT)
+
+transform2dTranslate = function(delta) {
+	matrix(c(1, 0, 0, 0, 1, 0, delta[1], delta[2], 1), ncol = 3)
+}
+
+transform2dRotation = function(alpha) {
+	matrix(c(cos(alpha), sin(alpha), 0, -sin(alpha), cos(alpha), 0, 0, 0, 1), ncol = 3)
+}
+
+# tranlation after rotation
+transform2dRotTrans = function(alpha, delta) {
+	transform2dTranslate(delta) %*% transform2dRotation(alpha)
+}
+
+# move in direction of rotation after rotation
+transform2dMoveYRot = function(dist, alpha) {
+	transl = transform2dTranslate(c(0, dist));
+	rot = transform2dRotation(alpha);
+	r = rot %*% transl;
+	r
+}
+
+# move in direction of rotation after rotation
+transform2dRotMove = transform2dRotMoveY = function(alpha, dist) {
+	rot = transform2dRotation(alpha);
+	v = rot %*% c(dist, 0, 1);
+	transform2dTranslate(v[1:2]) %*% rot
+}
+
+
+# create transformation that is created by rotating a points
+#	the destination of the point is used to create a translation
+transform2dRot2Move = function(alpha, point) {
+	p = applyT(matrix(point, ncol = 2), transform2dRotation(alpha));
+	transform2dTranslate(p);
 }

@@ -356,3 +356,5 @@ encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate
 #
 #	</p> freeze/thaw functions
 #
+
+Deparse = function(o)join(deparse(o));

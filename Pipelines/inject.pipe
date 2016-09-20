@@ -6,6 +6,7 @@
 #		inject external files into pipeline specification files
 #	Pipe instances:
 #		inject3col
+#		injectExternal
 #	Input:
 #		arbitrary directories
 #	Output:
@@ -33,6 +34,7 @@ inject3col:isa			Inject
 inject3col:FileType		tped3col
 
 # inject files from a different pipeline run
+injectExternal:isa		Inject
 injectExternal:Options	--inject-files-spec
 
 #

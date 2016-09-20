@@ -118,7 +118,7 @@ my $pgrammar = q{
 	pipe_input_identifier: pipe_identifier | number
 	pipe_input_selector: pipe_input_identifier(s /,/)
 };
-# <%> recover syntax highlighting in kate
+# <%> recover syntax highlighting in kate | /
 
 # $ls:	lines
 sub readPipelineConfig { my ($ls, $c) = @_;
@@ -145,6 +145,7 @@ sub readPipelineConfigFile { my ($f, $c) = @_;
 	my $path = firstFile($f, $c->{pathes});
 	die "Config file $f not found" if (! -e $path);
 	# <p> read file into lines
+	Log("Including pipeline configuration:$path", 5);
 	my @c = readPipelineConfig([split(/\n/, readFile($path))], $c);
 	return @c;
 }

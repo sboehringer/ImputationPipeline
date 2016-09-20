@@ -42,5 +42,5 @@ applyRperSnp:pedFile_example	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,S
 #
 
 G:Name		Association
-G:Association	injectExternal | PipelineTests
+G:Association	injectExternal | G:PipelineTests
 G:PipelineTests	G:Models | Copy:Union | filterResults | gwasReport

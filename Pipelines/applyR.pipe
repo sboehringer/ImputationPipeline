@@ -74,7 +74,7 @@ applyLmPerSnp:formula1			__must_be_specified__
 applyLmPerSnp:formula1_example	BMI ~ MARKER_dosage + Age + Sex
 applyLmPerSnp:formula0			__must_be_specified__
 applyLmPerSnp:formula0_example	BMI ~ Age + Sex
-applyLmPerSnp:select			
+applyLmPerSnp:select			TRUE
 applyLmPerSnp:select_example	nit(type = 'CCC')
 applyLmPerSnp:extraOptions		--formula1 'applyLmPerSnp:formula1' --formula0 'applyLmPerSnp:formula0' \
 	--select 'applyLmPerSnp:select'
@@ -92,7 +92,7 @@ applyLogisticPerSnp:formula1			__must_be_specified__
 applyLogisticPerSnp:formula1_example	KRAS ~ MARKER_dosage + Age + Sex
 applyLogisticPerSnp:formula0			__must_be_specified__
 applyLogisticPerSnp:formula0_example	KRAS ~ Age + Sex
-applyLogisticPerSnp:select			
+applyLogisticPerSnp:select				TRUE
 applyLogisticPerSnp:select_example	nit(type = 'CCC')
 applyLogisticPerSnp:extraOptions		--formula1 'applyLogisticPerSnp:formula1' \
 	--formula0 'applyLogisticPerSnp:formula0' --select 'applyLogisticPerSnp:select' --writeAsTable 1 --digits 6
@@ -112,7 +112,7 @@ applyCoxPerSnp:formula1			__must_be_specified__
 applyCoxPerSnp:formula1_example	Surv(time, event) ~ MARKER + age + sex
 applyCoxPerSnp:formula0			__must_be_specified__
 applyCoxPerSnp:formula0_example	Surv(time, event) ~ age + sex
-applyCoxPerSnp:select			
+applyCoxPerSnp:select			TRUE
 applyCoxPerSnp:select_example	nit(type = 'CCC')
 applyCoxPerSnp:extraOptions		--formula1 'applyCoxPerSnp:formula1' --formula0 'applyCoxPerSnp:formula0' --select 'applyCoxPerSnp:select'
 applyCoxPerSnp:meta				{ formula0 = "applyCoxPerSnp:formula0"; formula1 = "applyCoxPerSnp:formula1"; }

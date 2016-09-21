@@ -53,17 +53,31 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	source(script, chdir = T);
 	#N = nrow(gens);
 	#N = 100;
+
+	# <p> genotype file
+	# without header, Example:--- rs10970651 32000111 T A ...
 	Tfile = file(genotypeFile, "r")
+
+	# <p> genotype info file
+	# impute 2.32 table, retrieved 21.9.2016
+	# snp_id rs_id position a0 a1 exp_freq_a1 info certainty type info_type0 concord_type0 r2_type0
 	Ifile = file(genotypeInfofile, "r")
 	infocols = scan(Ifile, what=character(0), n=10, quiet=T) #discard header
+
 	r = lapply(1:N, function(i) {
 		# <p> scan SNP meta data
 		firstcols = scan(Tfile, what = character(0), n = 5, quiet=T)
 		infocols = scan(Ifile, what = character(0), n = 10, quiet=T)
 		snpname = firstcols[2];
 		snpinfo = firstcols[3:5];
-		snpinfo2 = infocols[4:5];
+		snpinfo2 = infocols[6:7];
+		snpnameInfo = infocols[2];
 		genos = scan(Tfile, what=numeric(0), n = 3 * Nids, quiet=T)
+		if (snpname != snpnameInfo) {
+			Logs('Genotype snp %{snpname}s != %{snpnameInfo}s. Stating strategic retreat.', logLevel = 3);
+			stop('Meta-data snp name mismatch');
+		}
+
 		# <p> first part of return value
 		r0 = c(snpname, chromosome, snpinfo, snpinfo2);
 		names(r0) = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');

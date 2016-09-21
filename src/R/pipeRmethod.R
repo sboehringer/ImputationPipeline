@@ -56,18 +56,21 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 
 	# <p> genotype file
 	# without header, Example:--- rs10970651 32000111 T A ...
+	# <!> hardcoded number of meta-data columns in every line
+	NgenoMeta = 5;
 	Tfile = file(genotypeFile, "r")
 
 	# <p> genotype info file
 	# impute 2.32 table, retrieved 21.9.2016
 	# snp_id rs_id position a0 a1 exp_freq_a1 info certainty type info_type0 concord_type0 r2_type0
 	Ifile = file(genotypeInfofile, "r")
-	infocols = scan(Ifile, what=character(0), n=10, quiet=T) #discard header
+	infocols = scan(Ifile, what = character(0), sep = "\n", quiet = T) # discard header
+	Ninfo = length(splitString(' ', infocols));
 
 	r = lapply(1:N, function(i) {
 		# <p> scan SNP meta data
-		firstcols = scan(Tfile, what = character(0), n = 5, quiet=T)
-		infocols = scan(Ifile, what = character(0), n = 10, quiet=T)
+		firstcols = scan(Tfile, what = character(0), n = NgenoMeta, quiet=T)
+		infocols = scan(Ifile, what = character(0), n = Ninfo, quiet=T)
 		snpname = firstcols[2];
 		snpinfo = firstcols[3:5];
 		snpinfo2 = infocols[6:7];

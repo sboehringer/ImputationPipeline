@@ -64,7 +64,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	# impute 2.32 table, retrieved 21.9.2016
 	# snp_id rs_id position a0 a1 exp_freq_a1 info certainty type info_type0 concord_type0 r2_type0
 	Ifile = file(genotypeInfofile, "r")
-	infocols = scan(Ifile, what = character(0), sep = "\n", quiet = T) # discard header
+	infocols = scan(Ifile, what = character(0), sep = "\n", n = 1, quiet = T) # discard header
 	Ninfo = length(splitString(' ', infocols));
 
 	r = lapply(1:N, function(i) {

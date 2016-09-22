@@ -33,3 +33,4 @@ gwasReport:cmd	\
 	R.pl --no-quiet --loglevel 5 -- gwas/gwas_imputation_script.R --summarizeGwas \
 		--output OUTPUT INPUT --meta FILE_META \
 		gwasReport:options
+gwasReport:ENV_ADD_QSUB_OPTIONS	--memory 16G

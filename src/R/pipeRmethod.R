@@ -25,7 +25,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	Nids = nrow(ped);
 
 	# <p> merge by 'id' and 'iid' or 'iid' alone
-	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
+	#if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
 	Logs('pipeRmethod: merging by [%{by}s]', by = join(by, ' '), logLevel = 2);
 	peddata = Merge(vars, ped, sort = F, all.y = T, by = by);
 

@@ -11,7 +11,7 @@
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
-	by = NULL, do_debug = F, skipToAndBrowseAtLine = NULL,
+	by = 'iid', do_debug = F, skipToAndBrowseAtLine = NULL,
 	entropyLimit = 2e-2, entropyCuts = c(0, .5, 1.5, 2+1e-3),
 	select = NULL) {
 

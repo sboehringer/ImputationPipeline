@@ -2,21 +2,15 @@
 #	<p> template for performing 
 #
 
-@include	imputation_qt_snptest.pipe
-@include	inject.pipe
-@include	copy.pipe
-@include	applyR.pipe
-@include	filterResults.pipe
-@include	gwas_report.pipe
+@include	associate.pipe
 
 # <p> Inputs
-G:PipeInput				PREFIX
+# directory of another pipeline run containing imputations, with spec file
+G:PipelineInput			IMPUTATION_PIPELINE
 G:VariableFile			[SEP=C,HEADER=T,HEADERMAP=__HEADERMAP__]:PREFIX-variables.csv
-G:referencePanel		REFPANEL
-applyRperSnp:pedFile	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,SEP=S]:InputPlink_OUTPUT_DIR/pedfile
+applyRperSnp:pedFile	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,SEP=S]:EXTERNAL_PED_FILE
 
 # <p> pipeline
 G:Models		( TESTS_PIPELINE )
-G:PipelineTests	G:Models | Copy:Union | filterResults | gwasReport
 
 TESTS_FORMULAS

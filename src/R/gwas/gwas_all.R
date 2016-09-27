@@ -530,21 +530,6 @@ gwasPublish = function(optionsFile, runs = c('R01', 'R02', 'R03')) {
 #	<p> post-GWAS
 #
 
-createPipeline = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
-	referencePanel = '1000genomesv3', doRunPipeline = FALSE, extraInterpolation = list(), templatePath = 'gwas/gwasImputationTemplate.pipe') {
-	writePipeFile(exportPath, optionsFile = optionsFile, run = run, referencePanel = referencePanel,
-		extraInterpolation = extraInterpolation, templatePath = templatePath);
-
-	transferPipeline(exportPath, optionsFile = optionsFile, run = run, doCopy = T);
-	if (doRunPipeline) startPipeline(exportPath, optionsFile = optionsFile, run = run);
-}
-imputationFetchResult = function(exportPath, optionsFile, run = 'R03') {
-	# assume initPublishing having been called
-	#initPublishing('gwasHuidtoxiciteit201103', '201407');
-	pipelineGetReports(exportPath, optionsFile = optionsFile, run = run);
-	pipelineResultFiles(exportPath, optionsFile = optionsFile, run = run);
-}
-
 #	exportPath = 'results/export/destination';
 # 	exportCleanedData(exportPath, optionsFile = optionsFile, run = 'R03');
 # 	writePipeFile(exportPath, optionsFile = optionsFile, run = 'R03',
@@ -556,8 +541,58 @@ imputationFetchResult = function(exportPath, optionsFile, run = 'R03') {
 postGWASimputation = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
 	referencePanel = '1000genomesv3') {
 	exportCleanedData(exportPath, optionsFile = optionsFile, run = run);
-	createPipeline(exportPath, optionsFile, run = run, referencePanel,
-		templatePath = 'gwas/gwasImputationTemplate.pipe');
+	extraInterpolation = list(REFPANEL = referencePanel);
+	createPipeline(exportPath, optionsFile, run = run, templatePath = 'gwas/gwasImputationTemplate.pipe',
+		extraInterpolation = extraInterpolation);
+}
+
+postGWASassociation = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03') {
+	o = gwasInitialize(optionsFile, run = run)$options;
+	if (is.null(o$remotePath)) stop('No remote path specified in config file.');
+	spR = splitPath(o$remotePath, ssh = T);
+
+	# <p> create pipeline depending on previous imputation run
+	exportPathOrig = exportPath;
+	prefixOrig = splitPath(exportPath)$path;
+	exportPath = Sprintf('%{exportPath}s-assoc-%{run}s');
+	prefix = splitPath(exportPath)$path;
+	if (T) exportCleanedData(exportPath, optionsFile = optionsFile, run = run);
+
+	# <p> files
+	files = Sprintf('%{prefix}s%{file}s', file = c('.fam', '.pipe', '-variables.csv'));
+	filePed = splitPath(files[1])$file;
+
+	# <p> models
+	expandedModels = expandModels(o$assParModels, input = NULL, o, d = NULL, noMDS = TRUE)$models;
+	models = pipelineModels(expandedModels);
+	# <!> hard-coded pipeline stage
+	input = list(EXTERNAL_PED_FILE = filePed, IMPUTATION_PIPELINE =
+		with(spR, Sprintf('%{path}s/imputation_06')));
+
+	# <p> write and create pipeline file
+	remotePath = with(o, Sprintf('%{remotePath}s-assoc-%{run}s'));
+	createPipeline(exportPath, optionsFile, run = run, templatePath = 'gwas/gwasAssociationTemplate.pipe',
+		files = files, extraInterpolation = c(models, input), remotePath = remotePath);
+}
+
+postGWASpublish = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
+	pipeline_pattern = 'imputation_%{stage}02d',
+	postfix = Sprintf('-assoc-%{run}s'), postfixPublish = '-publish') {
+	rd = pipelineGetResultDir(splitPath(exportPath)$path, optionsFile, run, pipeline_pattern,
+		postfix = postfix);
+	#print(remoteDir);
+	#pipelineGetReports = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
+	#pipeline_pattern = 'imputation_%{stage}02d') {
+
+	# destination sub-folder
+	destDir = Sprintf('%{exportPath}s%{postfixPublish}s');
+	descDocPath = Sprintf('%{destDir}s/description.txt');
+	writeFile(descDocPath, descDoc, mkpath = T);
+	path = publishFile(descDocPath, 'imputation-reports', 'description.txt');
+	rPdf = with(rd, System(Sprintf('scp "%{remote_path}s/*.pdf" %{destDir}q')), 2);
+	rJpeg = with(rd, System(Sprintf('scp %{remote_path}q/*.jpeg %{remote_path}q/*.jpg %{destDir}q')), 2);
+	System(Sprintf('chmod ug+rwX %{destDir}q'), 2)
+
 }
 
 postGWASdoAll = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
@@ -570,7 +605,31 @@ postGWASdoAll = function(exportPath = 'results/export/clean', optionsFile = opti
 	if (doFetchResults) imputationFetchResult(exportPath, optionsFile, run);
 }
 
-exportCleanedData = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03') {
+# <p> helper functions
+
+createPipeline = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
+	extraInterpolation = list(),
+	files = Sprintf('%{prefix}s%{file}s', file = c('.bim', '.bed', '.fam', '.pipe')),
+	templatePath = 'gwas/gwasImputationTemplate.pipe', remotePath = NULL,
+	doRunPipeline = FALSE, doTransferPipeline = TRUE) {
+	writePipeFile(exportPath, optionsFile = optionsFile, run = run,
+		extraInterpolation = extraInterpolation, templatePath = templatePath);
+
+	if (doTransferPipeline)
+		transferPipeline(exportPath, remotePath = remotePath,
+			optionsFile = optionsFile, run = run, files = files, doCopy = T);
+	if (doRunPipeline) startPipeline(exportPath, optionsFile = optionsFile, run = run);
+}
+imputationFetchResult = function(exportPath, optionsFile, run = 'R03') {
+	# assume initPublishing having been called
+	#initPublishing('gwasHuidtoxiciteit201103', '201407');
+	pipelineGetReports(exportPath, optionsFile = optionsFile, run = run);
+	pipelineResultFiles(exportPath, optionsFile = optionsFile, run = run);
+}
+
+
+exportCleanedData = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
+	noMDS = FALSE) {
 	# <p> initialize
 	Dir.create(prefix, treatPathAsFile = T);
 	o = gwasInitialize(optionsFile, run = run)$options;
@@ -581,6 +640,12 @@ exportCleanedData = function(prefix = 'results/data-cleaned-%D', optionsFile = o
 
 	# <p> data
 	d = gwasReadVariableFromOptionsFile(optionsFile, run = run);
+	if (!noMDS) {
+		mds = readMDS(o$input, o);
+		d = merge(d, mds, all.x = T);
+	}
+
+	# <p> write output
 	write.csv(data.frame(id = e$individuals), Sprintf('%{prefix}s-individuals-excluded.csv'));
 	included = setdiff(d$id, e$individuals);
 	d0 = d[which.indeces(included, d$id), , drop = F];
@@ -634,15 +699,10 @@ writePipeFile = function(prefix = 'results/data-cleaned-%D', optionsFile = optio
 	Dir.create(prefix, treatPathAsFile = T);
 	o = gwasInitialize(optionsFile, run = run)$options;
 	sp = splitPath(prefix);
-	if (is.null(o$remotePath)) stop('No remote path specified in config file.');
-	spR = splitPath(o$remotePath);
 
 	# <p> template interpolation
 	template = readFile(templatePath);
-	substDict = c(
-		list(PREFIX = sp$file, REMOTE_PATH = spR$path,
-			REFPANEL = referencePanel,
-			`__HEADERMAP__` = headerMap),
+	substDict = c(list(PREFIX = sp$file, `__HEADERMAP__` = headerMap),
 		extraInterpolation
 	);
 	pipe = mergeDictToString(substDict, template);
@@ -652,15 +712,16 @@ writePipeFile = function(prefix = 'results/data-cleaned-%D', optionsFile = optio
 }
 
 transferPipeline = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
-	doCopy = T, doCopyPipeFile = F) {
+	doCopy = T, doCopyPipeFile = F,
+	files = Sprintf('%{prefix}s%{file}s', file = c('.bim', '.bed', '.fam', '.pipe')),
+	remotePath = NULL) {
 	sp = splitPath(prefix);
-	o = gwasInitialize(optionsFile, run = run)$options;
-	Dir.create(o$remotePath, recursive = T);
-	files = Sprintf('%{prefix}s%{file}s', file = c('.bim', '.bed', '.fam', '.pipe', '-variables.csv'));
+	if (is.null(remotePath)) remotePath = gwasInitialize(optionsFile, run = run)$options$remotePath;
+	Dir.create(remotePath, recursive = T);
 	print(files);
-	if (doCopy) File.copy(files, o$remotePath);
-	if (doCopyPipeFile) File.copy(Sprintf('%{prefix}s%{file}s', file = '.pipe'), o$remotePath);
-	spR = splitPath(o$remotePath, ssh = T);
+	if (doCopy) File.copy(files, remotePath);
+	if (doCopyPipeFile) File.copy(Sprintf('%{prefix}s%{file}s', file = '.pipe'), remotePath);
+	spR = splitPath(remotePath, ssh = T);
 	cmd = Sprintf('pipeline.pl --print-pipeline %{base}s.pipe', base = sp$file);
 	System(cmd, patterns = c('cwd', 'ssh'), 1, doLogOnly = T, ssh_host = spR$userhost, cwd = spR$path);
 }
@@ -673,16 +734,17 @@ startPipeline = function(prefix = 'results/data-cleaned-%D', optionsFile = optio
 	System(cmd, patterns = c('cwd', 'ssh'), 1, doLogOnly = F, ssh_host = spR$userhost, cwd = spR$path);
 }
 
-pipelineGetResultDir = function(prefix, optionsFile, run, pipeline_pattern) {
+pipelineGetResultDir = function(prefix, optionsFile, run, pipeline_pattern, postfix = '') {
 	o = gwasInitialize(optionsFile, run = run)$options;
 	sp = splitPath(prefix);
 	spR = splitPath(o$remotePath, ssh = T);
-	cmd = Sprintf('pipeline.pl --print-pipeline %{base}s.pipe', base = sp$file);
+	cmd = Sprintf('pipeline.pl --print-pipeline %{base}s%{postfix}s.pipe', base = sp$file);
 	r = System(cmd, patterns = c('cwd', 'ssh'), 1, return.output = T, doLogOnly = F,
-		ssh_host = spR$userhost, cwd = spR$path);
+		ssh_host = spR$userhost, cwd = Sprintf('%{base}s%{postfix}s', base = spR$path));
 	stage = as.integer(fetchRegexpr('(\\d+)\\s+-gwasReport', r$output, captures = T));
 	pipeline_dir = Sprintf(pipeline_pattern);
-	r = list(pipeline_dir = pipeline_dir, o = o)
+	r = list(pipeline_dir = pipeline_dir, stage = stage,
+		remote_path = Sprintf('%{remote}s%{postfix}s/%{pipeline_dir}s', remote = o$remotePath));
 	r
 }
 

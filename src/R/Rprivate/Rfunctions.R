@@ -50,6 +50,12 @@ callDelegate = function(functionBase, delegation, args, restrictArgs = T) {
 }
 
 #
+#	<p> generic functions
+#
+
+Identity = function(...)list(...)
+
+#
 #	<p> benchmarking
 #
 

@@ -13,6 +13,7 @@ loadLibraries = function() {
 #Mon 27 Jun 2005 10:49:06 AM CEST
 #system("cd ~/src/Rprivate ; ./exportR.sh");
 #system("cd ~/src/Rprivate ; ./exportR.sh"); source("RgenericAll.R"); source("Rgenetics.R"); loadLibraries();
+#system('WD=`pwd` ; cd ~/src/Rprivate ; ./exportR.sh ; cp RgenericAllRaw.R $WD ; cd $WD');
 
 #
 #	<§> abstract data functions
@@ -1045,6 +1046,23 @@ kvlapply = function(l, f, ...) {
 	names(r) = ns;
 	r
 }
+getElement = function(v, i)if (is.list(v)) v[[i]] else v[i];
+# unify w/ list.takenFrom -> tests
+List.takenFrom = function(listOfLists, v)
+	lapply(1:length(listOfLists), function(j)getElement(listOfLists[[j]], v[j]));
+# tuple-apply
+tuapply = function(..., fct = Identity, args = list(), names = NULL) {
+	tupels = list(...);
+	M = length(tupels);
+	Ns = sapply(tupels, length);
+	N = Ns[1];
+	if (any(Ns != N)) stop('Indexable elements not of same length');
+	r = lapply(1:N, function(i)do.call(fct, c(List.takenFrom(tupels, rep(i, M)), args)));
+	if (is.null(names) && !is.null(base::names(tupels[[1]]))) names = base::names(tupels[[1]]);
+	if (!is.null(names)) base::names(r) = names;
+	r
+}
+
 
 # USE.NAMES logic reversed for sapply
 sapplyn = function(l, f, ...)sapply(l, f, ..., USE.NAMES = F);
@@ -2661,9 +2679,11 @@ formula.response = function(f) {
 	#r = all.vars(f)[attr(terms(f), "response")];	# fails to work on 'response ~ .'
 	r
 }
-formula.rhs = function(f, noTilde = FALSE) {
+formula.rhs = function(f, noTilde = FALSE, as_character = FALSE) {
 	rhs = fetchRegexpr('[~](.*)', if (!is.character(f)) formula.to.character(f) else f, captures = T);
-	if (noTilde) rhs else as.formula(con('~', rhs))
+	r = if (noTilde) rhs else con('~', rhs);
+	r = if (as_character) r else as.formula(r);
+	r
 }
 formula.covariates = function(f) {
 	covs = all.vars(formula.rhs(f));
@@ -2697,9 +2717,9 @@ data.vars = function(data, formula, re.string = '.*', ignore.case = F) {
 formula.add.rhs = function(f0, f1) {
 	as.formula(join(c(formula.to.character(f0), formula.rhs(f1, noTilde = TRUE)), '+'))
 }
-formula.add.response = function(f0, f1) {
+formula.add.response = function(f0, f1, envir = parent.frame()) {
 	formula = join(c(formula.response(f1), formula.rhs(f0, noTilde = FALSE)), ' ');
-	as.formula(formula)
+	as.formula(formula, env = envir)
 }
 formula.predictors = function(f, data, dataFrameNames = TRUE) {
 	if (formula.rhs(f) == ~ 1) return('(Intercept)');
@@ -4385,6 +4405,19 @@ environment_evaled = function(f, functions = FALSE, recursive = FALSE) {
 environment_eval = function(f, functions = FALSE, recursive = FALSE) {
 	environment(f) = environment_evaled(f, functions = functions, recursive = recursive);
 	f
+}
+
+#
+#	Parsing, evaluation
+#
+
+Parse = function(text, ...) {
+	parse(text = text, ...)
+}
+Eval = function(e, ..., envir = parent.frame(), autoParse = T) {
+	if (autoParse && is.character(e)) e = Parse(e, ...);
+	eval(e, envir = envir)
+	
 }
 
 #
@@ -6197,6 +6230,12 @@ callDelegate = function(functionBase, delegation, args, restrictArgs = T) {
 	f = get(Sprintf('%{functionBase}s%{delegation}u'));
 	.do.call(f, args, restrictArgs = restrictArgs)
 }
+
+#
+#	<p> generic functions
+#
+
+Identity = function(...)list(...)
 
 #
 #	<p> benchmarking

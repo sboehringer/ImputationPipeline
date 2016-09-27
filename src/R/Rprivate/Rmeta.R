@@ -98,6 +98,19 @@ environment_eval = function(f, functions = FALSE, recursive = FALSE) {
 }
 
 #
+#	Parsing, evaluation
+#
+
+Parse = function(text, ...) {
+	parse(text = text, ...)
+}
+Eval = function(e, ..., envir = parent.frame(), autoParse = T) {
+	if (autoParse && is.character(e)) e = Parse(e, ...);
+	eval(e, envir = envir)
+	
+}
+
+#
 #		Freeze/thaw
 #
 

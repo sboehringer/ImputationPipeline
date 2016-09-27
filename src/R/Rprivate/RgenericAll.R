@@ -7849,6 +7849,14 @@ Qvalue = function(P.value, ...) {
 	r$qvalue = vector.embed(rep(NA, sum(is.na(P.value))), which(!is.na(P.value)), qv$qvalue);
 	r
 }
+
+#
+#	<p> math functions
+#
+
+Ceiling = function(x, N = 0)(ceiling(x * 10^N) / 10^N)
+Floor = function(x, N = 0)(floor(x * 10^N) / 10^N)
+
 #
 #	Rpatches.R
 #Fri Nov 20 17:18:37 CET 2009

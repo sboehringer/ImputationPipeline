@@ -154,7 +154,6 @@ gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do
 	#
 	# <p> create top table by filtering
 	#
-	o$Ntop = 10;
 	PvalueCutoff = Ceiling(sort(na.omit(ps$P.value))[o$Ntop], 9);
 	filterExp = Sprintf('P.value < %{PvalueCutoff}e');
 	outputTop = with(o, Sprintf('%{outputBase}s-topSnps-raw-%{Ntop}d.csv'));

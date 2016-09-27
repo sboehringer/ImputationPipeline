@@ -79,6 +79,18 @@ gwas_topTable = function(o, ps, output = NULL) with(o, {
 })
 
 gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do.run = T) {
+	#
+	#	<p> read data
+	#	optimize for size and speed (files may be > 4G)
+	#	<i> integrate into readTable
+	#
+	t0 = read.csv(path, nrows = 1);
+	colClasses = rep('NULL', ncol(t0));
+	colClasses = vector.assign(colClasses, which(names(t0) == 'marker'), 'character');
+	colClasses = vector.assign(colClasses, which(names(t0) %in% c('chr', 'position')), 'integer');
+	colClasses = vector.assign(colClasses, which(names(t0) %in% c('P.value')), 'numeric');
+	ps = read.csv(path, colClasses = colClasses, nrows = nrows);
+	
 	#nrows = 1e2;	#<!><%> debugging
 	#
 	#	<p> qq-plot
@@ -86,27 +98,22 @@ gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do
 	# fix latex bug: only one '.' allowed per file name
 	# all P-values <N>
 	if (.do.run) {
-		psA = read.csv(sprintf('%s.pvalues', path), nrows = nrows);
-		pValues = psA$P.value[psA$P.value > 0];
+		ps = read.csv(sprintf('%s.pvalues', path), nrows = nrows);
+		pValues = ps$P.value[ps$P.value > 0];
 		qq = ggplot_qqunif(pValues);
-		#qq = ggplot_qqunif(psA$P.value);
+		#qq = ggplot_qqunif(ps$P.value);
 		qqPath = sprintf('%s/%s-pvalues-QQ.jpg', outputDir, splitPath(path)$base);
 		ggsave(qqPath, qq);
 		REP.plot('QQ:ASSOCIATION', qqPath);
-# 		REP.plot('QQ:ASSOCIATION', Qplot(sample = psA$P.value, dist = qunif,
+# 		REP.plot('QQ:ASSOCIATION', Qplot(sample = ps$P.value, dist = qunif,
 # 			file = sprintf('%s/%s-pvalues-QQ.jpg', outputDir, splitPath(path)$base)));
-		REP.tex('G:N_SNPs', nrow(psA));
+		REP.tex('G:N_SNPs', nrow(ps));
 	}
-
-	#
-	#	<p> read filtered results
-	#
-	ps = read.csv(path, nrows = nrows);
 
 	#
 	# <p> inflation
 	#
-	chisqs = qchisq(psA$P.value, df = 1, lower.tail = F);
+	chisqs = qchisq(ps$P.value, df = 1, lower.tail = F);
 	medianChisq = qchisq(.5, 1);
 	#medianChisq = 0.4550757;	# median(rchisq(1e7, df = 1))
 	inflation = (median(sqrt(chisqs), na.rm = T) / sqrt(medianChisq))^2;

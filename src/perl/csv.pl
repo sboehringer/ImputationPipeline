@@ -107,6 +107,8 @@ sub processor { my ($o, $header) = @_;
 	}
 	if ($o->{selectRowsByExpression} ne '') {
 		my $cols = makeHash($header, [map { "\$_[$_]" } 0 .. $#$header]);
+		$cols->{''} = undef;
+		Log("Columns: ". join(', ', keys %$cols), 5);
 		my $code = 'sub { $_ = $_[0]; '. mergeDictToString($cols, $o->{selectRowsByExpression}). ' }';
 		Log("row filter: '$code'", 5);
 		my $sub = eval($code);
@@ -346,7 +348,7 @@ sub parser_dbi { my ($o, $f) = @_;
 sub iterateInput { my ($pa, $o) = @_;
 	my $header = undef;
 	if ($o->{header}) {
-		$header = [$pa->()];
+		$header = [map { uqs($_) } $pa->()];
 		my $hpr = headerProcessor($o, $header);
 		my @headerNew = $hpr->(@$header);
 	}

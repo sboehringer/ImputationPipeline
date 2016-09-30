@@ -189,8 +189,8 @@ gwas_manhattenPlotDefaults = list(
 	colors = c('gray10', 'gray50'),
 	textColor = 'grey50',
 	extendY = 8,
-	size.x.labels = 8,
-	size.y.labels = 9,
+	size.x.labels = 10,
+	size.y.labels = 11,
 	thresholds = list(
 		geom_hline(yintercept = mlog10(5e-6), colour = 'red', alpha = I(1/3)),
 		geom_hline(yintercept = mlog10(5e-8), colour = 'red')
@@ -247,8 +247,7 @@ gwasManhattanPlot = function(formula, data, chromosomes = 1:23,
 gwasManhattanPlot2file = function(formula, data, output, chromosomes = 1:23,
 	bins = c(5e2L, 1e2L), Nrep = 5, extensions = c('jpeg', 'png', 'pdf'), options = list(),
 	pp = list(width = valueU(29.7, 'cm'), height = valueU(21, 'cm'),
-		options = list(jpeg = list(unit_out = 'dpi300'))
-))  {
+		options = list(jpeg = list(unit_out = 'dpi300'), png = list(unit_out = 'dpi150')))) {
 
 	p = gwasManhattanPlot(formula, data, chromosomes = chromosomes, bins = bins, Nrep = Nrep);
 	r = plot_save(p,

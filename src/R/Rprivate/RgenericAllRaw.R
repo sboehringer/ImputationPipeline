@@ -4884,7 +4884,7 @@ ggplot_qqunif = function(p.values, alpha = .05, fontsize = 6,
 	p
 }
 #ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
-QQunif = Qqunif = function(p.values, alpha = .05, fontsize = 6,
+QQunif = Qqunif = function(p.values, alpha = .05, fontsize = 12,
 	tr = function(P)-log10(P), trName = Deparse(body(tr)), colorCI = "#000099",
 	bins = c(2e2, 2e2), Nrep = 10) {
 
@@ -5251,16 +5251,49 @@ units_conv = list(
 );
 units_default = list(jpeg = 'dpi150', pdf = 'cm', png = 'points');
 
-plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
-	type = NULL, options = list(), unit = 'cm', unit_out = NULL, envir = parent.frame()) {
+# autoscale scales canvas sizes to make scaling uniform between devices
+#	increases the pixel resolution for pixel devices
+deviceTypes = list(
+	jpeg = list(hasDpi = TRUE, autoScale = 1),
+	png = list(hasDpi = TRUE, autoScale = 1),
+	pdf = list(forceUnit = 'inch', autoScale = 1)
+);
 
+Device = function(type, plot_path, width, height, ..., units = 'cm', dpi = NA, autoScale = FALSE) {
 	device = get(type);
-	if (is.null(unit_out)) unit_out = units_default[[type]];
-	width = toUnit(width, unit_out)@value;
-	height = toUnit(height, unit_out)@value;
-	Log(Sprintf('Saving %{type}s to "%{plot_path}s"  [width: %{width}f %{height}f]'), 5);
+	o = deviceTypes[[type]];
+	if (!is.null(o$forceUnit)) {
+		width = toUnit(width, o$forceUnit);
+		height = toUnit(height, o$forceUnit);
+	}
+	width = width@value;
+	height = height@value;
+	if (autoScale && !is.null(o$autoScale)) {
+		width = width * o$autoScale;
+		height = height * o$autoScale;
+	}
+	if (nif(o$hasDpi))
+		device(plot_path, width = width, height = height, units = units, res = dpi, ...) else
+		device(plot_path, width = width, height = height, ...);
+}
 
-	device(plot_path, width = width, height = height, ...);
+# use 'cm' as output unit
+# if unit_out is from a class beginning with unitDpi, produce a resolution argument correpsonding
+#	to that many dpi
+
+plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
+	type = NULL, options = list(), unit = 'cm', unit_out = NULL, autoScale = FALSE, envir = parent.frame()) {
+
+	if (is.null(unit_out)) unit_out = units_default[[type]];
+	#width = toUnit(width, unit_out)@value;
+	#height = toUnit(height, unit_out)@value;
+	width = toUnit(width, 'cm');
+	height = toUnit(height, 'cm');
+	dpi = Nina(as.integer(FetchRegexpr('dpi(\\d+)', unit_out, captures = T)));
+ 	Logs('Saving %{type}s to "%{plot_path}s"  [width: %{w}f %{h}f dpi: %{dpi}d]',
+		w = width@value, h = height@value, logLevel = 5);
+	Device(type, plot_path, width = width, height = height, units = 'cm', dpi = dpi, ...,
+		autoScale = autoScale);
 		#ret = eval(object, envir = envir);
 		ret = if (any(class(object) %in% c('ggplot', 'plot'))) {
 			print(object)
@@ -5270,16 +5303,30 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	dev.off();
 }
 
+plotSizes = list(
+	a4 = list(width = valueU(21, 'cm'), height = valueU(21 * sqrt(2), 'cm')),
+	a4R = list(width = valueU(21*sqrt(2), 'cm'), height = valueU(21, 'cm')),
+	a4_15 = list(width = valueU(1.5*21, 'cm'), height = valueU(1.5 * 21 * sqrt(2), 'cm')),
+	a4R_15 = list(width = valueU(1.5*21*sqrt(2), 'cm'), height = valueU(1.5 * 21, 'cm'))
+);
 #
 #	Examples:
 #	plot_save(c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
 plot_typeMap = list(jpg = 'jpeg');
-plot_save = function(object, ..., width = valueU(20, 'cm'), height = valueU(20, 'cm'), plot_path = NULL,
+plot_save = function(object, ..., size, width, height, plot_path = NULL,
 	type = NULL,
 	envir = parent.frame(), options = list(), simplify = T, unit_out = NULL, createDir = TRUE) {
 
+	# <p> plot size
+	# default size
+	if (missing(size) && (missing(width) || missing(height))) size = 'a4R';
+	if (!missing(size)) {
+		width = plotSizes[[size]]$width;
+		height = plotSizes[[size]]$height;
+	}
 	if (class(width) == 'numeric') width = valueU(width, 'cm');
 	if (class(height) == 'numeric') height = valueU(height, 'cm');
+
 	if (is.null(plot_path)) file = tempFileName('plot_save', 'pdf', inRtmp = T);
 	ret = lapply(plot_path, function(plot_path) {
 		if (createDir) Dir.create(plot_path, recursive = T, treatPathAsFile = T);
@@ -5287,10 +5334,15 @@ plot_save = function(object, ..., width = valueU(20, 'cm'), height = valueU(20, 
 			ext = splitPath(plot_path)$ext;
 			type = firstDef(plot_typeMap[[ext]], ext);
 		}
-		uo = firstDef(unit_out, options[[type]]$unit_out, units_default[[type]]);
-		Logs("plot_path: %{plot_path}s, device: %{type}s, unit_out: %{uo}s", logLevel = 5);
-		plot_save_raw(object, ..., type = type, width = width, height = height, plot_path = plot_path,
-			options = options, unit_out = uo, envir = envir);
+		uo = firstDef(options[[type]]$unit_out, unit_out, units_default[[type]]);
+		Logs(con("plot_path: %{plot_path}s, device: %{type}s, unit_out: %{uo}s "), logLevel = 5);
+		args = c(list(object),
+			list(type = type, plot_path = plot_path,
+				width = width, height = height, unit_out = uo,
+				options = options, envir = envir),
+			list(...)
+		);
+		do.call(plot_save_raw, args);
 	});
 	if (length(plot_path) == 1 && simplify) ret = ret[[1]];
 	r = list(path = plot_path, ret = ret);

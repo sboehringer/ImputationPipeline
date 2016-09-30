@@ -172,7 +172,11 @@ plot_file = function(code_or_object, file = NULL, options = list(), ..., envir =
 
 ggplot_qqunif = function(p.values, alpha = .05, fontsize = 6,
 	tr = function(x)-log(x, 10), trName = '-log10(P-value)', colorCI = "#000099") {
-	p.values = tr(sort(p.values));
+
+	# <p> preparation
+	if (any(p.values < 0 | p.values > 1)) stop("P.values not in interval (0, 1)");
+	p.values = tr(sort(na.omit(p.values)));
+
 	N = length(p.values);
 	Ns = 1:N;
 	# j-th order statistic from a uniform(0,1) sample has beta(j,n-j+1) distribution
@@ -190,6 +194,36 @@ ggplot_qqunif = function(p.values, alpha = .05, fontsize = 6,
 	p
 }
 #ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
+QQunif = Qqunif = function(p.values, alpha = .05, fontsize = 6,
+	tr = function(P)-log10(P), trName = Deparse(body(tr)), colorCI = "#000099",
+	bins = c(2e2, 2e2), Nrep = 10) {
+
+	# <p> preparation
+	if (any(p.values <= 0 | p.values > 1)) stop("P.values not in interval (0, 1)");
+	p.values = tr(sort(na.omit(p.values)));
+	N = length(p.values);
+	d = data.frame(theoretical = tr((1:N)/N), p.value = p.values);
+
+	# <p> binning
+	if (!is.null(bins)) {
+		Ns = binPlot(d, bins = bins, Nrep = Nrep, returnIdcs = T);
+		d = d[Ns, ];
+	} else Ns = 1:N;
+
+	# j-th order statistic from a uniform(0,1) sample has beta(j,n-j+1) distribution
+	# (Casella & Berger, 2002, 2nd edition, pg 230, Duxbury)
+	dPlot = data.frame(d,
+		ciU = tr(qbeta(1 - alpha/2, Ns, N - Ns + 1)), ciL = tr(qbeta(    alpha/2, Ns, N - Ns + 1)),
+		colorCI = colorCI);
+	p = ggplot(dPlot) +
+		geom_line(aes(x = theoretical, y = ciU, colour = colorCI)) +
+		geom_line(aes(x = theoretical, y = ciL, colour = colorCI)) +
+		geom_point(aes(x = theoretical, y = p.value), size = 1) +
+		theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(p.values)*1.1)) +
+		scale_y_continuous(name = trName) +
+		theme(text = element_text(size = fontsize));
+	p
+}
 
 
 vp_at = function(x, y)viewport(layout.pos.row = x, layout.pos.col = y);
@@ -522,7 +556,8 @@ units_conv = list(
 	cm = list(from = function(cm)(cm/2.54*600), to = function(b)(b/600*2.54)),
 	points = list(from = function(points)(points/72*600), to = function(b)(b/600*72)),
 	inch = list(from = function(i)(i*600), to = function(b)(b/600)),
-	dpi150 = list(from = function(dpi)(dpi/150*600), to = function(b)(b*150/600))
+	dpi150 = list(from = function(dpi)(dpi/150*600), to = function(b)(b*150/600)),
+	dpi300 = list(from = function(dpi)(dpi/300*600), to = function(b)(b*300/600))
 );
 units_default = list(jpeg = 'dpi150', pdf = 'cm', png = 'points');
 
@@ -545,6 +580,9 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	dev.off();
 }
 
+#
+#	Examples:
+#	plot_save(c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
 plot_typeMap = list(jpg = 'jpeg');
 plot_save = function(object, ..., width = valueU(20, 'cm'), height = valueU(20, 'cm'), plot_path = NULL,
 	type = NULL,
@@ -559,9 +597,10 @@ plot_save = function(object, ..., width = valueU(20, 'cm'), height = valueU(20, 
 			ext = splitPath(plot_path)$ext;
 			type = firstDef(plot_typeMap[[ext]], ext);
 		}
-		Logs("plot_path: %{plot_path}s, device: %{type}s", logLevel = 5);
+		uo = firstDef(unit_out, options[[type]]$unit_out, units_default[[type]]);
+		Logs("plot_path: %{plot_path}s, device: %{type}s, unit_out: %{uo}s", logLevel = 5);
 		plot_save_raw(object, ..., type = type, width = width, height = height, plot_path = plot_path,
-			options = options, unit_out = unit_out, envir = envir);
+			options = options, unit_out = uo, envir = envir);
 	});
 	if (length(plot_path) == 1 && simplify) ret = ret[[1]];
 	r = list(path = plot_path, ret = ret);
@@ -667,4 +706,90 @@ transform2dRotMove = transform2dRotMoveY = function(alpha, dist) {
 transform2dRot2Move = function(alpha, point) {
 	p = applyT(matrix(point, ncol = 2), transform2dRotation(alpha));
 	transform2dTranslate(p);
+}
+
+dfTop = function(d, N)d[1:min(nrow(d), N),, drop = F]
+vTop = function(v, N)v[1:min(length(v), N)]
+
+#
+#	<p> binning
+#
+
+# partition range of data into bins according to bins and choose Nrep representatives for each bin
+binPlot = function(data, formula = NULL, bins = c(1e2, 1e2), Nrep = 3, eps = 1e-5, permute = TRUE,
+	plotRange = NULL, returnIdcs = FALSE) {
+	cols = if (is.null(formula)) 1:2 else match(all.vars(formula), dimnames(data)[[2]]);
+	rangeX = if (is.null(plotRange$rangeX)) range(data[, cols[1]]) else plotRange$rangeX;
+	rangeY = if (is.null(plotRange$rangeX)) range(data[, cols[2]]) else plotRange$rangeY;
+	# bin number defined by numbering in 1st quadrant within range, row-first
+	# i.e. (0, 0): origin, bins[1]: (0, 1), ...
+	RX = (rangeX[2] - rangeX[1] + eps);
+	RY = (rangeY[2] - rangeY[1] + eps);
+	bin = as.vector(apply(data[, cols], 1, function(e) {
+		binX = as.integer(floor(bins[1] * ((e[1] - rangeX[1]) / RX)));
+		binY = as.integer(floor(bins[2] * ((e[2] - rangeY[1]) / RY)));
+		bin = binY * bins[1] + binX;
+		bin
+	}));
+
+	# <p> select data
+	idcs = unlist(lapply(unique(bin), function(b) {
+		idcs = which(bin == b)
+		if (permute) idcs = Sample(idcs);
+		vTop(idcs, Nrep)
+	}));
+	r = if (returnIdcs) idcs else data[idcs, , drop = F];
+	r
+}
+
+binPlot_1 = function(data, formula = NULL, bins = c(1e2, 1e2), Nrep = 3, eps = 1e-5, permute = TRUE,
+	plotRange = NULL, returnIdcs = FALSE) {
+	cols = if (is.null(formula)) 1:2 else match(all.vars(formula), dimnames(data)[[2]]);
+	rangeX = if (is.null(plotRange$rangeX)) range(data[, cols[1]]) else plotRange$rangeX;
+	rangeY = if (is.null(plotRange$rangeX)) range(data[, cols[2]]) else plotRange$rangeY;
+	# bin number defined by numbering in 1st quadrant within range, row-first
+	# i.e. (0, 0): origin, bins[1]: (0, 1), ...
+	RX = (rangeX[2] - rangeX[1] + eps);
+	RY = (rangeY[2] - rangeY[1] + eps);
+	bin = as.vector(apply(data[, cols], 1, function(e) {
+		binX = as.integer(floor(bins[1] * ((e[1] - rangeX[1]) / RX)));
+		binY = as.integer(floor(bins[2] * ((e[2] - rangeY[1]) / RY)));
+		bin = binY * bins[1] + binX;
+		bin
+	}));
+
+	# <p> select data
+	dataSL = lapply(unique(bin), function(b) {
+		d0 = data[which(bin == b), , drop = F];
+		d1 = if (permute) d0[sample.int(nrow(d0)), , drop = F] else d0;
+		dfTop(d1, Nrep)
+	});
+	dataS = do.call(rbind, dataSL);
+	dataS
+}
+binPlot_0 = function(data, formula = NULL, bins = c(1e2, 1e2), Nrep = 3, eps = 1e-5, permute = TRUE) {
+	cols = if (is.null(formula)) 1:2 else match(all.vars(formula), dimnames(data)[[2]]);
+	rangeX = range(data[, cols[1]]);
+	rangeY = range(data[, cols[2]]);
+	# bin number defined by numbering in 1st quadrant within range, row-first
+	# i.e. (0, 0): origin, bins[1]: (0, 1), ...
+	bin = as.vector(apply(data[, cols], 1, function(e) {
+		binX = as.integer(floor(bins[1] * ((e[1] - rangeX[1]) / (rangeX[2] - rangeX[1] + eps))));
+		binY = as.integer(floor(bins[2] * ((e[2] - rangeY[1]) / (rangeY[2] - rangeY[1] + eps))));
+		bin = binY * bins[1] + binX;
+		bin
+	}));
+	data1 = cbind(data, bin);
+	if (permute) data1 = data1[sample.int(nrow(data1)), ];
+
+	# <p> ordered data
+	# <A> assume order to be stable
+	dataO = data1[order(data1[, 'bin']), ];
+
+	# <p> selected data
+	binsU = unique(dataO[, 'bin']);
+	dataDf = as.data.frame(dataO);
+	dataSL = lapply(binsU, function(b)subsetTop(dataO, with(dataDf, bin == b), Nrep));
+	dataS = do.call(rbind, dataSL);
+	dataS
 }

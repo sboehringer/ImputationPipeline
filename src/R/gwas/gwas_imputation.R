@@ -105,23 +105,39 @@ gwas_topTable = function(o, ps, tableOutput = NULL) with(o, {
 	), fmt = 'tiny');
 })
 
+# columns: list(columnName = class, ...)
+readCsvColumns = function(path, columns, nrows = -1) {
+	t0 = read.csv(path, nrows = 1);
+	colClasses = rep('NULL', ncol(t0));
+	colClasses = vector.assign(colClasses,
+		which.indeces(names(columns), names(t0)),
+		as.vector(columns)
+	);
+	t1 = read.csv(path, colClasses = colClasses, nrows = nrows);
+	t1
+}
+
+#
+#	<p> read data from association pipeline
+#		optimized for memory consumption and speed (files may be > 4G)
+#		determine column types, only read needed columns
+#	<i> integrate into readTable
+#
+readAssociation = function(path, nrows = -1) {
+	readCsvColumns(path,
+		list(marker = 'character', chr = 'integer', position = 'integer', P.value = 'numeric'),
+		nrows = nrows
+	)
+}
+
 gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do.run = T) {
 	#
 	#	<p> preparation
 	#
 	outputBase = Sprintf("%{outputDir}s/%{base}s", base = splitPath(path)$base);
-
-	#
 	#	<p> read data
-	#	optimize for size and speed (files may be > 4G)
-	#	<i> integrate into readTable
-	#
-	t0 = read.csv(path, nrows = 1);
-	colClasses = rep('NULL', ncol(t0));
-	colClasses = vector.assign(colClasses, which(names(t0) == 'marker'), 'character');
-	colClasses = vector.assign(colClasses, which(names(t0) %in% c('chr', 'position')), 'integer');
-	colClasses = vector.assign(colClasses, which(names(t0) %in% c('P.value')), 'numeric');
-	ps = read.csv(path, colClasses = colClasses, nrows = nrows);
+	ps = readAssociation(path, nrows = nrows);
+	REP.tex('G:N_SNPs', nrow(ps));
 	
 	#nrows = 1e2;	#<!><%> debugging
 	#
@@ -129,30 +145,22 @@ gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do
 	#
 	# fix latex bug: only one '.' allowed per file name
 	# all P-values <N>
-	if (.do.run) {
-		pValues = ps$P.value[ps$P.value > 0];
-		qq = ggplot_qqunif(pValues);
-		#qq = ggplot_qqunif(ps$P.value);
-		qqPath = sprintf('%s/%s-pvalues-QQ.jpeg', outputDir, splitPath(path)$base);
-		ggsave(qqPath, qq);
-		REP.plot('QQ:ASSOCIATION', qqPath);
-# 		REP.plot('QQ:ASSOCIATION', Qplot(sample = ps$P.value, dist = qunif,
-# 			file = sprintf('%s/%s-pvalues-QQ.jpg', outputDir, splitPath(path)$base)));
-		REP.tex('G:N_SNPs', nrow(ps));
-	}
+	qq = QQunif(ps$P.value[ps$P.value > 0]);
+	qqPath = Sprintf('%{outputBase}s-pvalues-QQ.jpeg');
+	ggsave(qqPath, qq);
+	REP.plot('QQ:ASSOCIATION', qqPath);
 
 	#
 	# <p> inflation
 	#
 	chisqs = qchisq(ps$P.value, df = 1, lower.tail = F);
-	medianChisq = qchisq(.5, 1);
-	#medianChisq = 0.4550757;	# median(rchisq(1e7, df = 1))
+	medianChisq = qchisq(.5, 1);	#medianChisq = 0.4550757;	# median(rchisq(1e7, df = 1))
 	inflation = (median(sqrt(chisqs), na.rm = T) / sqrt(medianChisq))^2;
 	Log(sprintf('Inflation %.2f', inflation), 4);
 	REP.tex('ASS:QQ:INFLATION', inflation, fmt = '.2');
 
 	#
-	# <p> create top table by filtering
+	# <p> create top table by file filtering
 	#
 	PvalueCutoff = Ceiling(sort(na.omit(ps$P.value))[o$Ntop], 9);
 	filterExp = Sprintf('P.value < %{PvalueCutoff}e');
@@ -169,10 +177,14 @@ gwas_report = function(o, path, outputDir = splitPath(path)$dir, nrows = -1, .do
 	#
 	#	<p> manhattan plot
 	#
-	psManhattan = Df_(ps, headerMap = list(chr = 'CHR', position = 'BP', P.value = 'P'));
 	REP.plot('ASS:MANHATTAN',
-		manhattanPlot(psManhattan, title = 'Manhattan plot',
-			output = sprintf('%s/%s-ass-manhattan.jpeg', outputDir, splitPath(path)$base)));
+		gwasManhattanPlot2file(P.value ~ chr + position, ps,
+			output = Sprintf('%{outputBase}s-ass-manhattan'))
+	);
+#	psManhattan = Df_(ps, headerMap = list(chr = 'CHR', position = 'BP', P.value = 'P'));
+# 	REP.plot('ASS:MANHATTAN',
+# 		manhattanPlot(psManhattan, title = 'Manhattan plot',
+# 			output = sprintf('%s/%s-ass-manhattan.jpeg', outputDir, splitPath(path)$base)));
 }
 
 pipeDefaults = list(

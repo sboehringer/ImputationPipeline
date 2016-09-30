@@ -1308,6 +1308,12 @@ searchDataFrame = function(d, l, .remove.factors = T) {
 	d0
 }
 
+subsetTop = function(obj, sel, N = 1) {
+	d0 = subset(obj, sel);
+	d1 = d0[1:min(nrow(d0), N), ];
+	d1
+}
+
 # convert strings to data frame names
 #	<i> create a data frame and extract names
 .dfns = function(ns)gsub(':', '.', ns);

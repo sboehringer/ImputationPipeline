@@ -90,8 +90,8 @@ manhattan = function(dataframe, title=NULL, max.y="max", suggestiveline = 0,
 			axis.ticks = element_line(colour = NA)
 		)
 		
-		if (suggestiveline) plot=plot+geom_hline(yintercept=suggestiveline,colour="blue", alpha=I(1/3))
-		if (genomewideline) plot=plot+geom_hline(yintercept=genomewideline,colour="red")
+		if (suggestiveline) plot = plot + geom_hline(yintercept=suggestiveline, colour="blue", alpha=I(1/3))
+		if (genomewideline) plot = plot + geom_hline(yintercept=genomewideline, colour="red")
 		
 		plot
 		
@@ -151,4 +151,110 @@ qqmanall= function(command="ls *assoc") {
 	end=Sys.time()
 
 	print(elapsed<-end-start)
+}
+
+#
+#	<p> good versions
+#
+
+# <!> bug fix for formula interface
+mlog10 = function(...)-log10(...);
+# assume formula: p-value ~ chr + position
+gwasManhattanPlotMatrix = function(formula, data, chromosomes = 1:23) {
+	# <p> preparation
+	vars = all.vars(formula);
+	nsStd = c('p', 'chr', 'position');
+	d1 = Df_(data, headerMap = listKeyValue(vars, nsStd));
+	chrs = sort(intersect(chromosomes, unique(d1$chr)));
+
+	# <p> raw data to plot
+	f1 = ~ 0 + mlog10(p) + chr + position;
+	mm = model.matrix(f1, model.frame(f1, data = d1));
+	dimnames(mm)[[2]] = nsStd;
+
+	# <p> coordinates
+	chrPos = c(0, cumsum(sapply(chrs, function(c)max(mm[, 'position'][mm[, 'chr']== c], na.rm = T))));
+	chrMap = listKeyValue(chrs, 1:length(chrs));
+	plotMat = cbind(mm[, c('p', 'chr')], (mm[, 'position'] + chrPos[avu(chrMap[mm[, 'chr']])]));
+	dimnames(plotMat)[[2]] = nsStd;
+	chrPositions = do.call(rbind, list(
+		start = pop(chrPos), end = chrPos[-1], mid = (pop(chrPos) + chrPos[-1])/2));
+	dimnames(chrPositions)[[2]] = chrs;
+	r = list(plotMatrix = plotMat, chrPositions = chrPositions, chromosomes = chrs);
+	r
+}
+
+gwas_manhattenPlotDefaults = list(
+	title = 'Manhattan Plot',
+	colors = c('gray10', 'gray50'),
+	textColor = 'grey50',
+	extendY = 8,
+	size.x.labels = 8,
+	size.y.labels = 9,
+	thresholds = list(
+		geom_hline(yintercept = mlog10(5e-6), colour = 'red', alpha = I(1/3)),
+		geom_hline(yintercept = mlog10(5e-8), colour = 'red')
+	),
+	xaxisPhysical = FALSE,
+	extendY = 'data'
+);
+
+gwasManhattanPlotRaw = function(data, chromosomes, chrPositions, options = list())
+	with(merge.lists(gwas_manhattenPlotDefaults, options), {
+
+	# <p> prepare parameters
+	if (extendY == 'data') extendY = ceiling(max(data$p));
+
+	# <p> base plot
+	p = qplot(position, p, data = data, ylab = expression(-log[10](italic(p))), colour = chr) +
+		scale_y_continuous(limits = c(0, extendY), breaks = 1:extendY, labels = 1:extendY) +
+		ggtitle(title) + theme_bw() + theme(
+			panel.background = element_blank(), panel.grid.minor = element_blank(),
+			axis.text.x = element_text(size = size.x.labels, colour = textColor), 
+			axis.text.y = element_text(size = size.y.labels, colour = textColor), 
+			axis.ticks = element_line(colour = textColor)
+		);
+
+	# <p> x-axis
+	if (xaxisPhysical) {
+		p = p + scale_x_continuous(name =
+			join(c('Physical position, chromosomes: ', join(chromosomes, ','))));
+	} else {
+		p = p + scale_x_continuous(name = 'Chromosome',
+			breaks = chrPositions['mid', ], labels = chromosomes) +
+			scale_colour_manual(values = rep(colors, length(chromosomes))) +
+			theme(legend.position = "none");
+	}
+	for (t in thresholds) p = p + t;
+	p
+})
+
+gwasManhattanPlot = function(formula, data, chromosomes = 1:23,
+	bins = c(5e2L, 1e2L), Nrep = 5, options = list()) {
+
+	# <p> prepare data
+	pm = gwasManhattanPlotMatrix(formula, data);
+	Log("Transformed Manhatten data", 4, doPrint = gc());
+	dataP = binPlot(pm$plotMatrix, ~ position + p, bins = bins);
+	Log("Binned Manhatten data", 4, doPrint = gc());
+
+	# <p> prepare parameters
+	p = gwasManhattanPlotRaw(Df_(dataP, as_factor = 'chr'), pm$chromosomes, pm$chrPositions, options);
+	Log("Created plot", 4, doPrint = gc());
+	p
+}
+
+gwasManhattanPlot2file = function(formula, data, output, chromosomes = 1:23,
+	bins = c(5e2L, 1e2L), Nrep = 5, extensions = c('jpeg', 'png', 'pdf'), options = list(),
+	pp = list(width = valueU(29.7, 'cm'), height = valueU(21, 'cm'),
+		options = list(jpeg = list(unit_out = 'dpi300'))
+))  {
+
+	p = gwasManhattanPlot(formula, data, chromosomes = chromosomes, bins = bins, Nrep = Nrep);
+	r = plot_save(p,
+		plot_path = paste(output, extensions, sep = '.'),
+		width = pp$width, height = pp$height, options = pp$options
+	);
+	output = r$path[1];
+	output
 }

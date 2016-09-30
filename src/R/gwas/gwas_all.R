@@ -585,14 +585,17 @@ postGWASpublish = function(exportPath = 'results/export/clean', optionsFile = op
 	#pipeline_pattern = 'imputation_%{stage}02d') {
 
 	# destination sub-folder
-	destDir = Sprintf('%{exportPath}s%{postfixPublish}s');
+	destDir = Sprintf('%{exportPath}q%{postfix}q%{postfixPublish}q');
 	descDocPath = Sprintf('%{destDir}s/description.txt');
 	writeFile(descDocPath, descDoc, mkpath = T);
 	path = publishFile(descDocPath, 'imputation-reports', 'description.txt');
-	rPdf = with(rd, System(Sprintf('scp "%{remote_path}s/*.pdf" %{destDir}q')), 2);
-	rJpeg = with(rd, System(Sprintf('scp %{remote_path}q/*.jpeg %{remote_path}q/*.jpg %{destDir}q')), 2);
+	rCp = with(rd, System(Sprintf(con('scp "%{remote_path}s/*.pdf" ',
+		'%{remote_path}q/*.jpeg %{remote_path}q/*.jpg ',
+		'%{remote_path}q/*.xls %{remote_path}q/*.csv ',
+		'%{destDir}q'))), 2);
+	System(Sprintf('cp %{exportPath}q%{postfix}q*.csv %{destDir}q'), 2);
 	System(Sprintf('chmod ug+rwX %{destDir}q'), 2)
-
+	publishDir(destDir, asSubdir = T);
 }
 
 postGWASdoAll = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',

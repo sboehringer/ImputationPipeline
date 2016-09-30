@@ -385,9 +385,10 @@ assign('DefaultLogLevel', 4, envir = Log_env__);
 #' 	Log.setLevel(3);
 #' 	Log('hello world', 4);
 #' 
-Log = function(o, level = get('DefaultLogLevel', envir = Log_env__)) {
+Log = function(o, level = get('DefaultLogLevel', envir = Log_env__), doPrint = NULL) {
 	if (level <= get('GlobalLogLevel', envir = Log_env__)) {
 		cat(sprintf("R %s: %s\n", date(), as.character(o)));
+		if (!is.null(doPrint)) print(doPrint);
 	}
 }
 Logs = function(o, level = get('DefaultLogLevel', envir = Log_env__), ..., envir = parent.frame()) {
@@ -1466,7 +1467,7 @@ publishCsv = function(table, as, ..., into = NULL) {
 publishDir = function(dir, into = NULL, as = NULL, asSubdir = FALSE) with(publishFctEnv('', into, as), {
 	sp = splitPath(dir);
 	# if 'dir' is a slashed dir itself, use the last dir-component
-	if (asSubdir) into = if (sp$file == '') splitPath(sp$dir)$file else file;
+	if (asSubdir) into = if (sp$file == '') splitPath(sp$dir)$file else sp$file;
 	if (!is.null(into)) {
 		destination = splitPath(Sprintf('%{destination}s/%{into}s/'))$fullbase;	# remove trailing slash
 	}

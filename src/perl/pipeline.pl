@@ -286,6 +286,17 @@ sub iteratePipeline { my ($p, $i, %o) = @_;
 	return iteratePipelineRaw($p, $i, undef, %o);
 }
 
+# allow to redefine pipeinstances based on the namesapce stratumSubstitution parameter
+# (see gwas examples). allows to stratify by subpipleines instead of only changing parameters
+sub expandStrataPipeSubstitution { my ($pipe, $stratum, $pars) = @_;
+	return $pipe if (!defined($pars->{stratumSubstitution}));
+	# instantiate substitution
+	my $pS = mergeDictToString({STRATUM => $stratum}, $pars->{stratumSubstitution});
+	my $pN = makeHash(['name', 'tag'], [split(':', $pS)]);
+	my %r = (%$pipe, %$pN);
+	return {%r};
+}
+
 sub expandStrataRaw { my ($pl, $pars, %o) = @_;
 	my @p = ();
 	for (my $i = 0; $i < @$pl; $i++) {
@@ -297,9 +308,13 @@ sub expandStrataRaw { my ($pl, $pars, %o) = @_;
 			if (defined($strata)) {
 				my @strata = split(/\s*[,\n]\s*/, $strata);
 				Log("Strata expansion $pipe->{name}:$pipe->{tag}: $strata", 5);
-				my @sp = map {
-					my $head = { %$pipe, stratum => $_ };
-					my @tail = @{expandStrataRaw([@{$pl}[($i + 1) .. $#$pl]], $pars,
+				my @sp = map { my $stratum = $_;
+					my $head = expandStrataPipeSubstitution({ %$pipe, stratum => $stratum },
+						$_, $pars->{$pipe->{name}});
+					my @subPipeline = map {
+						expandStrataPipeSubstitution($_, $stratum, $pars->{$_->{name}})
+					} @{$pl}[($i + 1) .. $#$pl];
+					my @tail = @{expandStrataRaw([@subPipeline], $pars,
 						forceSubpipe => 1)};
 					[$head, @tail]
 				} @strata;

@@ -18,7 +18,7 @@
 @include	imputation_qt_snptest.pipe
 @include	inject.pipe
 @include	copy.pipe
-@include	
+@include	selectSnps.pipe
 
 #
 #	<p> input
@@ -27,18 +27,12 @@
 # directory of another pipeline run containing imputations, with spec file
 G:PipeInput				__must_be_specified__
 G:PipeInput_example		../myImputation/imputation_06
-G:VariableFile			__must_be_specified__
-G:VariableFile_example	[SEP=C,HEADER=T,HEADERMAP=__HEADERMAP__]:PREFIX-variables.csv
-G:Models				__must_be_specified__
-G:Models_example		( applyCoxPerSnp:model1 | GWASsummarize,  applyCoxPerSnp:model2 | GWASsummarize ) 
-applyRperSnp:pedFile	__must_be_specified__
-applyRperSnp:pedFile_example	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,SEP=S]:EXTERNAL_PED_FILE
-
+selectSnps:strata			__must_be_specified__
+selectSnps:strata_example	snpList1.txt,snpList2.txt
 
 #
 #	<p> specification
 #
 
-G:Name		Association
-G:Association	injectExternal | G:PipelineTests
-G:PipelineTests	G:Models | Copy:Union | filterResults | gwasReport
+G:Name			SNPSelection
+G:SNPSelection	injectExternal | selectSnps | Copy:Union

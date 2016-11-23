@@ -1,0 +1,44 @@
+#	Pipe name:
+#		-
+#	Creation date:
+#		Wed Nov 23 16:42:00 CET 2016
+#	Description:
+#		Meta-pipe to include all pipes necessary to extract SNPs from an imputation run
+#	Input:
+#		3col transposed genotype files via inject
+#	Output:
+#		3col for selected SNPs
+#	Pipe instances:
+#		-
+
+#
+#	<p> dependencies
+#
+
+@include	imputation_qt_snptest.pipe
+@include	inject.pipe
+@include	copy.pipe
+@include	
+
+#
+#	<p> input
+#
+
+# directory of another pipeline run containing imputations, with spec file
+G:PipeInput				__must_be_specified__
+G:PipeInput_example		../myImputation/imputation_06
+G:VariableFile			__must_be_specified__
+G:VariableFile_example	[SEP=C,HEADER=T,HEADERMAP=__HEADERMAP__]:PREFIX-variables.csv
+G:Models				__must_be_specified__
+G:Models_example		( applyCoxPerSnp:model1 | GWASsummarize,  applyCoxPerSnp:model2 | GWASsummarize ) 
+applyRperSnp:pedFile	__must_be_specified__
+applyRperSnp:pedFile_example	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,SEP=S]:EXTERNAL_PED_FILE
+
+
+#
+#	<p> specification
+#
+
+G:Name		Association
+G:Association	injectExternal | G:PipelineTests
+G:PipelineTests	G:Models | Copy:Union | filterResults | gwasReport

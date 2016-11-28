@@ -35,4 +35,4 @@ selectSnps:strata_example	snpList1.txt,snpList2.txt
 #
 
 G:Name			SNPSelection
-G:SNPSelection	injectExternal | selectSnps | Copy:Union
+G:SNPSelection	injectExternal | selectSnps | SummarizeImpute2select | Copy:Union

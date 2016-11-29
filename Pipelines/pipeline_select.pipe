@@ -27,12 +27,12 @@
 # directory of another pipeline run containing imputations, with spec file
 G:PipeInput				__must_be_specified__
 G:PipeInput_example		../myImputation/imputation_06
-selectSnps:strata			__must_be_specified__
-selectSnps:strata_example	snpList1.txt,snpList2.txt
+selectSnpsImpute2:strata			__must_be_specified__
+selectSnpsImpute2:strata_example	snpList1.txt,snpList2.txt
 
 #
 #	<p> specification
 #
 
 G:Name			SNPSelection
-G:SNPSelection	injectExternal | ( selectSnps | SummarizeImpute2select ) | Copy:Union
+G:SNPSelection	injectExternal | ( selectSnpsImpute2 | SummarizeImpute2select ) | Copy:Union

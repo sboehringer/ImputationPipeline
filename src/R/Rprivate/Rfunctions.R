@@ -49,6 +49,10 @@ callDelegate = function(functionBase, delegation, args, restrictArgs = T) {
 	.do.call(f, args, restrictArgs = restrictArgs)
 }
 
+CallDelegate = function(functionBase, delegation, ..., restrictArgs = T) {
+	callDelegate(functionBase, delegation, args = list(...), restrictArgs = T)
+}
+
 #
 #	<p> generic functions
 #

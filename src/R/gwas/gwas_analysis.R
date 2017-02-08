@@ -822,6 +822,22 @@ associationAnalysisWriteSummaries = function(input, outputDir = NULL, d, o = lis
 	write.csv(markersExcl, file = Sprintf('%{outputDirExport}s/markers-excluded.csv'));
 })
 
+# expand models, compute corresponding data
+expandedModelsData = function(d, o) with(o, {
+	expandedModels = expandModels(assParModels, input, o, d);
+	d0 = expandedModels$data;
+	e = readExclusionsInds(o, 'all');
+	d = d0[- match(e, d$id), , drop = F];
+
+	r = lapply(expandedModels$models, function(m)with(m, {
+		if (!is.null(m$subset)) d = subset(d, with(d, eval(m$subset)));
+		if (!is.null(m$filter)) { d = filter(o, d, f1, f0, m); }
+		r = list(model = m, data = d);
+	}));
+	r
+})
+
+#<!><i> merge with expandedModelsData
 associationAnalysisSummary = function(input, outputDir = NULL, d, o = list()) with(o, {
 	prefix = sprintf('%s/qc/%s', outputDir, splitPath(input)$file);
 

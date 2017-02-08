@@ -874,6 +874,11 @@ ciToSd = function(ci.lo, ci.up, level = .95) {
 	sd = Vectorize(inverse(function(s)qnorm(1 - (1 - level)/2, 0, s), interval = c(0, span * 8)))(ciU);
 	sd
 }
+ciToSd_1 = function(ci.lo, ci.up, level = .95) {
+	alpha = 1 - level;
+	widthStd = qnorm(1 - alpha/2) * 2;
+	(ci.up - ci.lo)/widthStd
+}
 ciToP = function(ci.lo, ci.up, level = .95, one.sided = F, against = 0) {
 	sd = ciToSd(ci.lo, ci.up, level)
 	P = peSdToP((ci.lo + ci.up)/2 - against, sd, one.sided);
@@ -884,7 +889,7 @@ peSdToP = function(beta, sd, one.sided = F) {
 	pnorm(-abs(beta), 0, sd, lower.tail = T) * ifelse(one.sided, 1, 2);
 }
 
-ciFromBetaSdev = function(beta, sdev, level = .95) {
+betaSdToCi = ciFromBetaSdev = function(beta, sdev, level = .95) {
 	r = list(effect = beta,
 		lower = qnorm((1 - level)/2, beta, sdev, lower.tail = T),
 		upper = qnorm((1 - level)/2, beta, sdev, lower.tail = F)
@@ -903,6 +908,7 @@ betaPtoCi = function(beta, p) {
 	sd = sdFromBetaP(beta, p);
 	ciFromBetaSdev(beta, sd)
 }
+betaVarToCi = function(beta, var)ciFromBetaSdev(beta, sqrt(var))
 
 #
 #	meta analysis
@@ -955,6 +961,35 @@ imputeMean = function(data) {
 	d1 = apply(data, 2, imputeMeanVar);
 	d1
 }
+
+# impute using mice
+imputeVariables = function(data, formula = NULL, vars = NULL, Nimp = 10, returnOriginal = FALSE,
+	imputationColumn = 'Imputation_') {
+	require('mice');
+
+	# <p> preparation
+	if (notE(formula)) vars = all.vars(formula.re(formula, data = data));
+	if (any(!lapply(data[, vars], class) %in% c('factor', 'numeric'))) {
+		stop('come columns not factor or numeric');
+	}
+	s = Summary(data[, vars]);
+	
+	# <p> imputation
+	dataImputed = mice(data[, vars], m = Nimp);
+	dataL = Df_(complete(dataImputed, "long", include = returnOriginal),
+		min_ = c('.id'), headerMap = list(`.imp` = imputationColumn), as_numeric = imputationColumn);
+
+	N = if (returnOriginal) Nimp + 1 else Nimp;
+	dataC = DfStack(data, N);
+	dataC[, vars] = Df_(dataL, min_ = imputationColumn);
+	dataR = Df(dataL[, imputationColumn], dataC, names = imputationColumn);
+	r = list(data = dataR, summary = s, vars = vars);
+	#r = list(data = dataImputed, summary = s, vars = vars);
+	r
+}
+
+
+
 
 #
 #	<p> cross validation
@@ -1071,21 +1106,32 @@ seq.transf = function(from = 0, to = 1, length.out = 1e1, ..., transf = log, tra
 #	<p> bug fixes for packages
 #
 
-model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F) {
+completeRows = function(data)!apply(data, 1, function(r)any(is.na(r)))
+
+model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F,
+	returnComplete = F) {
 	# <p> prepare data matrices
 	f1 = formula.re(f, data = data, ignore.case = ignore.case);
 	f1vars = all.vars(f1);
 	response = formula.response(f1);
-	responseValues = if (length(response) > 0) data[[response]] else NULL;
-	row.names(data) = NULL;
-	complete = !apply(data[, f1vars, drop = F], 1, function(r)any(is.na(r)));
-	data = droplevels(data[complete, ]);
-	responseValues = responseValues[complete];
+	responseVars = all.vars(as.formula(con(response, ' ~ 1')));
+
+	# <p> complete data
+	complete = completeRows(data[, f1vars, drop = F]);
+	data = droplevels(data[complete, , drop = F]);
+
+	# <p> response
+	responseData = if (notE(responseVars)) with(data, Eval(response)) else NULL;
+	# <p> offset
 	offset = if (!is.null(offset)) offset[complete] else NULL;
+	# <p> model matrix
 	mm = model.matrix(f1, model.frame(f1, data = data));
 	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)')];
 
-	r = list(mm = mm, response = responseValues, offset = offset, indeces = as.integer(row.names(data)));
+	# <p> return
+	r = list(mm = mm, response = responseData, offset = offset, indeces = which(complete),
+		varsCov = setdiff(f1vars, responseVars), varsResponse = responseVars);
+	if (returnComplete) r = c(r, list(data = data));
 	r
 }
 complete_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F) {
@@ -1443,8 +1489,10 @@ pairs_std.panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
 	if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
 	text(0.5, 0.5, txt, cex = cex.cor * 1)	# used tb cex.cor * r
 }
-pairs_std = function(...) {
-	pairs(..., diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor)
+pairs_std = function(...,
+	lower.panel = panel.smooth, diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor) {
+	pairs(...,
+		lower.panel = lower.panel, diag.panel = diag.panel, upper.panel = upper.panel)
 }
 
 #
@@ -1601,4 +1649,68 @@ Qvalue = function(P.value, ...) {
 
 Ceiling = function(x, N = 0)(ceiling(x * 10^N) / 10^N)
 Floor = function(x, N = 0)(floor(x * 10^N) / 10^N)
+
+#
+#	<p> descriptive statistics
+#
+
+SummaryColNum = function(col, qtls = c(0, 0.25, .5, .75, 1)) {
+	qs = quantile(col, qtls, na.rm = T);
+	mn = vector.named(mean(col, na.rm = T), 'mean');
+	na = vector.named(fraction(is.na(col)), 'NA');
+	Sd = vector.named(sd(col, na.rm = T), 'sd');
+	medianI = which(qtls == .5);
+	qs1 = if (length(medianI) > 0) vector.embed(qs, medianI + 1, mn) else c(qs, mean);
+	c(qs1, Sd, na)
+}
+SummaryColFactor = function(col) {
+	na = vector.named(fraction(is.na(col)), 'NA');
+	na
+}
+SummaryCol = function(col, qtls = c(0, 0.25, .5, .75, 1)) {
+	r = if (class(col) == 'numeric') SummaryColNum(col, qtls) else
+		if (class(col) == 'factor') c(rep(NA, length(qtls) + 2), SummaryColFactor(col)) else
+			stop("Could not summarize column");
+	r
+}
+
+Summary = function(d) {
+	r0 = lapply(d, SummaryCol)
+	r = t(as.matrix(do.call(cbind, r0)));
+	r
+}
+
+#
+#	<p> survival
+#
+
+# adapted from survival:::print.survfit
+survfit2m = function (x, scale = 1, ..., rmean = 'none') {
+	if (inherits(x, "survfitms")) {
+		x$surv <- 1 - x$prev
+		if (is.matrix(x$surv)) dimnames(x$surv) <- list(NULL, x$states)
+		if (!is.null(x$lower)) {
+			x$lower <- 1 - x$lower
+			x$upper <- 1 - x$upper
+		}
+		rmean <- "none"
+	}
+	omit <- x$na.action
+	temp <- survival:::survmean(x, scale = scale, rmean)
+	mtemp <- if (is.matrix(temp$matrix)) 
+		temp$matrix
+	else matrix(temp$matrix, nrow = 1, dimnames = list(NULL, 
+		names(temp$matrix)))
+	if (all(mtemp[, 2] == mtemp[, 3])) {
+		cname <- dimnames(mtemp)[[2]]
+		mtemp <- mtemp[, -2, drop = FALSE]
+		cname <- cname[-2]
+		cname[2] <- "n"
+		dimnames(mtemp)[[2]] <- cname
+	}
+	if (all(mtemp[, 1] == mtemp[, 2])) 
+		mtemp <- mtemp[, -1, drop = FALSE]
+	temp$matrix <- drop(mtemp)
+	temp$matrix
+}
 

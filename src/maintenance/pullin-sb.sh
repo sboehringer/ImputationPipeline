@@ -10,3 +10,4 @@ cd $PIPELINEBASE/src/maintenance
 
 # <p> perl libraries
 ( cd ~/src/privatePerl ; cp TempFileNames.pm Set.pm PropertyList.pm BatchQueue.pm $PIPELINEBASE/src/perl-lib )
+( cd ~/src/privatePerl ; mkdir $PIPELINEBASE/src/perl-lib/Statistics ; cp Statistics/R.pm Statistics/Rsession.pm  $PIPELINEBASE/src/perl-lib/Statistics )

@@ -1,0 +1,10 @@
+#
+#	<p> template for extracting SNPs from an imputation run 
+#Wed Nov 23 16:39:32 CET 2016
+
+@include	pipeline_select.pipe
+
+# <p> Inputs
+# directory of another pipeline run containing imputations, with spec file
+G:PipelineInput				IMPUTATION_PIPELINE
+selectSnpsImpute2:strata	SNP_FILE

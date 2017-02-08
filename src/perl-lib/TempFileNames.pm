@@ -3,7 +3,7 @@ require 5.000;
 require Exporter;
 
 @ISA       = qw(Exporter);
-@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &uqs &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix);
+@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &existsWithBase &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &qs2 &uqs &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix &slurpToTemp &slurpPipeToTemp);
 
 #@EXPORT_OK = qw($sally @listabob %harry func3);
 
@@ -17,6 +17,7 @@ use IO::File;
 use PropertyList;
 use Set;
 use POSIX;
+use POSIX::strptime qw(strptime);
 use Fcntl ':flock';	# testService
 use Fcntl qw(&F_WRLCK &F_SETLKW &F_UNLCK &F_SETLK);	#lockFile
 #require 'sys/fcntl.ph';	#lockFile
@@ -64,6 +65,12 @@ sub existsOnHost { my ($file, $host) = @_;
 }
 sub existsOnHostLambda { my ($host) = @_;
 	return sub { return existsOnHost($_[0], $host); }
+}
+sub existsWithBase { my ($path) = @_;
+	my $sp = splitPathDict($path);
+	my @bases = grep { splitPathDict($_)->{base} eq $sp->{base} } dirList($sp->{dir});
+	#Log("bases [dir:$sp->{dir}], [base:$sp->{base}]: ". join(', ', @bases), 2);
+	return map { "$sp->{dir}/$_" } @bases;
 }
 
 sub fileOperation { my ($local, $remote, $uri, @args) = @_;
@@ -409,7 +416,9 @@ sub Rename { my ($from, $files, $to, $logLevel, $c) = @_;
 		} @$files );
 	# <p> case 2
 	} elsif (!defined($files)) {
-		@stack = ( { from => $from, to => $to } );
+		@stack = ref($from) eq 'ARRAY'
+			? map { { from => $from->[$_], to => $to->[$_] } } 0..$#$from
+			: ( { from => $from, to => $to } );
 	# <p> case 1
 	} else {
 		my $m = firstDef($c->{mapper}, \&standardMapper);
@@ -444,6 +453,7 @@ sub	scanDir { my($dstPath, $basePath, $path, $fct, $obj)=@_;
 # $c (the context):
 #	noDirs: should the function be triggered for dirs
 #	context: function argument
+#	fBranch: function controlling entering of subdirs
 
 sub depthSearchDirLeaf { my ($path, $c) = @_;
 	$c->{f}->($path, $c) if (
@@ -456,7 +466,10 @@ sub	depthSearchDirBranch { my($path, $c) = @_;
 	my @list = dirList($path, $c->{host});
 	foreach $p (@list) {
 		my $npath = "$path/$p";
-		depthSearchDirBranch($npath, $c) if (-d $npath && !-l $npath);
+		$c->{fullPath} = $npath;
+		next if (-d $npath && defined($c->{fBranch}) && !$c->{fBranch}->($p, $c));
+		depthSearchDirBranch($npath, $c)
+			if (-d $npath && !-l $npath && !defined(which($npath, $c->{exclusions})));
 		depthSearchDirLeaf($npath, $c);
 	}
 	$c->{depth}--;
@@ -1005,15 +1018,19 @@ sub callTriggersFromOptions { my ($c, @args) = @_;
 	# extract options and detect deep vs non-deep structure
 	my $o = defined($c->{o})? $c->{o}: $c;
 	foreach $key (keys %{$c->{_triggers}}) {
+		#if (defined($o->{$key})) {
+		# <!> changed 23.11.2016 due to introduction of default trigger without entry in $c/$o
+		# <!> changed back 17.1.2017 due to breaking behaviour
 		if (defined($o->{$key})) {
-			my $sub = (ref($c->{_triggers}{$key}) eq 'CODE'? $c->{_triggers}{$key}
-			: 'main::'. $o->{triggerPrefix}. ($o->{triggerPrefix} eq ''? $key: ucfirst($key)));
+			my $sub = (ref($c->{_triggers}{$key}) eq 'CODE'
+				? $c->{_triggers}{$key}
+				: 'main::'. $o->{triggerPrefix}. ($o->{triggerPrefix} eq ''? $key: ucfirst($key)));
 			$sub =~ tr{-}{_} if (ref($sub) ne 'CODE');
 			$didCall = 1;
 			$ret += $sub->($c, @args);
 		}
 	}
-	exit($ret) if ($didCall);
+	exit($ret) if ($didCall && !$o->{doReturn});
 }
 
 
@@ -1022,8 +1039,12 @@ sub callTriggersFromOptions { my ($c, @args) = @_;
 );
 # example for option === function name
 # $main::d = { triggerPrefix => '' };
+# $main::d = { triggerDefault => 'myFunction' };
 # $main::o = [ '+encryptToHex=s'];
 
+# triggers:
+#	triggers are specified as a code reference in defaults, as a +option in options or as 
+#	a auto-vivifying default trigger that is called even if no option is given to the program
 # $returnDeepStruct returns a dict with elements c, o, cred
 #	return a merged dict otherwise
 # if an option has a subroutine as a default that subroutine gets called
@@ -1035,21 +1056,25 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 	# copy trigger definitions
 	my @triggers = grep { ref($o->{$_}) eq 'CODE' } keys %$o;
 	my $subs = makeHash([@triggers], [@{$defaults}{@triggers}]);
-	my @options = @$options;
 	# are any arguments present before calling GetOptionsStandard
 	my $noArgs = !@ARGV;
 	# get subroutine triggers (+options)
+	my @options = @$options;
+	my $triggerDefault = $defaults->{triggerDefault};
+	push(@options, "+$triggerDefault") if (defined($triggerDefault));
 	@options = map {
 		my ($t, $o, $oa) = ($_ =~ m{^(\+?)([a-z0-9_-]*)(.*)$}i);
 		$subs->{$o} = 0 if ($t eq '+');
 		$o.$oa
 	} (@options, @triggers);
 	# <!> reset $o in order to prevent Getopt::Long from calling triggers interpreted as callbacks
-	my $od = { %$o };	# option defaults
-	$od->{$_} = undef foreach (@triggers);
+	my $od = { %$o, ( map { $_ => undef }  keys %$subs ) };	# option defaults, reset triggers
 	my $os = {};	# specified options
 	my $result = GetOptionsStandard($os, @options);
-	$o = { %$od, %$os };
+	# no triggers triggered?
+	my $doTrigger = (int(grep { defined($_) }  @$os{keys %$subs}) == 0 && defined($triggerDefault));
+	my %odt = ($doTrigger? ($triggerDefault => 0): ());
+	$o = { %$od, %$os, %odt };
 	my $programName = cmdNm();
 
 	if ($o->{help} || !$result || ($noArgs && $o->{helpOnEmptyCall})) {
@@ -1066,7 +1091,7 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 			'.this_cookie.'. $programName) || exit(0)
 	}
 	my $deepR = { o => $o, c => $c, cred => $cred, _triggers => $subs };
-	my $flatR = { %$od, %$c, %$os, %$cred, _triggers => $subs };
+	my $flatR = { %$od, %$c, %$os, %odt, %$cred, _triggers => $subs };
 	my $r = $o->{returnDeepStruct}? $deepR: $flatR;
 	# handle call triggers, triggering might be delayed
 	callTriggersFromOptions($r, @ARGV) if ($o->{callTriggers});
@@ -1235,7 +1260,16 @@ sub testIfMount { my ($path, $doFollowLink) = @_;
 sub qw { $_[0] =~ s{"}{\\"}sog; $_[0] }
 sub qsB { $_[0] =~ s{\\}{\\\\}sog; return $_[0]; }
 sub qsQ { return qw(qsB($_[0])) }
-sub qs { my $p = qsB($_[0]); $p =~ s{'}{'\\''}sog; return "'$p'"; }
+sub qs { my $p = $_[0];
+	$p = qsB($p);
+	$p =~ s{'}{'"'"'}sog;
+	return "'$p'";
+}
+sub qs2 { my $p = $_[0];
+	$p = qsB($p);
+	$p =~ s{"}{\\"}sog;
+	return "\"$p\"";
+}
 sub prefix { my ($s, $prefix) = @_;
 	return $s eq ''? '': "$prefix$s";
 }
@@ -1271,12 +1305,32 @@ sub uqs { my ($t) = @_;
 	}
 );
 
+sub traverseRaw { my ($v, $keys) = @_;
+	my @keys = @$keys;
+	return $v if (!int(@keys));
+	my $key = shift(@keys);
+
+	if (ref($v) eq 'HASH') {
+		$v = $v->{$key};
+	} else {
+		my $code = ref($v)->can($key);
+		$v = $v->$code();
+		#Log("Col: $c; value:$v; Class: ". ref($v).": ". ref($r). " Method: $m, ", 2);
+	}
+	return traverseRaw($v, [@keys]);
+}
+
+sub traverse { my ($v, $kp) = @_;
+	my @keys = split(/[.]/, $kp);
+	return traverseRaw($v, [@keys]);
+}
+
 sub formatTableHeader { my ($d, $cols) = @_;
 	#my $fmt = join(' ', map { $_->{format} } @{$d->{columns}}{@$cols});
 	#$fmt =~ s{%0?\*\.?\d?[df]}{%*s}sog;
 	my $fmt = join(' ', ('%*s') x int(@$cols));
 	my $header = sprintf($fmt, map {
-		( -abs($d->{columns}{$_}{width}), ucfirst($_) )
+		( -abs($d->{columns}{$_}{width}), ucfirst(firstDef($d->{columns}{$_}{rename}, $_)) )
 	} @$cols);
 	return $header;
 }
@@ -1286,18 +1340,14 @@ sub formatTableRows { my ($d, $t, $cols) = @_;
 	} @{$d->{columns}}{@$cols});
 	my @rows = map { my $r = $_;
 		sprintf($fmt, map { my $c = $_;
-			my $v;
-			if (ref($r) eq 'HASH') {
-				$v = $r->{$c};
-			} else {
-				my $code = ref($r)->can($c);
-				$v = $r->$code();
-			}
-			my $f = $d->{columns}{$_}{format};
+			my $col = $d->{columns}{$c};
+			my $f = $col->{format};
+			my $m = $col->{method};
+			my $v = traverse($r, firstDef($col->{keyPath}, $c));
 			my $tr = $Set::tableFormats{$f}{transform};
 			$v = $tr->($v) if (defined($tr));
 			# <p> width
-			my $w = $d->{columns}{$_}{width};
+			my $w = $col->{width};
 			my $tw = $Set::tableFormats{$f}{width};
 			$w = $tw->($w) if (defined($tw));
 			($w, $v)
@@ -1321,6 +1371,23 @@ sub formatTable { my ($d, $rows, $cols) = @_;
 
 sub dateReformat { my ($date, $fmtIn, $fmtOut) = @_;
 	return strftime($fmtOut, strptime($date, $fmtIn));
+}
+
+sub slurpToTemp {
+	my @lines = <>;
+	my $tf = tempFileName("/tmp/perl_$ENV{USER}/slurp_pl", undef, { doTouch => 'YES' });
+	writeFile($tf, join("\n", @lines));
+	return $tf;
+}
+
+sub slurpPipeToTemp { my ($cmd) = @_;
+	$fh = new IO::File;
+    return undef if (!$fh->open("$cmd |"));
+	my @lines = <$fh>;
+	my $tf = tempFileName("/tmp/perl_$ENV{USER}/slurp_pl", undef, { doTouch => 'YES' });
+	writeFile($tf, join("\n", @lines));
+	$fh->close;
+	return $tf;
 }
 
 1;

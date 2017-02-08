@@ -418,7 +418,7 @@ Plot = function(..., file = NULL, .plotType = 'pdf', o = NULL, f = NULL) {
 }
 
 .REP.defaultParameters = list(
-	copy.files = 'setup.tex',
+	copy.files = c(),
 	setup = 'setup.tex',
 	latex = 'pdflatex',
 	useDefaultTemplate = T
@@ -426,7 +426,8 @@ Plot = function(..., file = NULL, .plotType = 'pdf', o = NULL, f = NULL) {
 # create new, global reporter
 REP.new = function(templates = NULL, cache = NULL, parameters = list(), resetCache = F,
 	latex = 'pdflatex', setup = 'setup.tex') {
-	copy.files = merge.lists(.REP.defaultParameters['copy.files'], list(copy.files = setup), concat = TRUE);
+	copy.files = merge.lists(.REP.defaultParameters['copy.files'],
+		list(copy.files = setup), list(copy.files = parameters$copy.files), concat = TRUE);
 	parameters = merge.lists(.REP.defaultParameters,
 		parameters,
 		list(latex = latex, setup = setup),
@@ -520,6 +521,15 @@ REP.setConditional = function(name, v) {
 
 REP.get = function(name) {
 	get('.REPORTER.ITEMS', envir = .GlobalEnv)$patterns[[name]];
+}
+
+codeForFunction = function(name) {
+	str = join(as.character(attr(get(name), 'srcref')), "\n");
+	str = gsub("\t", "    ", str);
+	str
+}
+REP.function = function(name) {
+	REP.tex(uc.first(name), Sprintf('%{name}s = %{code}s', code = codeForFunction(name)));
 }
 
 outputOf = function(code, print = T, envir = parent.frame()) {
@@ -645,13 +655,14 @@ REP.plot = function(name, code, ..., file = NULL, type = 'pdf', envir = parent.f
 
 # tag allows to search for overloading templates (_tag). This can be used in reportSubTemplate to
 #	conditionally report templates
-.REP.interpolateTemplate = function(templName, conditionals = list(), tag = NULL) {
+.REP.interpolateTemplate = function(templName, conditionals = list(), tag = NULL,
+	maxIterations = 1e4, iterative = T) {
 	ri = .REPORTER.ITEMS;
 	if (!is.null(tag) && !is.null(ri$templates[[sprintf('%s_%s', templName, tag)]]))
 		templName = sprintf('%s_%s', templName, tag);
 	s = ri$templates[[templName]]
 	#s = readFile(tpath);
-	s = mergeDictToString(.REPORTER.ITEMS$patterns, s, iterative = T);
+	s = mergeDictToString(.REPORTER.ITEMS$patterns, s, maxIterations = maxIterations, iterative = iterative);
 
 	lengths = sapply(names(conditionals), nchar);
 	for (n in names(conditionals)[rev(order(lengths))]) {
@@ -696,12 +707,12 @@ REP.reportSubTemplate = function(subTemplate, tag = NULL, conditionals = list())
 	REP.save();
 }
 
-REP.finalizeSubTemplate = function(subTemplate) {
+REP.finalizeSubTemplate = function(subTemplate, maxIterations = 1e4, iterative = T) {
 	# finalize subTemplates
 	patterns = .REPORTER.ITEMS$patterns;
 	subPatterns = sprintf('TEMPLATE:%s:subTemplates', subTemplate);
 
-	text = mergeDictToString(patterns, patterns[[subPatterns]], iterative = T);
+	text = mergeDictToString(patterns, patterns[[subPatterns]], maxIterations = maxIterations, iterative = T);
 	setREPentry(sprintf('TEMPLATE:%s', subTemplate), text);
 	# remove trail
 	if (is.null(subPatterns)) return(NULL);
@@ -713,7 +724,8 @@ REP.finalizeSubTemplate = function(subTemplate) {
 	REP.save();
 }
 
-REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, output = NULL) {
+REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, output = NULL,
+	maxIterations = 1e4, iterative = T) {
 	# <p> vars
 	ri = .REPORTER.ITEMS;
 	
@@ -732,7 +744,7 @@ REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, outp
 				source = sprintf('%s/%s/%s', getwd(), sdir, cpath);
 				Log(sprintf('Reporting: dir %s', sdir), 4);
 				if (file.exists(source)) {
-					dest = sprintf('%s/%s', dir, cpath);
+					dest = sprintf('%s/%s', dir, splitPath(cpath)$file);
 					Log(sprintf('Reporting: symlinking %s -> %s', source, dest), 4);
 					file.symlink(source, dest);
 					break;
@@ -744,7 +756,8 @@ REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, outp
 	# <p> create final document
 	tn = names(ri$templates)[1];
 	allConditionals = merge.lists(ri$conditionals, conditionals);
-	s = .REP.interpolateTemplate(ri$mainTemplate, allConditionals);
+	s = .REP.interpolateTemplate(ri$mainTemplate, allConditionals,
+		maxIterations = maxIterations, iterative = iterative);
 
 	# <p> run latex to produce temp file
 	tmpPath = sprintf('%s/%s.tex', dir, tn);

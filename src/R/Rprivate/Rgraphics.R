@@ -605,7 +605,9 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	Device(type, plot_path, width = width, height = height, units = 'cm', dpi = dpi, ...,
 		autoScale = autoScale);
 		#ret = eval(object, envir = envir);
-		ret = if (any(class(object) %in% c('ggplot', 'plot'))) {
+		ret = if (any(class(object) == 'grob')) {
+			grid.draw(object)
+		} else if (any(class(object) %in% c('ggplot', 'plot'))) {
 			print(object)
 		} else {
 			eval(object, envir = envir);
@@ -615,6 +617,7 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 
 plotSizes = list(
 	a4 = list(width = valueU(21, 'cm'), height = valueU(21 * sqrt(2), 'cm')),
+	a4Sq = list(width = valueU(21, 'cm'), height = valueU(21, 'cm')),
 	a4R = list(width = valueU(21*sqrt(2), 'cm'), height = valueU(21, 'cm')),
 	a4_15 = list(width = valueU(1.5*21, 'cm'), height = valueU(1.5 * 21 * sqrt(2), 'cm')),
 	a4R_15 = list(width = valueU(1.5*21*sqrt(2), 'cm'), height = valueU(1.5 * 21, 'cm'))

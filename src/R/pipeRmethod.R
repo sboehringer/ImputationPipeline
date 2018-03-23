@@ -102,7 +102,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 
 		# <p> merge to produce output
 		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);
-		if (!is.null(select)) {
+		if (!is.null(select) && !(select %in% c('NA', 'NULL', 'all'))) {
 			Logs('Subsetting with expression %{Select}s', Select = select, logLevel = 3);
 			# <A> assume select to be character 'expression(myexpr)', i.e. double eval is necessary
 			# <i> detect non-expression

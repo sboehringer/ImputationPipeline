@@ -14,3 +14,11 @@ export RPRIVATE=$PIPELINEBASE/src/R/Rprivate
 export RINCLUDES=RgenericAll.R
 export RSCRIPTS=$RPRIVATE:$PIPELINEBASE/src/R
 export PERL5LIB=$PIPELINEBASE/src/perl-lib:$HOME/perl5/lib/perl5:$PERL5LIB
+export QSUB_SOURCEFILES=$QSUB_SOURCEFILES:$PIPELINEBASE/src/pipeline_profile
+
+if [ "$1" == '-v' ]; then
+	echo Current pipeline environment
+	echo 	Base folder: $PIPELINEBASE
+	echo 	Pathes: $PIPELINEPATHES
+	echo 	Qsub includes [QSUB_SOURCEFILES]: $QSUB_SOURCEFILES
+fi

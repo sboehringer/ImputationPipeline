@@ -108,8 +108,8 @@ sub submitCommand { my ($cmd, $o) = @_;
 	#my $env = ''; #join("\n", map { "$_=$ENV{$_}" } keys %ENV);
 
 	# <p> prepare environment
-	my @envKeys = split(/\s*,\s*/, $o->{exports});
-	my @sourceFiles = split(/\s*:\s*/, $o->{sourceFiles});
+	my @envKeys = grep { $_ ne '' } split(/\s*,\s*/, $o->{exports});
+	my @sourceFiles = grep { $_ ne '' } split(/\s*:\s*/, $o->{sourceFiles});
 	my @envReset = which_indeces(['-'], [@envKeys]);
 	@env = @envKeys[($envReset[0] + 1) .. $#envKeys] if (defined($envReset[0]));
 	my @env = map { "$_=$ENV{$_}" } grep { !/$\s*^/ } @envKeys;

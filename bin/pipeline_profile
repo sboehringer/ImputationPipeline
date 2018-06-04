@@ -18,7 +18,11 @@ export QSUB_SOURCEFILES=$QSUB_SOURCEFILES:$PIPELINEBASE/src/pipeline_profile
 
 if [ "$1" == '-v' ]; then
 	echo Current pipeline environment
-	echo 	Base folder: $PIPELINEBASE
-	echo 	Pathes: $PIPELINEPATHES
-	echo 	Qsub includes [QSUB_SOURCEFILES]: $QSUB_SOURCEFILES
+	echo "	Current host: $HOST_PIPELINE"
+	echo "	Base folder: $PIPELINEBASE"
+	echo "	Pathes: $PIPELINEPATHES"
+	echo "	Qsub includes [QSUB_SOURCEFILES]: $QSUB_SOURCEFILES"
+	echo "	R includes: $RINCLUDES"
+	echo "	R scripts: $RSCRIPTS"
+	echo "	Perl libraries: $PERL5LIB"
 fi

@@ -3,7 +3,7 @@
 pushd $PIPELINEBASE/src/maintenance
 
 # <p> R scripts
-./pullin-R-sb.sh
+#./pullin-R-sb.sh
 
 # <p> perl scripts
 ( cd ~/src/scripts ; cp System/qsub.pl System/R.pl System/qwait.pl Conversion/csv.pl Conversion/csv2.pl $PIPELINEBASE/src/perl )

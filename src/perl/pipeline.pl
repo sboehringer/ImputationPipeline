@@ -597,7 +597,7 @@ sub submitPipeline { my ($c, $p) = @_;
 
 	writeFile($c->{pipelineStateFile}, stringFromProperty({ pipeline => $p, config => $c }));
 	writeFile($c->{pipelineParameterFile}, join("\n", parameters_as_text($p)));
-	for my $i (@{$c->{pipeRange}}) {
+	for my $i (@{$c->{range}}) {
 		my $pipe = $p2[$i];
 		# pipe options
 		my %po = (%{$ppars->{$pipe->{name}}}, %{$ppars->{$pipe->{tag}}});

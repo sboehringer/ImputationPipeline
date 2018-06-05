@@ -188,18 +188,20 @@
 	}
 	sub iterateFiles { my ($self) = @_;
 		my @cmds = $self->batchCommands();
+		my @cmds2run = @cmds;
 		if (int(@{$self->range}) > 0) {
 			Log('Reducing range to: '. join(',', @{$self->range}), 3);
-			@cmds = @cmds[@{$self->range}];
+			@cmds2run = @cmds[@{$self->range}];
 		}
 		Log(Dumper([@cmds]), 5);
 		my @jids;
 		push(@{$self->jids}, $self->scheduler->submit($_->{cmd}, 4,
-			waitJids => $self->jidWaitList)->{jid}) foreach (@cmds);
+			waitJids => $self->jidWaitList)->{jid}) foreach (@cmds2run);
 
 		my $spec = {
 			type => $self->outputFileType, files => [map { $_->{file} } @cmds],
-			jids => [@{$self->jids}]
+			jids => [@{$self->jids}],
+			commandsSubmitted => [@{$self->range}]
 		};
 		return $spec;
 	}

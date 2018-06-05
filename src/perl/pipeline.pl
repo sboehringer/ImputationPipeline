@@ -537,7 +537,7 @@ sub prepareRunningDir { my ($c, $p) = @_;
 	my $prefixDigits = firstDef($p->{parameters}{G}{digits}, 2);
 	my $pipeDir = sub { sprintf('%s_%0*d', $prefix, $prefixDigits, $_[0]) };
 	my @outputDirs = map { $pipeDir->($_->{id}) } unlist(@{$p->{pipeline}});
-	@outputDirs = @outputDirs[@{$c->{range}}];
+	@outputDirs = @outputDirs[@{$c->{pipeRange}}];
 
 	# further directories
 	my @otherDirs = ('diag');
@@ -597,7 +597,7 @@ sub submitPipeline { my ($c, $p) = @_;
 
 	writeFile($c->{pipelineStateFile}, stringFromProperty({ pipeline => $p, config => $c }));
 	writeFile($c->{pipelineParameterFile}, join("\n", parameters_as_text($p)));
-	for my $i (@{$c->{range}}) {
+	for my $i (@{$c->{pipeRange}}) {
 		my $pipe = $p2[$i];
 		# pipe options
 		my %po = (%{$ppars->{$pipe->{name}}}, %{$ppars->{$pipe->{tag}}});

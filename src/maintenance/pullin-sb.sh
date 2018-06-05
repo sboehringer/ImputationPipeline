@@ -1,5 +1,7 @@
 #!/bin/sh
 
+PIPELINEBASE=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/../../
+
 pushd $PIPELINEBASE/src/maintenance
 
 # <p> R scripts

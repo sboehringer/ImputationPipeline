@@ -65,7 +65,7 @@ $TempFileNames::GeneralHelp
 HELP_TEXT
 
 #$TEMP_DIR = '/tmp/qsub_pl_'.$ENV{USER};
-my $HEADER = '#!/bin/sh
+my $HEADER = '#!/bin/bash
 # Options
 OGS_OPTIONS
 

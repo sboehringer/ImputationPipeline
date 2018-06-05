@@ -1,0 +1,10 @@
+#!/bin/bash
+
+echo Current pipeline environment
+echo "	Current host: $HOST_PIPELINE"
+echo "	Base folder: $PIPELINEBASE"
+echo "	Pathes: $PIPELINEPATHES"
+echo "	Qsub includes [QSUB_SOURCEFILES]: $QSUB_SOURCEFILES"
+echo "	R includes: $RINCLUDES"
+echo "	R scripts: $RSCRIPTS"
+echo "	Perl libraries: $PERL5LIB"

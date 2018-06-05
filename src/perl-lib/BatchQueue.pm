@@ -23,7 +23,7 @@
 
 	sub submit { my ($self, $cmd, $logLevel, %o) = @_;
 		my $ret = TempFileNames::System($cmd, $logLevel, undef, {%o});
-Log("Return code:$ret");
+		#Log("Return code:$ret");
 		return { return => $ret, jid => undef };
 	}
 	sub queuedJobs { return (); }

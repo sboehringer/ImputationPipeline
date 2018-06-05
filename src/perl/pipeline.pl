@@ -532,8 +532,7 @@ sub prepareRunningDir { my ($c, $p) = @_;
 	my $prefixDigits = firstDef($p->{parameters}{G}{digits}, 2);
 	my $pipeDir = sub { sprintf('%s_%0*d', $prefix, $prefixDigits, $_[0]) };
 	my @outputDirs = map { $pipeDir->($_->{id}) } unlist(@{$p->{pipeline}});
-	my ($from, $to) = (firstDef($c->{from}, 0), firstDef($c->{to}, int(@outputDirs)));
-	@outputDirs = @outputDirs[$from .. $to];
+	@outputDirs = @outputDirs[@{$c->{range}}];
 
 	# further directories
 	my @otherDirs = ('diag');

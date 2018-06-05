@@ -46,8 +46,13 @@ $main::helpText = <<HELP_TEXT;
 	pipeline.pl my_pipeline.pipe --print-parameters | less -S
 	pipeline.pl --from 5 --to 7 my_pipeline.pipe
 	pipeline.pl --range 5:7 my_pipeline.pipe
+	# same as from
+	pipeline.pl --range 5 my_pipeline.pipe
 	# subrange is only effective for transforming steps, runs specified jobs from the subrange
 	pipeline.pl --range 5 --subrange 10:10 my_pipeline.pipe
+	# same as --subrange 10:10
+	pipeline.pl --range 5 --subrange 10 my_pipeline.pipe
+
 
 $TempFileNames::GeneralHelp
 HELP_TEXT

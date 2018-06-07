@@ -688,7 +688,7 @@ sub refineConfig { my ($c, $p) = @_;
 	my $Npipeline = int(unlist(@{$p->{pipeline}}));
 	my ($from, $to) = (firstDef($c->{from}, 0), firstDef($c->{to}, $Npipeline - 1));
 	my @pipeRange = ($from .. $to);
-	@pipeRange = splitRange($c->{range}, $Npipeline) if (defined($c->{range}));
+	@pipeRange = splitRange($c->{range}, $Npipeline - 1) if (defined($c->{range}));
 	my @subRange = defined($c->{subrange})? splitRange($c->{subrange}): ();
 	return {%$c, pipeRange => [@pipeRange], subRange => [@subRange]};
 }

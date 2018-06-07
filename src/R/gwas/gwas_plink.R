@@ -76,7 +76,7 @@ plinkFile2founders = function(input, output) {
 
 plinkOptions = function(o, exclusions = 'baseline', qsubOptions = NULL) {
 	o = list(exclusions = list(
-		inds = readExclusionsInds(o, exclusions),
+		individuals = readExclusionsInds(o, exclusions),
 		markers = readExclusionsMarkers(o, exclusions),
 		qsubOptions = qsubOptions
 	));
@@ -271,11 +271,91 @@ plinkSplitData = function(path = pathGenotypes, outputDir = plinkTempDir, Nchunk
 	NULL
 }
 
-#runPlinkQC(o);
-plinkGetSnpInfo = function(o, id) with(o, {
+plinkSnpQuery = function(o, query) with(o, {
 	require('RSQLite');
 	if (!exists('globalBimDb', envir = .GlobalEnv)) {
 		assign('globalBimDb', sqliteOpen(Sprintf('%{outputPrefixGlobal}s_bim.sqlite')), envir = .GlobalEnv);
 	}
-	sqliteQuery(globalBimDb, list(id = id))
+	sqliteQuery(globalBimDb, query)
 })
+
+#runPlinkQC(o);
+plinkGetSnpInfo = function(o, id) with(o, {
+	plinkSnpQuery(o, list(id = id))
+})
+
+plinkRangeAroundSnp = function(o, snp, range = 3e3) {
+	info = plinkGetSnpInfo(o, snp)[1, ];
+	pos = as.integer(info$mapPhy);
+	query = list(chr = info$chr, mapPhy = list('> Int', pos - range), mapPhy = list('< Int', pos + range));
+	plinkSnpQuery(o, query)
+}
+
+plinkReadGenotypes = function(o, snps) {
+	e = readExclusions(o);
+	snps = setdiff(snps, e$markers);
+	gts = readPlinkBed(o$input, snps, usePedIid = T);
+	gtsClean = gts[!(row.names(gts) %in% e$individuals), , drop = F];
+	gtsClean
+}
+
+#
+#	<p> data management
+#
+
+bimCols = c('chr', 'idSnp', 'posGen', 'posPhy', 'A0', 'A1');
+plinkRemapBim = function(
+	pathMap = '[HEADER=F,SEP=T,NAMES=idSnp;rsId]:data/plink/GSA_variantID_renaming.txt',
+	pathBim = 'data/plink/cyptam.bim',
+	outputPostfix = '-rs',
+	printRanges = list(1000:1020, 10000:10020),
+	outputFormat = '[HEADER=F,SEP=T,QUOTE=F]:') {
+
+	map = readTable(pathMap);
+	bim = readTable(con('[HEADER=F,SEP=T,NAMES=', join(bimCols, ';'),']:', pathBim));
+
+	bimNew = merge(bim, map, by = 'idSnp', all.x = T);
+	bim0 = bimNew = bimNew[order_align(bim$idSnp, bimNew$idSnp), , drop = F];
+	if (nrow(bim) != nrow(bimNew)) stop('makers missing in bimNew');
+	if (any(bimNew$idSnp != bim$idSnp)) stop('markers not in correct order');
+
+	# <p> unmapped markers (not in map data frame)
+	LogS(1, '#Non rs-mapped SNPs: %{Nsnps}d', Nsnps = sum(is.na(bimNew$rsId)));
+	bimNew$idSnp[!is.na(bimNew$rsId)] = bimNew$rsId[!is.na(bimNew$rsId)];
+	if (any(bimNew$idSnp[is.na(bimNew$rsId)] != bim0$idSnp[is.na(bimNew$rsId)]))
+		stop('mapped markers overwritten');
+
+	# <p> duplicates
+	dI = which(duplicated(bimNew$idSnp));
+	LogS(1, '#duplicated SNPs: %{Nsnps}d', Nsnps = length(dI));
+	printComp = function(range, bim, bimNew) print(head(cbind(bimNew[range, ], bim[range, ])));
+	bimNew$idSnp[dI] = paste(bimNew$idSnp[dI], 1:length(dI), sep = '-');
+	if (any(duplicated(bimNew$idSnp))) stop('duplicated marker names present');
+
+	# <p> debugging
+	for (r in printRanges) printComp(r, bim, bimNew);
+
+	# <p> output
+	output = con(outputFormat, splitPath(pathBim)$fullbase, outputPostfix, '.bim');
+	LogS(1, 'Writing new bim to "%{output}s"');
+	writeTable(bimNew[, bimCols], output);
+	with(splitPath(pathBim), {
+		System(Sprintf('ln -s %{base}q.bed %{fullbase}q%{outputPostfix}q.bed'));
+		System(Sprintf('ln -s %{base}q.fam %{fullbase}q%{outputPostfix}q.fam'));
+	});
+}
+
+
+plinkResaveFam = function(fam,
+	path = 'data/plink/aplpedpd',
+	outputPostfix = '-ids',
+	outputFormat = '[HEADER=F,SEP=S,QUOTE=F]:') {
+
+	with(splitPath(path), {
+		output = con(fullbase, outputPostfix);
+		LogS(1, 'Writing new fam to "%{output}s.fam"');
+		writeTable(fam, Sprintf('%{outputFormat}s%{output}s.fam'));
+		System(Sprintf('ln -s %{base}q.bed %{output}q.bed'));
+		System(Sprintf('ln -s %{base}q.bim %{output}q.bim'));
+	});
+}

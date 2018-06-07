@@ -681,16 +681,20 @@ regressionMethods = list(
 		}
 	),
 	gee = list(
-		fit = function(formula, data, clusterCol, ...) {
+		fit = function(formula, data, clusterCol, family = binomial(), ...) {
 			if (!length(formula.covariates(formula))) return(NULL);
-			# geeglm needs ordered clusterIds <!>
-			data = data[order(data[[clusterCol]]), ];
-			names(data)[which(names(data) == clusterCol)] = "..gee.clusters";	# hack to make geeglm work
-			r = geeglm(formula, data = data, id = ..gee.clusters, ...);
+			# geeglm needs ordered clusterIds <!> <N> now pre-processed
+			#data = data[order(data[[clusterCol]]), , drop = F];
+			#data = Df_(data, headerMap = listKeyValue(clusterCol, 'regrCompClusters'));
+			#names(data)[which(names(data) == clusterCol)] = "regrCompClusters";	# hack to make geeglm work
+			#geeClusters = as.integer(data[[clusterCol]]);
+			myFamily = get(family$family)();
+			r = geeglm(formula, data = data, id = regrCompClusters, ...);
 			r
 		},
 		compare = function(m1, m0){
-			a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			#a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			a = if (is.null(m0)) anova(m1$r) else { anova(m0$r, m1$r); }
 			list(anova = a, m0 = m0, m1 = m1, p.value = a[["P(>|Chi|)"]][1],
 				effects0 = coefficients(summary(m0$r))[, "Estimate"],
 				sdevs0 = coefficients(summary(m0$r))[, "Std.err"],
@@ -698,10 +702,51 @@ regressionMethods = list(
 				sdevs1 = coefficients(summary(m1$r))[, "Std.err"]
 			)
 		}
+	),
+	geebin = list(
+		fit = function(formula, data, clusterCol, ...) {
+			if (!length(formula.covariates(formula))) return(NULL);
+			# <!> workaround for generic approach that gives obscure error message
+			#	gee with family = binomial()
+			r = geeglm(formula, data = data, id = regrCompClusters, family = binomial(), ...);
+			r
+		},
+		compare = function(m1, m0){
+			#a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			a = if (is.null(m0)) anova(m1$r) else { anova(m0$r, m1$r); }
+			list(anova = a, m0 = m0, m1 = m1, p.value = a[["P(>|Chi|)"]][1],
+				effects0 = coefficients(summary(m0$r))[, "Estimate"],
+				sdevs0 = coefficients(summary(m0$r))[, "Std.err"],
+				effects1 = coefficients(summary(m1$r))[, "Estimate"],
+				sdevs1 = coefficients(summary(m1$r))[, "Std.err"]
+			)
+		}
+	),
+	surv = list(
+		fit = function(formula, data, clusterCol, ...)
+			list(r = coxph(formula, data = data), formula = formula, data = data),
+		compare = function(m1, m0){
+			vars0 = formula.predictors(m0$r$formula, m0$r$data);
+			Nvars0 = length(vars0);
+			vars1 = formula.predictors(m1$r$formula, m1$r$data);
+			Nvars1 = length(vars1);
+			p.value = if (Nvars0 == 0 || (Nvars1 - Nvars0) == 1) {
+				v = setdiff(vars1, vars0);
+				summary(m1$r$r)$coefficients[v, 'Pr(>|z|)']
+			} else {
+				anova(m0$r$r, m1$r$r)[2, 'P(>|Chi|)']
+			}
+			r = list(
+				p.value = p.value,
+				effects0 = coefficients(summary(m0$r$r)),
+				effects1 = coefficients(summary(m1$r$r))
+			);
+			r
+		}
 	)
 );
 
-completeRows = function(f1, data) {
+CompleteRows = function(f1, data) {
 	vars = all.vars(as.formula(f1));
 	rows = apply(data[, vars, drop = F], 1, function(r)all(!is.na(r)));
 	r = which(rows);
@@ -720,18 +765,26 @@ regressionCompare = function(m1, m0) {
 }
 
 regressionCompareModelsRaw = function(f1, f0, data, type = "lm", clusterCol = NULL, ...) {
+	f0 = as.formula(f0);
+	f1 = as.formula(f1);
 	# <p> jointly trim data according to missing data
 	#rows = which(apply(data[, c(formula.vars(f1), clusterCol)], 1, function(r)all(!is.na(r))));
 	# more robust version
 	row.names(data) = NULL;
 	#rows = as.integer(row.names(model.frame(f1, data = data)));
 	# robust for random effects
-	rows = apply(data[, all.vars(as.formula(f1)), drop = F], 1, function(r)!any(is.na(r)));
-	d0 = data[rows, ];
+	#rows = apply(data[, all.vars(as.formula(f1)), drop = F], 1, function(r)!any(is.na(r)));
+	#d0 = data[rows, ];
+	# <p> general cluster processing: order (<!> required for geeglm, rename <!> required for geeglm
+	if (Nif(clusterCol)) {
+		data = data[order(data[[clusterCol]]), , drop = F];
+		data = Df_(data, headerMap = listKeyValue(clusterCol, 'regrCompClusters'));
+	}
+	d0 = model_matrix_from_formula(f1, data, returnComplete = T)$data;
 
 	# <p> fit and compare models
-	m1 = regressionFit(as.formula(f1), data = d0, type = type, clusterCol = clusterCol, ...);
-	m0 = regressionFit(as.formula(f0), data = d0, type = type, clusterCol = clusterCol, ...);
+	m1 = regressionFit(f1, data = d0, type = type, clusterCol = clusterCol, ...);
+	m0 = regressionFit(f0, data = d0, type = type, clusterCol = clusterCol, ...);
 	a = regressionCompare(m1, m0);
 	a
 }
@@ -840,6 +893,33 @@ permute = function(data, stat, vars, ..., Nperm = 5e3, Pvalue = 'lower', na.rm =
 	r
 }
 
+calibrate = function(f1, data, regression = glm, family = binomial(), quantiles = seq(0, 1, 0.25), ...) {
+	stat0 = regression(f1, data, family = family);
+	scores = predict(stat0, data, type = 'link');
+	ps = predict(stat0, data, type = 'response');
+	y = data[[formula.response(f1)]];
+	groups = quantile(scores, probs = quantiles, na.rm = FALSE);
+
+	calibration = lapply(2:length(quantiles), function(i) {
+		group = scores > groups[i - 1] & scores <= groups[i];
+		c(mean(y[group]), mean(ps[group]), sum(group))
+	});
+	c0 = Df(do.call(rbind, calibration),
+		row.names = paste0(sprintf('%.1f', quantiles[-1] * 100), '%'),
+			names = c('truth', 'prediction', 'N'));
+	r = list(calibration = c0, model = summary(stat0), quantiles = groups[-1], scores = scores);
+	r
+}
+
+#
+#	<p> P-values
+#
+
+alphaLevels = function(ps, Nalpha = 40, alphas = seq(1/Nalpha, 1 - 1/Nalpha, length.out = Nalpha)) {
+	lvls = setNames(sapply(alphas, function(alpha)mean(ps < alpha)), round(alphas, 2));
+	lvls
+}
+
 #
 #	<p> error propagation
 #
@@ -866,7 +946,7 @@ errSum = function(sdx, cx = 1, sdy = 0, cy = 1, covxy = 0) {
 #
 
 # convert confidence interval to standard dev based on a normality assumption
-ciToSd = function(ci.lo, ci.up, level = .95) {
+ciToSd_old = function(ci.lo, ci.up, level = .95) {
 	# upper centered limit
 	ciU = ci.up - mean(c(ci.lo, ci.up));
 	span = ci.up - ci.lo;
@@ -874,7 +954,7 @@ ciToSd = function(ci.lo, ci.up, level = .95) {
 	sd = Vectorize(inverse(function(s)qnorm(1 - (1 - level)/2, 0, s), interval = c(0, span * 8)))(ciU);
 	sd
 }
-ciToSd_1 = function(ci.lo, ci.up, level = .95) {
+ciToSd = function(ci.lo, ci.up, level = .95) {
 	alpha = 1 - level;
 	widthStd = qnorm(1 - alpha/2) * 2;
 	(ci.up - ci.lo)/widthStd
@@ -898,8 +978,8 @@ betaSdToCi = ciFromBetaSdev = function(beta, sdev, level = .95) {
 }
 
 ciFromSummary = function(s, var, level = .95) {
-	cs = coefficients(s)[var, ];
-	ciFromBetaSdev(cs[["Estimate"]], cs[["Std. Error"]], level = level);
+	cs = as.matrix(coefficients(s)[var, ]);
+	ciFromBetaSdev(cs[, 'Estimate'], cs[, 'Std. Error'], level = level);
 }
 
 pFromBetaSd = function(beta, sd, null = 0)pnorm(null, abs(beta), sd)
@@ -909,6 +989,21 @@ betaPtoCi = function(beta, p) {
 	ciFromBetaSdev(beta, sd)
 }
 betaVarToCi = function(beta, var)ciFromBetaSdev(beta, sqrt(var))
+
+coefficientsOR = function(s, level = .95) {
+	cis = do.call(cbind, ciFromSummary(s, level = level));
+
+	# <p> ORs
+	cisOR = Df_(exp(cis));
+	cisOR['(Intercept)', ] = NA;	# intercept does not have an OR interpretation
+	names(cisOR) = paste(names(cisOR), 'OR', sep = '');
+
+	# <p> result
+	cfs = coefficients(s);
+	r = cbind(cfs, cis[, -1], as.matrix(cisOR));
+	r
+}
+coefficientsORmodel = function(model, level = .95)coefficientsORsModel(summary(model), level)
 
 #
 #	meta analysis
@@ -964,26 +1059,27 @@ imputeMean = function(data) {
 
 # impute using mice
 imputeVariables = function(data, formula = NULL, vars = NULL, Nimp = 10, returnOriginal = FALSE,
-	imputationColumn = 'Imputation_') {
+	imputationColumn = 'Imputation_', returnMice = FALSE) {
 	require('mice');
 
 	# <p> preparation
 	if (notE(formula)) vars = all.vars(formula.re(formula, data = data));
-	if (any(!lapply(data[, vars], class) %in% c('factor', 'numeric'))) {
-		stop('come columns not factor or numeric');
+	invalidVars = vars[!lapply(data[, vars], class) %in% c('factor', 'numeric')];
+	if (length(invalidVars) > 0) {
+		stop(Sprintf('some columns neither factor nor numeric: %{v}s', v = join(invalidVars, ', ')));
 	}
-	s = Summary(data[, vars]);
+	s = descriptives(data[, vars]);
 	
 	# <p> imputation
-	dataImputed = mice(data[, vars], m = Nimp);
+	dataImputed = mice(data[, vars, drop = F], m = Nimp);
 	dataL = Df_(complete(dataImputed, "long", include = returnOriginal),
 		min_ = c('.id'), headerMap = list(`.imp` = imputationColumn), as_numeric = imputationColumn);
 
-	N = if (returnOriginal) Nimp + 1 else Nimp;
-	dataC = DfStack(data, N);
+	dataC = DfStack(data, (Nimp + returnOriginal));
 	dataC[, vars] = Df_(dataL, min_ = imputationColumn);
 	dataR = Df(dataL[, imputationColumn], dataC, names = imputationColumn);
 	r = list(data = dataR, summary = s, vars = vars);
+	if (returnMice) r = c(r, list(mice = dataImputed));
 	#r = list(data = dataImputed, summary = s, vars = vars);
 	r
 }
@@ -1107,11 +1203,12 @@ seq.transf = function(from = 0, to = 1, length.out = 1e1, ..., transf = log, tra
 #
 
 completeRows = function(data)!apply(data, 1, function(r)any(is.na(r)))
+completeData = function(f, data)data[completeRows(data[, all.vars(f), drop = F]), , drop = F]
 
 model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F,
-	returnComplete = F) {
+	returnComplete = F, formulaAsIs = F) {
 	# <p> prepare data matrices
-	f1 = formula.re(f, data = data, ignore.case = ignore.case);
+	f1 = if (formulaAsIs) f else formula.re(f, data = data, ignore.case = ignore.case);
 	f1vars = all.vars(f1);
 	response = formula.response(f1);
 	responseVars = all.vars(as.formula(con(response, ' ~ 1')));
@@ -1119,14 +1216,17 @@ model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, re
 	# <p> complete data
 	complete = completeRows(data[, f1vars, drop = F]);
 	data = droplevels(data[complete, , drop = F]);
-
+	
 	# <p> response
 	responseData = if (notE(responseVars)) with(data, Eval(response)) else NULL;
 	# <p> offset
 	offset = if (!is.null(offset)) offset[complete] else NULL;
 	# <p> model matrix
-	mm = model.matrix(f1, model.frame(f1, data = data));
-	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)')];
+	#mm = if (exists('lFormula') && length(unlist(Regex('[+]\\s*[(]', Deparse(f1)))) > 0)
+	mm = if (exists('lFormula') && length(unlist(Regex('[+]\\s*[(].*?[|].*[)]', Deparse(f1)))) > 0)
+		lFormula(f1, data)$X else	# lme4
+		model.matrix(f1,  model.frame(f1, data = data));
+	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)'), drop = F];
 
 	# <p> return
 	r = list(mm = mm, response = responseData, offset = offset, indeces = which(complete),
@@ -1471,7 +1571,7 @@ compareVectors = function(l) {
 }
 
 pairs_std.panel.hist <- function(x, ...) {
-	usr <- par("usr"); on.exit(par(usr))
+	usr <- par("usr"); on.exit(par(usr));	# restore settings
 	par(usr = c(usr[1:2], 0, 1.5) )
 	h <- hist(x, plot = FALSE)
 	breaks <- h$breaks; nB <- length(breaks)
@@ -1489,8 +1589,41 @@ pairs_std.panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
 	if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
 	text(0.5, 0.5, txt, cex = cex.cor * 1)	# used tb cex.cor * r
 }
+
+unique_fraction = function(x) (length(unique(x))/length(x))
+guess_is_factor = function(x, na.rm = T) {
+	all(as.integer(x) == x, na.rm = na.rm) && unique_fraction(x) < .1
+}
+
+
+panel.scatter = function(x, y, col = par("col"), bg = NA, pch = par("pch"), 
+	cex = 1, col.smooth = "red", span = 2/3, iter = 3, blotSize = cm2in(.3), ...) 
+{
+	#call_ = match.call(envir = parent.frame(1L));
+	# it is difficult to get information on the plotted variables, for now a heuristics is used
+	#	to determine factor status
+	if (guess_is_factor(x) && guess_is_factor(y)) {
+		pars = par(c('usr', 'xaxt', 'yaxt')); on.exit(par(pars));
+		t0 = table(x, y);
+		#plot(t0);
+		mx = max(as.integer(t0));
+		d0 = Df(merge.multi.list(dimnames(t0)), w = sqrt(as.integer(t(t0))), as_numeric = c('x', 'y'));
+		#par(new = TRUE);
+		#plot(d0[, c('x', 'y')], type = 'n', xaxt='n', yaxt = 'n');
+		par(new = TRUE);
+		with(d0,
+			symbols(x = x, y = y, circles = w, inches = blotSize, ann = F, bg = "steelblue2", fg = NULL,
+			 xaxt='n', yaxt = 'n')
+		)
+		#return();
+	} else {
+		# <i> call forwarding
+		panel.smooth(x, y, col, bg, pch, cex, span, iter);
+	}
+}
+
 pairs_std = function(...,
-	lower.panel = panel.smooth, diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor) {
+	lower.panel = panel.scatter, diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor) {
 	pairs(...,
 		lower.panel = lower.panel, diag.panel = diag.panel, upper.panel = upper.panel)
 }
@@ -1680,6 +1813,39 @@ Summary = function(d) {
 	r
 }
 
+
+descriptivesNumeric = function(data) {
+	bp = apply(data, 2, boxplot.stats);
+	N = list.kp(bp, 'n', do.unlist = T);
+	r = data.frame(
+		N = N,
+		Nna = nrow(data) - N,
+		mean = apply(data, 2, mean, na.rm = T),
+		median = apply(data, 2, median, na.rm = T),
+		se = apply(data, 2, sd, na.rm = T) / sqrt(N),
+		Nout = sapply(bp, function(v)length(v$out))
+	);
+	r
+}
+descriptivesFactor = function(data) {
+	Nnas = apply(data, 2, function(c)sum(is.na(c)));
+	r = data.frame(
+		N = nrow(data) - Nnas,
+		Nna = Nnas,
+		Ncat = sapply(lapply(data, levels), length)
+	);
+	r
+}
+
+descriptives = function(data) {
+	r1 = descriptivesFactor(data[, DfClasses(data) == 'factor']);
+	r2 = descriptivesNumeric(data[, DfClasses(data) == 'numeric']);
+	r = listOfDataFrames2data.frame(list(r1, r2), idColumn = NULL, colsFromUnion = T, row.names = T);
+	r$`NAperc` = with(r, Nna / nrow(data) * 100);
+	r
+}
+
+
 #
 #	<p> survival
 #
@@ -1712,5 +1878,29 @@ survfit2m = function (x, scale = 1, ..., rmean = 'none') {
 		mtemp <- mtemp[, -1, drop = FALSE]
 	temp$matrix <- drop(mtemp)
 	temp$matrix
+}
+
+#
+#	<p> mixed models
+#
+
+lmer2ci = function(object, method = 'profile')confint.merMod(object, method = method);
+
+lmer2p = function(object, method = 'profile') {
+	cis = lmer2ci(object, method = method);
+	apply(cis, 1, function(ci)ciToP(ci[1], ci[2]))
+}
+
+#
+#	<p> simulation studies
+#
+
+dataSimulation = function(Niteration, fSim, fStat = function(data, ...)summary(data), ...,
+	parSim = list(), parStat = list()) {
+	parShared = list(...);
+	r = Lapply(1:Niteration, function(i) {
+		data = do.call(fSim, c(parSim, parShared));
+		r = do.call(fStat, c(list(data = data), parStat, parShared));
+	});
 }
 

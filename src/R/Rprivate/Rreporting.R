@@ -68,6 +68,7 @@ latex = list(
 	},
 	quote = function(s, detectFormula = T) {
 		s = gsub('_', '\\\\_', s, perl = T);
+		s = gsub('#', '\\\\#', s, perl = T);
 		s = gsub('&', '\\\\&', s, perl = T);
 		s = gsub('~', '$\\\\sim$', s, perl = T);
 		s = gsub('([<>])', '$\\1$', s, perl = T);
@@ -771,7 +772,6 @@ REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, outp
 		if (r$error > 0 || (verbose && i == 1)) Log(r$output, 1);
 		#if (r$error > 0) break;
 	}
-
 	# <p> output
 	postfix = join(names(conditionals[unlist(conditionals)]), '-');
 	if (postfix != '') postfix = sprintf('-%s', postfix);

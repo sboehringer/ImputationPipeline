@@ -1,6 +1,65 @@
 #
 #	Rmeta.R
 #Wed Jun  3 15:11:27 CEST 2015
+#Mon 27 Jun 2005 10:49:06 AM CEST
+#system("~/src/Rprivate/exportR.sh");
+#system("~/src/Rprivate/exportR.sh"); source("RgenericAllRaw.R"); source("Rgenetics.R"); loadLibraries();
+#system('. ~/src/Rprivate/exportR.sh ; cp ~/src/Rprivate/RgenericAllRaw.R .');
+
+#
+#	<p> Meta-helpers
+#
+
+#
+#	level dependend logging
+# moved from Rsystem.R to break dependency cylce (22.3.2017)
+#Global..Log..Level = 4;
+#Default..Log..Level = 4;
+#assign(Default..Log..Level, 4, envir = .GlobalEnv);
+Log_env__ <- new.env();
+assign('DefaultLogLevel', 4, envir = Log_env__);
+
+#' Log a message to stderr.
+#' 
+#' Log a message to stderr. Indicate a logging level to control verbosity.
+#' 
+#' This function prints a message to stderr if the condition is met that a
+#' global log-level is set to greater or equal the value indicated by
+#' \code{level}. \code{Log.level} returns the current logging level.
+#' 
+#' @aliases Log Log.setLevel Log.level
+#' @param o Message to be printed.
+#' @param level If \code{Log.setLevel} was called with this value, subsequent
+#' calls to \code{Log} with values of \code{level} smaller or equal to this
+#' value will be printed.
+#' @author Stefan Böhringer <r-packages@@s-boehringer.org>
+#' @seealso \code{\link{Log.setLevel}}, ~~~
+#' @keywords ~kwd1 ~kwd2
+#' @examples
+#' 
+#' 	Log.setLevel(4);
+#' 	Log('hello world', 4);
+#' 	Log.setLevel(3);
+#' 	Log('hello world', 4);
+#' 
+Log = function(o, level = get('DefaultLogLevel', envir = Log_env__), doPrint = NULL) {
+	if (level <= get('GlobalLogLevel', envir = Log_env__)) {
+		cat(sprintf("R %s: %s\n", date(), as.character(o)));
+		if (!is.null(doPrint)) print(doPrint);
+	}
+}
+Logs = function(o, level = get('DefaultLogLevel', envir = Log_env__), ..., envir = parent.frame()) {
+	Log(Sprintf(o, ..., envir = envir), level = level);
+}
+LogS = function(level, s, ..., envir = parent.frame()) {
+	Log(Sprintf(s, ..., envir = envir), level = level);
+}
+
+Log.level = function()get('GlobalLogLevel', envir = Log_env__);
+Log.setLevel = function(level = get('GlobalLogLevel', envir = Log_env__)) {
+	assign("GlobalLogLevel", level, envir = Log_env__);
+}
+Log.setLevel(4);	# default
 
 
 #
@@ -236,7 +295,6 @@ frozenCallWrap = function(freeze_file, freeze_control = FreezeThawControlDefault
 	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
 	sp = splitPath(freeze_file, ssh = freeze_ssh);
 	file = if (freeze_relative) sp$file else sp$path;
-browser();
 	#wrapperPath = sprintf("%s-wrapper.RData", splitPath(file)$fullbase);
 	r = sprintf("R.pl --template raw --no-quiet --loglevel %d --code 'eval(get(load(\"%s\")[[1]]))' --",
 		logLevel, file);
@@ -365,6 +423,34 @@ encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate
 	call_
 }
 
+#
+# compact saving for delayed loading
+#
+# <i> make 
+# object: list with single element
+freezeObject = function(object, env) {
+	dir = attr(env, 'path');
+	name = names(object);
+	file = Sprintf('%{dir}s/%{name}s.Rdata');
+print(file);
+	save(list = name, envir = as.environment(object), file = file);
+	eval(substitute(delayedAssign(OBJECT, get(load(file = FILE)[1])),
+		list(OBJECT = name, FILE = file)), envir = env);
+}
+freezeObjectsList = function(objects, pos = 2, parent = parent.frame(), freezeObjectDir = NULL) {
+	td = firstDef(freezeObjectDir, tempdir());
+	env = new.env(parent = parent);
+	attr(env, "path") = td;
+
+	if (any(names(objects) == '')) stop('Only named objects can be frozen. Check for naming conflicts.');
+	#n = names(objects) == '';
+	#if (sum(n) > 0) names(objects)[n] = paste('ARG_ANON__', 1:sum(n), sep = '');
+	nlapply(objects, function(n)freezeObject(objects[n], env = env));
+	env
+}
+freezeObjects = function(..., pos = 2, parent = parent.frame(), freezeObjectDir = NULL) {
+	freezeObjectsList(list(...), pos = pos, parent, freezeObjectDir)
+}
 
 #
 #	</p> freeze/thaw functions

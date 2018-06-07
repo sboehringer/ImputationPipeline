@@ -2,10 +2,12 @@
 %\begin{comment}
 	\documentclass[a4paper,oneside,11pt]{article}
 	\usepackage{amsmath,amssymb, amssymb, amsfonts, setspace, latexsym, epsfig, epsf, rotating, longtable, setspace, a4wide,verbatim, caption, hyperref}
-	\usepackage{amsthm}
 	\usepackage[utf8x]{inputenc}
 	\usepackage{graphicx, grffile}
-
+	%\usepackage{amsmath, amssymb, amsfonts, rotating, longtable, setspace, a4wide,verbatim, caption, hyperref}
+	\usepackage{amsthm}
+	\usepackage{lmodern}	
+	
 	\newcounter{global}
 	%\setcounter{global}{1}
 	\theoremstyle{definition} \newtheorem{exam}[global]{Example}%
@@ -28,17 +30,17 @@
 \usepackage{fontspec}
 \usepackage{xcolor}
 \usepackage{titlesec}
-\usepackage{datetime}
+\usepackage{datetime2}
 \usepackage{lastpage}
 \defaultfontfeatures{Ligatures=TeX}
 \setsansfont{Droid Sans}
 %\setmainfont{CMU Serif}
 \definecolor{Blue}{rgb}{.204,.353,.541}
 \definecolor{LightBlue}{rgb}{.31,.506,.741}
-\newfontfamily\subsubsectionfont[Color=LightBlue]{CMU Sans Serif}
+%\newfontfamily{\subsubsectionfont}[Color=LightBlue]{CMU Sans Serif}
 \titleformat*{\section}{\Large\bfseries\sffamily\color{Blue}}
 \titleformat*{\subsection}{\large\bfseries\sffamily\color{LightBlue}}
-\titleformat*{\subsubsection}{\itshape\subsubsectionfont}
+%\titleformat*{\subsubsection}{\itshape\subsubsectionfont}
 %\titleformat*{\subsubsection}{\itshape\sffamily\color{LightBlue}}
 
 \newcommand{\analysisreport}[4]{
@@ -54,7 +56,8 @@
 	Project name:			& #1\\
 	Consulting department:	& #3\\
 	Contact email:			& #4\\
-	Report generation:		& \today, \ \currenttime\\
+	%Report generation:		& \today, \ \currenttime\\
+	Report generation:		& \today, \ \DTMnow\\
 	Number of pages: 		& \pageref{LastPage}
 	\end{tabular}
 \end{center}

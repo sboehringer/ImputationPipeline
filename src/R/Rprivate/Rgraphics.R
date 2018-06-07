@@ -193,35 +193,94 @@ ggplot_qqunif = function(p.values, alpha = .05, fontsize = 6,
 		theme(text = element_text(size = fontsize));
 	p
 }
-#ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
-QQunif = Qqunif = function(p.values, alpha = .05, fontsize = 12,
-	tr = function(P)-log10(P), trName = Deparse(body(tr)), colorCI = "#000099",
-	bins = c(2e2, 2e2), Nrep = 10) {
 
-	# <p> preparation
-	if (any(p.values <= 0 | p.values > 1)) stop("P.values not in interval (0, 1)");
-	p.values = tr(sort(na.omit(p.values)));
+QQunifPlotDf = function(p.values, alpha = .05, tr = function(P)-log10(P), trName = Deparse(body(tr)),
+	bins = c(2e2, 2e2), Nrep = 10, p.bottom = 1e-300, na.rm = T) {
+
+	# <p> filter
+	Logs('#p-values being NA: %{Nna}d', Nna = sum(is.na(p.values)), logLevel = 4);
+	if (na.rm) p.values = p.values[!is.na(p.values)];
+	Logs('#p-values < %{p.bottom}.1e: %{Nceil}d', Nceil = sum(p.values < p.bottom), logLevel = 4);
+	p.values = ifelse(p.values < p.bottom, p.bottom, p.values);
+
+	# <p> data frame
+	if (any(p.values < 0 | p.values > 1)) stop("P.values not in interval (0, 1)");
+	o = order(p.values)
+	p.values = tr(p.values[o]);
+
+	# <p> data frame
 	N = length(p.values);
 	d = data.frame(theoretical = tr((1:N)/N), p.value = p.values);
 
 	# <p> binning
-	if (!is.null(bins)) {
-		Ns = binPlot(d, bins = bins, Nrep = Nrep, returnIdcs = T);
-		d = d[Ns, ];
-	} else Ns = 1:N;
+	Ns = if (!is.null(bins)) binPlot(d, bins = bins, Nrep = Nrep, returnIdcs = T) else Ns = 1:N;
+	d = d[Ns, ];
 
 	# j-th order statistic from a uniform(0,1) sample has beta(j,n-j+1) distribution
 	# (Casella & Berger, 2002, 2nd edition, pg 230, Duxbury)
 	dPlot = data.frame(d,
-		ciU = tr(qbeta(1 - alpha/2, Ns, N - Ns + 1)), ciL = tr(qbeta(    alpha/2, Ns, N - Ns + 1)),
-		colorCI = colorCI);
+		ciU = tr(qbeta(1 - alpha/2, Ns, N - Ns + 1)), ciL = tr(qbeta(alpha/2, Ns, N - Ns + 1)));
+	dPlot
+}
+
+#ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
+QQunif = Qqunif = function(p.values, alpha = .05, fontsize = 12,
+	tr = function(P)-log10(P), trName = Deparse(body(tr)), colorCI = "#000099",
+	bins = c(2e2, 2e2), Nrep = 10, p.bottom = 0) {
+
+	dPlot = QQunifPlotDf(p.values, alpha, tr, trName, bins, Nrep, p.bottom, na.rm = T);
+	dPlot = Df(dPlot, colorCI = colorCI);
+
 	p = ggplot(dPlot) +
 		geom_line(aes(x = theoretical, y = ciU, colour = colorCI)) +
 		geom_line(aes(x = theoretical, y = ciL, colour = colorCI)) +
 		geom_point(aes(x = theoretical, y = p.value), size = 1) +
-		theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(p.values)*1.1)) +
+		theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(dPlot$p.value)*1.1)) +
 		scale_y_continuous(name = trName) +
 		theme(text = element_text(size = fontsize));
+
+	p
+}
+
+cbPalette1 = c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7");
+cbPalette2 = c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7");
+QQunifDfPalette = c(cbPalette1, cbPalette2);
+
+QQunifDf = function(f1, data, alpha = .05, fontsize = 12,
+	tr = function(P)-log10(P), trName = Deparse(body(tr)), trI = function(Ptr)exp(Ptr * log(10)),
+	colorCI = "#000099", bins = c(2e2, 2e2), Nrep = 10, p.bottom = 0, byCutoff = 1, legendTitle = 'Test') {
+	# <p> variable names
+	p.value = formula.response(f1);
+
+	cats0 = factorFromFormula(data, formula.rhs(f1));
+	plotDfs = by(data, cats0, function(d0)
+		QQunifPlotDf(d0[[p.value]], alpha, tr, trName, bins, Nrep, p.bottom, na.rm = T));
+	#color = recodeLevels(as.character(cats0), levels = c('odd', 'even'));
+	dPlot = do.call(rbind, nlapply(plotDfs, function(n)Df(name = n, plotDfs[[n]])));
+	dPlot = dPlot[!is.na(dPlot[[p.value]]),, drop = F];
+	dPlot = dPlot[order(dPlot[[p.value]]), ];
+	myBreaks = function()cats0;	# work around for ggplot2 behavior of lexically scoping to data set only
+	palette = c(colorCI, QQunifDfPalette)[1:(length(cats0) + 1)];
+
+	# <p> data frame CI
+	pRangeTh = range(dPlot$theoretical);
+	N = ceiling(trI(pRangeTh[2]));	# <!> inverse of tr
+	dCi = data.frame(
+		theoretical = tr((1:N - .5)/N),
+		ciU = tr(qbeta(1 - alpha/2, 1:N, N - (1:N) + 1)), ciL = tr(qbeta(alpha/2, 1:N, N - (1:N) + 1))
+	);
+
+	p = ggplot(dPlot) +
+		geom_point(aes(x = theoretical, y = p.value, colour = name), size = 1) +
+		scale_color_manual(name = get('legendTitle'), breaks = get('cats0'), values = get('palette')) + 
+		#theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(dPlot$p.value)*1.1)) +
+		theme_bw() + coord_cartesian(ylim = c(0, max(dPlot$p.value)*1.1)) +
+		scale_y_continuous(name = trName) +
+		theme(text = element_text(size = fontsize)) +
+		# CI
+		geom_line(data = dCi, aes(x = theoretical, y = ciU, colour = colorCI)) +
+		geom_line(data = dCi, aes(x = theoretical, y = ciL, colour = colorCI))
+
 	p
 }
 
@@ -240,20 +299,41 @@ plot_grid_grid = function(plots, coords) {
 	});
 }
 
-plot_grid_base = function(plots, coords, envirPlotVar = 'plot') {
+plot_error = function(msg, errN = 10) {
+	plot(1:errN, type = 'n', xlab = '', ylab = '', axes = FALSE, frame.plot = FALSE);
+	text(errN/2, errN/2, msg);
+}
+
+plot_grid_base = function(plots, coords, envirPlotVar = 'plot', verbose = F, errN = 10) {
 	# <p> do plotting
 	coordMat0 = matrix(0, nrow = max(coords[, 1]), ncol = max(coords[, 2]));
-	coordMat = matrix.assign(coordMat0, coords, 1:length(plots));
+	coordMat = matrix.assign(coordMat0, coords, 1:prod(dim(coordMat0)));
 	layout(coordMat);
 
 	sapply(1:length(plots), function(i) {
-		eval(get(envirPlotVar, plots[[i]]));
+		if (verbose) LogS(2, 'plot_grid#: %{i}d');
+		this = try({
+			switch(class(plots[[i]]),
+				environment = eval(get(envirPlotVar, plots[[i]])),
+				`function` = do.call(plots[[i]], list()),
+				eval(plots[[i]]))
+		});
+		if (class(this) == 'try-error') plot_error(this)
 	});
 # 			if (is.environment(plots[[i]])) eval(get(envirPlotVar, plots[[i]])) else print(plots[[i]]);
 }
 
+# plot_grid(list(
+# 	quote(plot(t0, col = d$sex)),
+# 	quote(plot(pca0$x[, 1:2], col = d$sex)),
+# 	function() {
+# 		plot(1:10, type = 'n', xlab = '', ylab = '');
+# 		text(5, 5, join(c(Sprintf('Family: %{myFid}d'), pedPed), "\n")) }
+# ), nrow = 2);
+# plot_save(plts, file = .fn('tsne-pca', 'pdf'));
 
-plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar = 'plot') {
+
+plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar = 'plot', verbose = F) {
 	if (missing(nrow)) {
 		if (missing(ncol)) {
 			ncol = 1;
@@ -266,14 +346,16 @@ plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar =
 	coords = if (is.null(mapper))
 		merge.multi(1:nrow, 1:ncol, .first.constant = byrow) else
 		mapper(1:length(plots));
-		
-	if (is.environment(plots[[1]]))
-		plot_grid_base(plots, coords, envirPlotVar) else
-		plot_grid_grid(plots, coords)
+
+	switch(class(plots[[1]]),
+		viewport = plot_grid_grid(plots, coords),
+		plot_grid_base(plots, coords, envirPlotVar, verbose = verbose)
+	);
 }
 
 plot_grid_to_path =  function(plots, ..., path,
-	width = valueU(21, 'cm'), height = valueU(29.7, 'cm'), NperPage = NULL, pdfOptions = list(paper = 'a4')) {
+	width = valueU(21, 'cm'), height = valueU(29.7, 'cm'), NperPage = NULL, pdfOptions = list(paper = 'a4'),
+	verbose = F) {
 
 	if (class(width) == 'numeric') width = valueU(width, 'inch');
 	if (class(height) == 'numeric') height = valueU(height, 'inch');
@@ -293,8 +375,9 @@ plot_grid_to_path =  function(plots, ..., path,
 	), pdfOptions);
 	do.call(pdf, pdfArgs);
 
-	lapply(pages, function(plotIdcs) {
-		plot_grid(plots[plotIdcs], ...);
+	ilapply(pages, function(plotIdcs, i) {
+		if (verbose) LogS(2, 'Plotting page: %{i}d');
+		plot_grid(plots[plotIdcs], ..., verbose = verbose);
 	});
 
 	dev.off();
@@ -310,7 +393,7 @@ plot_adjacent = function(fts, factor, N = ncol(fts)) {
 }
 
 plot_grid_pdf = function(plots, file, nrow, ncol, NperPage, byrow = T, mapper = NULL,
-	pdfOptions = list(paper = 'a4')) {
+	pdfOptions = list(paper = 'a4'), verbose = F) {
 	Nplots = length(plots);
 	if (missing(nrow)) nrow = NperPage / ncol;
 	if (missing(ncol)) ncol = NperPage / nrow;
@@ -319,9 +402,10 @@ plot_grid_pdf = function(plots, file, nrow, ncol, NperPage, byrow = T, mapper = 
 
 	do.call(pdf, c(list(file = file), pdfOptions));
 	sapply(1:Npages, function(i) {
+		if (verbose) LogS(2, 'Plotting page: %{i}d');
 		Istrt = (i - 1) * NperPage + 1;
 		Istop = min(i * NperPage, Nplots);
-		plot_grid(plots[Istrt:Istop], nrow, ncol, byrow = byrow, mapper = mapper);
+		plot_grid(plots[Istrt:Istop], nrow, ncol, byrow = byrow, mapper = mapper, verbose = verbose);
 	});
 	dev.off();
 }
@@ -591,6 +675,16 @@ Device = function(type, plot_path, width, height, ..., units = 'cm', dpi = NA, a
 # if unit_out is from a class beginning with unitDpi, produce a resolution argument correpsonding
 #	to that many dpi
 
+plot_draw = function(object, envir) {
+	ret = if (any(class(object) == 'grob')) {
+		grid.draw(object)
+	} else if (any(class(object) %in% c('ggplot', 'plot'))) {
+		print(object)
+	} else {
+		eval(object, envir = envir);
+	}
+}
+
 plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	type = NULL, options = list(), unit = 'cm', unit_out = NULL, autoScale = FALSE, envir = parent.frame()) {
 
@@ -605,13 +699,14 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	Device(type, plot_path, width = width, height = height, units = 'cm', dpi = dpi, ...,
 		autoScale = autoScale);
 		#ret = eval(object, envir = envir);
-		ret = if (any(class(object) == 'grob')) {
-			grid.draw(object)
-		} else if (any(class(object) %in% c('ggplot', 'plot'))) {
-			print(object)
-		} else {
-			eval(object, envir = envir);
-		}
+# 		ret = if (any(class(object) == 'grob')) {
+# 			grid.draw(object)
+# 		} else if (any(class(object) %in% c('ggplot', 'plot'))) {
+# 			print(object)
+# 		} else {
+# 			eval(object, envir = envir);
+# 		}
+		ret = plot_draw(object, envir = envir);
 	dev.off();
 }
 
@@ -624,7 +719,7 @@ plotSizes = list(
 );
 #
 #	Examples:
-#	plot_save(c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
+#	plot_save(object, c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
 plot_typeMap = list(jpg = 'jpeg');
 plot_save = function(object, ..., size, width, height, plot_path = NULL,
 	type = NULL,

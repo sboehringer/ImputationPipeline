@@ -90,7 +90,7 @@ postGWASdoAll = function(exportPath = 'results/export/clean', optionsFile = opti
 
 createPipelineRaw = function(exportPath = 'results/export/clean', optionsFile = optionsFile, run = 'R03',
 	extraInterpolation = list(),
-	files = Sprintf('%{prefix}s%{file}s', file = c('.bim', '.bed', '.fam', '.pipe')),
+	files = Sprintf('%{exportPath}s%{file}s', file = c('.bim', '.bed', '.fam', '.pipe')),
 	templatePath = 'gwas/gwasImputationTemplate.pipe', remotePath = NULL,
 	doRunPipeline = FALSE, doTransferPipeline = TRUE) {
 	writePipeFile(exportPath, optionsFile = optionsFile, run = run,
@@ -113,7 +113,7 @@ imputationFetchResult = function(exportPath, optionsFile, run = 'R03') {
 exportCleanedData = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
 	noMDS = FALSE) {
 	# <p> initialize
-	Dir.create(prefix, treatPathAsFile = T);
+	Dir.create(prefix, treatPathAsFile = T, recursive = T);
 	o = gwasInitialize(optionsFile, run = run)$options;
 
 	# <p> plink file
@@ -155,7 +155,12 @@ exportIndividualsForModels = function(models, output = 'results/export/individua
 	lapply(models, exportIndividualsForModel, output = output)
 }
 
-testTypes = list(glmBin = 'applyLogisticPerSnp', glmSurv = 'applyCoxPerSnp', glmOrd = NULL);
+testTypes = list(
+	glmBin = 'applyLogisticPerSnp',
+	glmSurv = 'applyCoxPerSnp',
+	glmLm = 'applyLmPerSnp',
+	glmOrd = NULL
+);
 
 pipelineModels = function(models) {
 	r = ilapply(models, function(m, i) {
@@ -360,9 +365,10 @@ postGWASsnpSelection = function(snps, exportPath = 'results/export/clean', optio
 		postfix = postfix, templatePath = 'gwas/gwasSnpSelectionTemplate.pipe');
 }
 
+# fam: data frame with ped (plink) file; otherwise a try to read from local file is made
 postGWASsnpSelectionRead = function(exportPath = 'results/export/clean', optionsFile, run = 'R03',
 	postfix = 'selection-top', imputationFileIdColumns = c('snpId', 'snp', 'posPhy', 'A1', 'A2'),
-	remotePath = NULL) {
+	remotePath = NULL, fam = NULL) {
 
 	rd = pipelineGetResultDir(splitPath(exportPath)$path, optionsFile, run,
 		postfix = Sprintf('-%{postfix}s-%{run}s'),
@@ -377,7 +383,9 @@ postGWASsnpSelectionRead = function(exportPath = 'results/export/clean', options
 	});
 
 	# <p> fam file
-	fam = readTable(Sprintf('[SEP=S,HEADER=F,NAMES=fid;iid;pid;fid;y]:%{exportPath}s.fam'), autodetect = F);
+	if (is.null(fam))
+		fam = readTable(Sprintf('[SEP=S,HEADER=F,NAMES=fid;iid;pid;fid;y]:%{exportPath}s.fam'),
+			autodetect = F);
 	# <p> read remote pathes
 	dataSnps = lapply(pl1, function(file) {
 		fileRemote = splitPath(file$genotypes$name)$file;
@@ -444,3 +452,71 @@ postGWASwriteSnpSelectionData = function(dataSnps, exportPath, optionsFile, run 
 	r
 }
 
+#
+#	<p> other helpers
+#
+
+# read fam file from imputation dir
+# assume that the pipe file has the same name as the directory <!>
+readFamFileFromRemotePath = function(remotePath) {
+	# <p> get input prefix
+	sp = splitPath(remotePath, ssh = T);
+	command = with(sp, Sprintf(con(
+		"pipeline.pl --print-parameters %{file}s.pipe 2>&1 | ",
+		"perl -ne 'print $1 if (m{^G:PipeInput\\s+(.*)}m)'"
+	)));
+	famPrefix = System(command, 1, patterns = c('cwd', 'ssh'),
+		ssh_host = sp$userhost, cwd = sp$path, return.output = T)$output;
+	# <p> path to fam-file
+	famPath = Sprintf(con(
+		'[HEADER=F,SEP=S,NAMES=fid;id;pid;mid;sex;affected]:',
+		'%{remotePath}s/%{famPrefix}s.fam'));
+	# <p> read file
+	fam = readTable(famPath, ssh = T);
+}
+
+
+#
+#	<p> export data
+#
+
+# Novershoot: maximal expected number of SNPs in region
+# Nregion: def of physical size of region
+snpDataTopHits = function(optionsFile, model = 1, run = 'R03', Ntop = 1, Novershoot = 30, Nregion = 3e4,
+	sizeExtract = 5e4) {
+	# <p> initialization
+	#snps = postGWAStopSNPs(imputationPrefix, optionsFile, run = 'R03');
+	i = gwasInitialize(optionsFile, run = run);
+	o = gwasReadOptionsFile(optionsFile, run = run);
+	d = gwasReadVariables(o, genotyped = TRUE);
+	mds = expandedModelsData(d, o);
+
+	# <p> read associations
+	assFile = exportFileName(o, analysisTag(mds[[model]]$model), 'snpAssociations.csv', mkdir = F);
+	ass = readTable(assFile);
+
+	# <p> extract top regions
+	assTop = ass[order(ass$P)[1:(Ntop*Novershoot)], ];
+	for (i in 1:Ntop) {
+		if (nrow(assTop) <= i) break;
+		phyDiff = abs(assTop$posPhy - assTop$posPhy[i]);
+		sel = (assTop$chr == assTop$chr[i] & phyDiff > 0 & phyDiff < Nregion);
+		assTop = assTop[!sel, , drop = F];
+	}
+	if (nrow(assTop) > Ntop) assTop = assTop[1:Ntop, , drop = F];
+
+	# <p> ranges around top regions
+	ranges = lapply(1:nrow(assTop), function(i) with(assTop[i, ],
+		Df(region = i, plinkRangeAroundSnp(o, marker, sizeExtract))
+	));
+	ranges = unique(do.call(rbind, ranges)[, c('region', 'chr', 'id', 'mapPhy')]);
+
+	# <p> exclusions
+	e = readExclusions(o);
+	rangesClean = ranges[!(ranges$id %in% e$markers), , drop = F];
+
+	# <p> read genotypes
+	gts = readPlinkBed(o$input, rangesClean$id, usePedIid = TRUE);
+	gtsClean = gts[!(row.names(gts) %in% e$individuals), , drop = F];
+	gtsClean
+}

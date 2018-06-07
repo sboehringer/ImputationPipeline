@@ -15,4 +15,5 @@ G:Shapeit				PrephasedShapeit:imputationPrephased
 
 # <p> Inputs
 G:PipelineInput			PREFIX
+G:PipeInput				G:PipelineInput
 G:referencePanel		REFPANEL

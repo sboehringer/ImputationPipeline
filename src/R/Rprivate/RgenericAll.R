@@ -1,4 +1,611 @@
 #
+#	Rmeta.R
+#Wed Jun  3 15:11:27 CEST 2015
+#Mon 27 Jun 2005 10:49:06 AM CEST
+#system("~/src/Rprivate/exportR.sh");
+#system("~/src/Rprivate/exportR.sh"); source("RgenericAllRaw.R"); source("Rgenetics.R"); loadLibraries();
+#system('. ~/src/Rprivate/exportR.sh ; cp ~/src/Rprivate/RgenericAllRaw.R .');
+
+#
+#	<p> Meta-helpers
+#
+
+#
+#	level dependend logging
+# moved from Rsystem.R to break dependency cylce (22.3.2017)
+#Global..Log..Level = 4;
+#Default..Log..Level = 4;
+#assign(Default..Log..Level, 4, envir = .GlobalEnv);
+Log_env__ <- new.env();
+assign('DefaultLogLevel', 4, envir = Log_env__);
+
+#' Log a message to stderr.
+#' 
+#' Log a message to stderr. Indicate a logging level to control verbosity.
+#' 
+#' This function prints a message to stderr if the condition is met that a
+#' global log-level is set to greater or equal the value indicated by
+#' \code{level}. \code{Log.level} returns the current logging level.
+#' 
+#' @aliases Log Log.setLevel Log.level
+#' @param o Message to be printed.
+#' @param level If \code{Log.setLevel} was called with this value, subsequent
+#' calls to \code{Log} with values of \code{level} smaller or equal to this
+#' value will be printed.
+#' @author Stefan Böhringer <r-packages@@s-boehringer.org>
+#' @seealso \code{\link{Log.setLevel}}, ~~~
+#' @keywords ~kwd1 ~kwd2
+#' @examples
+#' 
+#' 	Log.setLevel(4);
+#' 	Log('hello world', 4);
+#' 	Log.setLevel(3);
+#' 	Log('hello world', 4);
+#' 
+Log = function(o, level = get('DefaultLogLevel', envir = Log_env__), doPrint = NULL) {
+	if (level <= get('GlobalLogLevel', envir = Log_env__)) {
+		cat(sprintf("R %s: %s\n", date(), as.character(o)));
+		if (!is.null(doPrint)) print(doPrint);
+	}
+}
+Logs = function(o, level = get('DefaultLogLevel', envir = Log_env__), ..., envir = parent.frame()) {
+	Log(Sprintf(o, ..., envir = envir), level = level);
+}
+LogS = function(level, s, ..., envir = parent.frame()) {
+	Log(Sprintf(s, ..., envir = envir), level = level);
+}
+
+Log.level = function()get('GlobalLogLevel', envir = Log_env__);
+Log.setLevel = function(level = get('GlobalLogLevel', envir = Log_env__)) {
+	assign("GlobalLogLevel", level, envir = Log_env__);
+}
+Log.setLevel(4);	# default
+
+
+#
+#	<p> Meta-functions
+#
+
+#
+#		Environments
+#
+
+# copy functions code adapted from restorepoint R package
+object.copy = function(obj) {
+	# Dealing with missing values
+	if (is.name(obj)) return(obj);
+	obj_class = class(obj);
+
+	copy =
+		if ('environment' %in% obj_class) environment.copy(obj) else
+		if (all('list' == class(obj))) list.copy(obj) else
+		#if (is.list(obj) && !(is.data.frame(obj))) list.copy(obj) else
+		obj;
+	return(copy)
+}
+list.copy = function(l)lapply(l, object.copy);
+environment.restrict = function(envir__, restrict__= NULL) {
+	if (!is.null(restrict__)) {
+		envir__ = as.environment(List_(as.list(envir__), min_ = restrict__));
+	}
+	envir__
+}
+environment.copy = function(envir__, restrict__= NULL) {
+	as.environment(eapply(environment.restrict(envir__, restrict__), object.copy));
+}
+
+bound_vars = function(f, functions = F) {
+	fms = formals(f);
+	# variables bound in default arguments
+	vars_defaults = unique(unlist(sapply(fms, function(e)all.vars(as.expression(e)))));
+	# variables used in the body
+	vars_body = setdiff(all.vars(body(f)), names(fms));
+	vars = setdiff(unique(c(vars_defaults, vars_body)), c('...', '', '.GlobalEnv'));
+	if (functions) {
+		vars = vars[!sapply(vars, function(v)is.function(rget(v, envir = environment(f))))];
+	}
+	vars
+}
+bound_fcts_std_exceptions = c('Lapply', 'Sapply', 'Apply');
+bound_fcts = function(f, functions = F, exceptions = bound_fcts_std_exceptions) {
+	fms = formals(f);
+	# functions bound in default arguments
+	fcts_defaults = unique(unlist(sapply(fms, function(e)all.vars(as.expression(e), functions = T))));
+	# functions bound in body
+	fcts = union(fcts_defaults, all.vars(body(f), functions = T));
+	# remove variables
+	#fcts = setdiff(fcts, c(bound_vars(f, functions), names(fms), '.GlobalEnv', '...'));
+	fcts = setdiff(fcts, c(bound_vars(f, functions = functions), names(fms), '.GlobalEnv', '...'));
+	# remove functions from packages
+	fcts = fcts[
+		sapply(fcts, function(e) {
+			f_e = rget(e, envir = environment(f));
+			!is.null(f_e) && environmentName(environment(f_e)) %in% c('R_GlobalEnv', '') && !is.primitive(f_e)
+	})];
+	fcts = setdiff(fcts, exceptions);
+	fcts
+}
+
+
+environment_evaled = function(f, functions = FALSE, recursive = FALSE) {
+	vars = bound_vars(f, functions);
+	e = nlapply(vars, function(v) rget(v, envir = environment(f)));
+	#Log(sprintf('environment_evaled: vars: %s', join(vars, ', ')), 7);
+	#Log(sprintf('environment_evaled: functions: %s', functions), 7);
+	if (functions) {
+		fcts = bound_fcts(f, functions = TRUE);
+		fcts_e = nlapply(fcts, function(v){
+			#Log(sprintf('environment_evaled: fct: %s', v), 7);
+			v = rget(v, envir = environment(f));
+			#if (!(environmentName(environment(v)) %in% c('R_GlobalEnv')))
+			v = environment_eval(v, functions = TRUE);
+		});
+		#Log(sprintf('fcts: %s', join(names(fcts_e))));
+		e = c(e, fcts_e);
+	}
+	#Log(sprintf('evaled: %s', join(names(e))));
+	r = new.env();
+	lapply(names(e), function(n)assign(n, e[[n]], envir = r));
+	#r = if (!length(e)) new.env() else as.environment(e);
+	parent.env(r) = .GlobalEnv;
+	#Log(sprintf('evaled: %s', join(names(as.list(r)))));
+	r
+}
+environment_eval = function(f, functions = FALSE, recursive = FALSE) {
+	environment(f) = environment_evaled(f, functions = functions, recursive = recursive);
+	f
+}
+
+#
+#	Parsing, evaluation
+#
+
+Parse = function(text, ...) {
+	parse(text = text, ...)
+}
+Eval = function(e, ..., envir = parent.frame(), autoParse = T) {
+	if (autoParse && is.character(e)) e = Parse(e, ...);
+	eval(e, envir = envir)
+	
+}
+
+#
+#		Freeze/thaw
+#
+
+delayed_objects_env = new.env();
+delayed_objects_attach = function() {
+	attach(delayed_objects_env);
+}
+delayed_objects_detach = function() {
+	detach(delayed_objects_env);
+}
+
+thaw_list = function(l)lapply(l, thaw_object, recursive = T);
+thaw_environment = function(e) {
+	p = parent.env(e);
+	r = as.environment(thaw_list(as.list(e)));
+	parent.env(r) = p;
+	r
+}
+
+# <i> sapply
+thaw_object_internal = function(o, recursive = T, envir = parent.frame()) {
+	r = 		 if (class(o) == 'ParallelizeDelayedLoad') thaw(o) else
+	#if (recursive && class(o) == 'environment') thaw_environment(o) else
+	if (recursive && class(o) == 'list') thaw_list(o) else o;
+	r
+}
+
+thaw_object = function(o, recursive = T, envir = parent.frame()) {
+	if (all(search() != 'delayed_objects_env')) delayed_objects_attach();
+	thaw_object_internal(o, recursive = recursive, envir = envir);
+}
+
+#
+#	<p> backend classes
+#
+
+setGeneric('thaw', function(self, which = NA) standardGeneric('thaw'));
+
+setClass('ParallelizeDelayedLoad',
+	representation = list(
+		path = 'character'
+	),
+	prototype = list(path = NULL)
+);
+setMethod('initialize', 'ParallelizeDelayedLoad', function(.Object, path) {
+	.Object@path = path;
+	.Object
+});
+
+setMethod('thaw', 'ParallelizeDelayedLoad', function(self, which = NA) {
+	if (0) {
+	key = sprintf('%s%s', self@path, ifelse(is.na(which), '', which));
+	if (!exists(key, envir = delayed_objects_env)) {
+		Log(sprintf('Loading: %s; key: %s', self@path, key), 4);
+		ns = load(self@path);
+		object = get(if (is.na(which)) ns[1] else which);
+		assign(key, object, envir = delayed_objects_env);
+		gc();
+	} else {
+		#Log(sprintf('Returning existing object: %s', key), 4);
+	}
+	#return(get(key, envir = delayed_objects_env));
+	# assume delayed_objects_env to be attached
+	return(as.symbol(key));
+	}
+
+	delayedAssign('r', {
+		gc();
+		ns = load(self@path);
+		object = get(if (is.na(which)) ns[1] else which);
+		object
+	});
+	return(r);
+});
+
+RNGuniqueSeed = function(tag) {
+	if (exists('.Random.seed')) tag = c(.Random.seed, tag);
+	md5 = md5sumString(join(tag, ''));
+	r = list(
+		kind = RNGkind(),
+		seed = hex2int(substr(md5, 1, 8))
+	);
+	r
+}
+
+RNGuniqueSeedSet = function(seed) {
+	RNGkind(seed$kind[1], seed$kind[2]);
+	#.Random.seed = freeze_control$rng$seed;
+	set.seed(seed$seed);
+}
+
+FreezeThawControlDefaults = list(
+	dir = '.', sourceFiles = c(), libraries = c(), objects = c(), saveResult = T,
+	freeze_relative = F, freeze_ssh = T, logLevel = Log.level()
+);
+
+thawCall = function(
+	freeze_control = FreezeThawControlDefaults,
+	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag)) {
+
+	load(freeze_file, envir = .GlobalEnv);
+	r = with(callSpecification, {
+		for (library in freeze_control$libraries) {
+			eval(parse(text = sprintf('library(%s)', library)));
+		}
+		for (s in freeze_control$sourceFiles) source(s, chdir = T);
+		Log.setLevel(freeze_control$logLevel);
+		if (!is.null(freeze_control$rng)) RNGuniqueSeed(freeze_control$rng);
+
+		if (is.null(callSpecification$freeze_envir)) freeze_envir = .GlobalEnv;
+		# <!> freeze_transformation must be defined by the previous source/library calls
+		transformation = eval(parse(text = freeze_control$thaw_transformation));
+		r = do.call(eval(parse(text = f)), transformation(args), envir = freeze_envir);
+		#r = do.call(f, args);
+		if (!is.null(freeze_control$output)) save(r, file = freeze_control$output);
+		r
+	});
+	r
+}
+
+frozenCallWrap = function(freeze_file, freeze_control = FreezeThawControlDefaults,
+	logLevel = Log.level(), remoteLogLevel = logLevel)
+	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
+	sp = splitPath(freeze_file, ssh = freeze_ssh);
+	file = if (freeze_relative) sp$file else sp$path;
+	#wrapperPath = sprintf("%s-wrapper.RData", splitPath(file)$fullbase);
+	r = sprintf("R.pl --template raw --no-quiet --loglevel %d --code 'eval(get(load(\"%s\")[[1]]))' --",
+		logLevel, file);
+	r
+})
+
+frozenCallResults = function(file) {
+	callSpecification = NULL;	# define callSpecification
+	load(file);
+	get(load(callSpecification$freeze_control$output)[[1]]);
+}
+
+freezeCallEncapsulated = function(call_,
+	freeze_control = FreezeThawControlDefaults,
+	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
+	freeze_save_output = F, freeze_objects = NULL, thaw_transformation = identity)
+	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
+
+	sp = splitPath(freeze_file, ssh = freeze_ssh);
+	outputFile = if (freeze_save_output)
+		sprintf("%s_result.RData", if (freeze_relative) sp$base else sp$fullbase) else
+		NULL;
+
+	callSpecification = list(
+		f = deparse(call_$fct),
+		#f = freeze_f,
+		args = call_$args,
+		freeze_envir = if (is.null(call_$envir)) new.env() else call_$envir,
+		freeze_control = list(
+			sourceFiles = sourceFiles,
+			libraries = libraries,
+			output = outputFile,
+			rng = freeze_control$rng,
+			logLevel = freeze_control$logLevel,
+			thaw_transformation = deparse(thaw_transformation)
+		)
+	);
+	thawFile = if (freeze_relative) sp$file else sp$path;
+	callWrapper = call('thawCall', freeze_file = thawFile);
+	#Save(callWrapper, callSpecification, thawCall, file = file);
+	#Save(c('callWrapper', 'callSpecification', 'thawCall', objects),
+	#	file = freeze_file, symbolsAsVectors = T);
+	#Save(c(c('callWrapper', 'callSpecification', 'thawCall'), objects),
+	Save(c('callWrapper', 'callSpecification', 'thawCall', freeze_objects),
+		file = freeze_file, symbolsAsVectors = T);
+	freeze_file
+})
+
+# <!> assume matched call
+# <A> we only evaluate named args
+callEvalArgs = function(call_, env_eval = FALSE) {
+	#if (is.null(call_$envir__) || is.null(names(call_$args))) return(call_);
+	#if (is.null(call_$envir) || !length(call_$args)) return(call_);
+
+	# <p> evaluate args
+	if (length(call_$args)) {
+		args = call_$args;
+		callArgs = lapply(1:length(args), function(i)eval(args[[i]], envir = call_$envir));
+		# <i> use match.call instead
+		names(callArgs) = setdiff(names(call_$args), '...');
+		call_$args = callArgs;
+	}
+
+	if (env_eval) {
+		call_$fct = environment_eval(call_$fct, functions = FALSE, recursive = FALSE);
+	}
+	# <p> construct return value
+	#callArgs = lapply(call_$args, function(e){eval(as.expression(e), call_$envir)});
+	call_
+}
+
+#callWithFunctionArgs = function(f, args, envir__ = parent.frame(), name = NULL) {
+callWithFunctionArgs = function(f__, args__, envir__ = environment(f__), name = NULL, env_eval = FALSE) {
+	if (env_eval) f = environment_eval(f__, functions = FALSE, recursive = FALSE);
+	call_ = list(
+		fct = f__,
+		envir = environment(f__),
+		args = args__,
+		name = name
+	);
+	call_
+}
+
+freezeCall = function(freeze_f, ...,
+	freeze_control = FreezeThawControlDefaults,
+	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
+	freeze_save_output = F, freeze_envir = parent.frame(), freeze_objects = NULL, freeze_env_eval = F,
+	thaw_transformation = identity) {
+
+	# args = eval(list(...), envir = freeze_envir)
+	call_ = callWithFunctionArgs(f = freeze_f, args = list(...),
+		envir__ = freeze_envir, name = as.character(sys.call()[[2]]), env_eval = freeze_env_eval);
+
+	freezeCallEncapsulated(call_,
+		freeze_control = freeze_control, freeze_tag = freeze_tag,
+		freeze_file = freeze_file, freeze_save_output = freeze_save_output, freeze_objects = freeze_objects,
+		thaw_transformation = thaw_transformation
+	);
+}
+
+
+encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate_args__ = FALSE,
+	unbound_functions = F) {
+	# function body of call
+	name = as.character(.call[[1]]);
+	fct = get(name);
+	callm = if (!is.primitive(fct)) {
+		callm = match.call(definition = fct, call = .call);
+		as.list(callm)[-1]
+	} else as.list(.call)[-1];
+	args = if (do_evaluate_args__) {
+		nlapply(callm, function(e)eval(callm[[e]], envir = envir__))
+	} else nlapply(callm, function(e)callm[[e]])
+	# unbound variables in body fct
+	#unbound_vars = 
+
+	call_ = list(
+		fct = fct,
+		envir = envir__,
+
+		#args = as.list(sys.call()[[2]])[-1],
+		args = args,
+
+		name = name
+	);
+	call_
+}
+
+#
+# compact saving for delayed loading
+#
+# <i> make 
+# object: list with single element
+freezeObject = function(object, env) {
+	dir = attr(env, 'path');
+	name = names(object);
+	file = Sprintf('%{dir}s/%{name}s.Rdata');
+print(file);
+	save(list = name, envir = as.environment(object), file = file);
+	eval(substitute(delayedAssign(OBJECT, get(load(file = FILE)[1])),
+		list(OBJECT = name, FILE = file)), envir = env);
+}
+freezeObjectsList = function(objects, pos = 2, parent = parent.frame(), freezeObjectDir = NULL) {
+	td = firstDef(freezeObjectDir, tempdir());
+	env = new.env(parent = parent);
+	attr(env, "path") = td;
+
+	if (any(names(objects) == '')) stop('Only named objects can be frozen. Check for naming conflicts.');
+	#n = names(objects) == '';
+	#if (sum(n) > 0) names(objects)[n] = paste('ARG_ANON__', 1:sum(n), sep = '');
+	nlapply(objects, function(n)freezeObject(objects[n], env = env));
+	env
+}
+freezeObjects = function(..., pos = 2, parent = parent.frame(), freezeObjectDir = NULL) {
+	freezeObjectsList(list(...), pos = pos, parent, freezeObjectDir)
+}
+
+#
+#	</p> freeze/thaw functions
+#
+
+Deparse = function(o)join(deparse(o));
+#
+#	Rmeta-classes.R
+#Wed May 17 17:53:44 2017
+#
+# split of classes from Rmeta.R to avoid warnings from pullins
+
+#
+#	<p> delayed loading for matrix-like data structures
+#
+
+# missing2null
+#	needed to work around callSuper's refusal to pass missing arguments
+m2n = function(e)(if (missing(e)) NULL else e)
+
+DelayedDataRefClass = setRefClass('DelayedDataRef',
+	fields = list(
+		# heuristics to correct numerical index
+		'initialIndex' = 'list',
+		'Data' = 'ANY'
+	),
+	methods = list(
+
+	initialize = function(vivifier, ...) {
+		.self
+	},
+	vivify = function(i, j, ...) {
+		initialIndex <<- list(i = m2n(i)[1], j = m2n(j)[1]);
+	},
+	correctIndexI = function(i) { i },
+	correctIndexJ = function(j) { j },
+	at = function(i, j, ..., drop = TRUE) {
+		if (class(Data) == 'uninitializedField') .self$vivify(i, j, ...);
+		# <!> only handles two dimensional case
+		# <!> does not cover all corner cases
+		# <i> correct index, if numeric, if necessary
+		if (!missing(i) && is.numeric(i)) i = correctIndexI(i);
+		if (!missing(j) && is.numeric(j)) j = correctIndexJ(j);
+
+		# can we fetch requested values; assume all indexed values present?
+		if ((!missing(i) && (
+				(is.numeric(i) && any(abs(i) > nrow(Data))) ||
+				(is.character(i) && !all(i %in% dimnames(Data)[[1]]))
+			)) ||
+			(!missing(j) && (
+				(is.numeric(j) && any(abs(j) > ncol(Data))) ||
+				(is.character(j) && !all(j %in% dimnames(Data)[[2]]))
+			))) {
+			stop('delayed object could not provide requested values');
+		}
+		# <i> re-vivify
+		r = Data[i, j, ..., drop = drop];
+		r
+	},
+	# <A> assumes complete vivification as in load
+	el = function(i, j, ..., exact = TRUE) {
+		if (class(Data) == 'uninitializedField') .self$vivify(i, j, ...);
+		# <i> re-vivify
+		r = if (missing(j))
+			Data[[i, ..., exact = exact]] else
+			Data[[i, j, ..., exact = exact]];
+		r
+	}
+
+
+	)
+);
+DelayedDataRefClass$accessors(names(DelayedDataRefClass$fields()));
+
+DelayedDataLookupClass = setRefClass('DelayedDataLookup',
+	fields = list(
+		'path' = 'character',
+		'lookup' = 'logical'
+	),
+	contains = 'DelayedDataRef',
+	methods = list(
+
+	initialize = function(path, lookup = TRUE, ...) {
+		callSuper(...);
+		.self$initFields(path = path, lookup = lookup);
+		.self
+	},
+	vivify = function(i, j, ..., logLevel__ = 4) {
+		callSuper(i, j, ...);
+		# this depends on package parallelize.dynamic
+		if (lookup) {
+			path0 = path;
+			path <<- parallelize_lookup(path);
+			Logs('Vivifying name "%{path0}s" from "%{path}s"', logLevel = logLevel__);
+		}
+	}
+
+	)
+);
+DelayedDataLookupClass$accessors(names(DelayedDataLookupClass$fields()));
+
+# collapse: on access, remove all other keys and garbage collect
+# <i> extract elements from list
+loadVivifierDefaultOptions = list(collapse = FALSE);
+
+DelayedDataLoadClass = setRefClass('DelayedDataLoad',
+	fields = list(
+		options = 'list',
+		'transform' = 'function'
+	),
+	contains = 'DelayedDataLookup',
+	methods = list(
+
+	initialize = function(path, lookup = TRUE, options = list(), ...) {
+		callSuper(path, lookup, ...);
+		.self$initFields(options = options);
+		.self
+	},
+	vivify = function(i, j, ..., exact = TRUE, logLevel__ = 4) {
+		callSuper(...);
+		o = merge.lists(loadVivifierDefaultOptions, options);
+		Logs("Vivifying generic Rdata path '%{path}q'", level = logLevel__);
+		Data <<- get(load(path)[1]);
+		# if not null function: notE(body(function()NULL)) == FALSE
+		if (notE(body(transform))) Data <<- transform(Data);
+	}
+	)
+);
+DelayedDataLoadClass$accessors(names(DelayedDataLoadClass$fields()));
+
+setClass('DelayedData', representation(ref = 'DelayedDataRef'));
+setMethod('initialize', 'DelayedData', function(.Object, ref) {
+	.Object = callNextMethod(.Object);
+	.Object@ref = ref;
+	.Object
+});
+DelayedDataAt = function(x, i, j, ..., drop = TRUE)x@ref$at(i, j, ..., drop = drop)
+DelayedDataEl = function(x, i, j, ..., exact = TRUE)x@ref$el(i, j, ..., exact = exact)
+DelayedDataNm = function(x, name)x@ref$el(name, exact = FALSE)
+setMethod('[', signature('DelayedData', 'ANY', 'ANY', 'ANY'), DelayedDataAt);
+# findMethods("[[")
+setMethod('[[', signature('DelayedData', 'ANY', 'ANY'), DelayedDataEl);
+# findMethods("$")
+setMethod('$', signature('DelayedData'), DelayedDataNm);
+
+delayedLoadFromPath = function(name, transform = NULL, ..., logLevel = 4, class = 'DelayedDataLoad') {
+	ref = new(class,  path = name, lookup = T, transform = transform, ...);
+	v = new('DelayedData', ref = ref);
+	v
+}
+
+#
+#	</p> delayed loading
+#
+#
 #	Rlibraries.R
 #Wed Oct 31 19:00:40 CET 2012
 
@@ -10,9 +617,10 @@ loadLibraries = function() {
 #
 #	Rdata.R
 #Mon 27 Jun 2005 10:49:06 AM CEST
-#system("cd ~/src/Rprivate ; ./exportR.sh");
-#system("cd ~/src/Rprivate ; ./exportR.sh"); source("RgenericAll.R"); source("Rgenetics.R"); loadLibraries();
-#system('WD=`pwd` ; cd ~/src/Rprivate ; ./exportR.sh ; cp RgenericAllRaw.R $WD ; cd $WD');
+#system("~/src/Rprivate/exportR.sh");
+#system("~/src/Rprivate/exportR.sh"); source("RgenericAll.R"); source("Rgenetics.R"); loadLibraries();
+#system('~/src/Rprivate/exportR.sh ; cp ~/src/Rprivate/RgenericAllRaw.R .');
+# <!> copied to Rmeta.R as being the first file to be exported by now (26.3.2017)
 
 #
 #	<§> abstract data functions
@@ -20,7 +628,7 @@ loadLibraries = function() {
 
 defined = function(x) exists(as.character(substitute(x)));
 defined.by.name = function(name) { class(try(get(name), silent = T)) != 'try-error' }
-# equivalent to i %in % v
+# equivalent to i %in% v
 is.in = function(i, v)(length((1:length(v))[v == i])>0)
 rget = function(name, default = NULL, ..., pos = -1, envir = as.environment(pos)) {
 	#obj = try(get(name, ...), silent = T);
@@ -63,7 +671,7 @@ avu = function(v, recursive = T, toNA = T) {
 	if (!length(r)) return(NULL);
 	r
 }
-pop = function(v)rev(rev(v)[-1]);
+#pop = function(v)rev(rev(v)[-1]);
 
 assign.list = function(l, pos = -1, envir = as.environment(pos), inherits = FALSE, immediate = TRUE) {
 	for (n in names(l)) {
@@ -72,6 +680,7 @@ assign.list = function(l, pos = -1, envir = as.environment(pos), inherits = FALS
 }
 eval.text = function(text, envir = parent.frame())eval(parse(text = text), envir= envir);
 
+nullomit = function(r)r[!sapply(r, is.null)]
 
 # replace elements base on list
 # l may be a list of lists with elements f (from) and t (to), when f is replaced with t
@@ -128,7 +737,7 @@ mat.sel = function(m, v, dir = 1) {
 }
 
 # rbind on list
-sapplyId = function(l)sapply(l, identity);
+simplify = sapplyId = function(l)sapply(l, identity);
 
 listFind = function(lsed, lsee) {
 	values = sapply(names(lsee), function(n)list.key(lsed, n), simplify = F, USE.NAMES = F);
@@ -147,7 +756,8 @@ same.vector = function(v)all(v == v[1])
 say = function(...)cat(..., "\n");
 printf = function(fmt, ...)cat(sprintf(fmt, ...));
 join = function(v, sep = " ")paste(v, collapse = sep);
-con = function(...)paste(..., sep="");
+con = function(..., Sep_ = '')paste(..., sep = Sep_);
+Con = function(..., Sep_ = '')paste(unlist(list(...)), collapse = Sep_);
 # pastem = function(a, b, ..., revsort = T) {
 # 	if (revsort)
 # 		as.vector(apply(merge(data.frame(a = b), data.frame(b = a), sort = F), 1,
@@ -181,6 +791,20 @@ circumfix = function(s, post = NULL, pre = NULL) {
 }
 abbr = function(s, Nchar = 20, ellipsis = '...') {
 	ifelse(nchar(s) > Nchar, paste(substr(s, 1, Nchar - nchar(ellipsis)), ellipsis, sep = ''), s)
+}
+wrapStr = function(s, Nchar = 60, regex = '\\s+', indent = "\n") {
+	r = '';
+	while (nchar(s) > Nchar) {
+		R = gregexpr('\\s+', s, perl = T);
+		Iws = R[[1]][R[[1]] <= Nchar];
+		Ichr = max(Iws);
+		# <i> handle Ichr = 1
+		r = con(r, substr(s, 1, Ichr - 1), indent);
+		s = substr(s, Ichr + attr(R[[1]], 'match.length')[length(Iws)], nchar(s));
+
+	}
+	r = con(r, s);
+	return(r);
 }
 
 Which.max = function(l, last.max = T, default = NA) {
@@ -349,6 +973,7 @@ MatchRegex = function(re, str, mode = 'return') {
 
 splitString = function(re, str, ..., simplify = T) {
 	l = lapply(str, function(str) {
+		if (is.na(str)) return(NA);
 		r = gregexpr(re, str, perl = T, ...)[[1]];
 		if (r[1] < 0) return(str);
 		l = sapply(1:(length(r) + 1), function(i) {
@@ -358,6 +983,12 @@ splitString = function(re, str, ..., simplify = T) {
 	});
 	if (length(l) == 1 && simplify) l = l[[1]];
 	l
+}
+# modeled after perl's qq
+qw = function(s, re = '\\s+', names = NULL, byrow = T) {
+	r = unlist(splitString(re, s));
+	if (notE(names)) r = Df_(matrix(r, ncol = length(names), byrow = byrow), names = names);
+	r
 }
 quoteString = function(s)sprintf('"%s"', s)
 trimString = function(s) {
@@ -632,6 +1263,20 @@ base2ord = base2dec = function(v, base = 2) {
 
 ord2bin = dec.to.bin = function(number, digits = 5) ord2base(number, digits, base = 2);
 bin2ord = bin.to.dec = function(bin) base2ord(bin, base = 2);
+
+# mixed base calculations
+#sapply(1:length(base), function(i)((n %/% div[i]) %% base[i]));
+cumprod1 = function(v)c(1, cumprod(pop(v)))
+# ord2adic = function(n, base = rep(2, 5)) {
+# 	div = cumprod1(base);
+# 	(n %/% div) %% base
+# }
+# adic2ord = function(v, base = rep(2, 5)) {
+# 	mult = cumprod1(base);
+# 	(v %*% mult)[1, 1]
+# }
+ord2adic = function(n, base = rep(2, 5))((n %/% cumprod1(base)) %% base)
+adic2ord = function(v, base = rep(2, 5))((v %*% cumprod1(base))[1, 1])
 
 #
 #	<Par> sequences
@@ -1017,7 +1662,13 @@ list.kprw = function(l, keys, unlist.pats, template, null2na, carryNames, test) 
 			l[, key]
 		} else if (class(l) %in% c('numeric', 'integer')) {
 			l[key]
-		} else return(template)
+		} else return(template);
+# 		{
+# 			r = template;
+# 			attr(r, 'names') = keys[last(keys)];
+# 			print(c(keys, r));
+# 			return(r);
+# 		}
 	} else {
 		if (length(keys) > 1)
 			lapply(l, function(sl)
@@ -1050,13 +1701,15 @@ list.kprwkp = function(l, keyPath, ...) {
 	r
 }
 
+list.kp.keys = function(keyPath) fetchRegexpr("[^$]+", keyPath);
+
 # wrapper for list.kprw
 # keyPath obeys EL1 $ EL2 $ ..., where ELn is '*' or a literal
 # unlist.pat is pattern of truth values TR1 $ TR2 $..., where TRn is in 'T|F' and specifies unlist actions
 # carryNames determines names to be carried over from the top level in case of unlist
 list.kpr = function(l, keyPath, do.unlist = F, template = NULL,
 	null2na = F, unlist.pat = NULL, carryNames = T, as.matrix = F, test = F) {
-	keys = fetchRegexpr("[^$]+", keyPath);
+	keys = list.kp.keys(keyPath);
 	unlist.pats = if (!is.null(unlist.pat)) as.logical(fetchRegexpr("[^$]+", unlist.pat)) else NULL;
 
 	# parallel keys
@@ -1074,6 +1727,8 @@ list.kp = function(l, keyPath, do.unlist = F, template = NULL, null2na = F, test
 		template = template, null2na = null2na, test = test);
 	r
 }
+
+list.kpu = function(..., do.unlist = T)list.kp(..., do.unlist = do.unlist);
 
 list.keys = function(l, keys, default = NA) {
 	l = as.list(l);
@@ -1094,7 +1749,7 @@ list.min  = function(l, keys) {
 # get apply
 gapply = function(l, key, unlist = F)list.key(l, key, unlist)
 # construct list as a dictionary for given keys and values
-listKeyValue = function(keys, values) {
+listKV = listKeyValue = function(keys, values) {
 	if (length(keys) != length(values))
 		stop("listKeyValue: number of provided keys does not match that of values");
 
@@ -1102,11 +1757,20 @@ listKeyValue = function(keys, values) {
 	names(l) = keys;
 	l
 }
+listNamed = function(l, names)setNames(l, names)
 vectorNamed = function(v, names) {
 	if (length(names) > length(v)) stop("vectorNamed: more names than vector elements");
 	names(v) = names;
 	v
 }
+
+vn = vectorNormed = function(v, type = 'O') {
+	v0 = as.matrix(v);
+	v0n = apply(v0, 2, function(v)norm(as.matrix(v), type = type));
+	r = if (!is.matrix(v)) v/v0n else sapply(1:ncol(v), function(i) v[, i] / v0n[i]);
+	r
+}
+
 #listInverse = function(l)listKeyValue(avu(l), names(l));
 listInverse = function(l, toNA = F) {
 	n = sapply(l, length);
@@ -1150,12 +1814,40 @@ kvlapply = function(l, f, ...) {
 	names(r) = ns;
 	r
 }
-pairsapply = function(l1, l2, f, ...) {
+pairsapply = pairsapplyVL = function(l1, l2, f, ..., simplify = T, USE.NAMES = TRUE) {
 	if (length(l1) != length(l2)) stop('pairsapply: pair of collections of unequal length.');
-	r = sapply(seq_along(l1), function(i)f(l1[i], l2[[i]], ...));
+	r = sapply(seq_along(l1), function(i)f(l1[i], l2[[i]], ...),
+		simplify = simplify, USE.NAMES = USE.NAMES);
+	r
+}
+pairsapplyLV = function(l1, l2, f, ..., simplify = T, USE.NAMES = TRUE) {
+	if (length(l1) != length(l2)) stop('pairsapply: pair of collections of unequal length.');
+	r = sapply(seq_along(l1), function(i)f(l1[[i]], l2[i], ...),
+		simplify = simplify, USE.NAMES = USE.NAMES);
+	r
+}
+pairslapply = function(l1, l2, f, ...) {
+	if (length(l1) != length(l2)) stop('pairlapply: pair of collections of unequal length.');
+	r = lapply(seq_along(l1), function(i)f(l1[[i]], l2[[i]], ...));
 	r
 }
 
+# <i> copy MARGIN handling from apply (aperm)
+lapplyDir = function(m, MARGIN, f_, ..., drop = F) {
+	selector = if (MARGIN == 1)
+		function(m, i)m[i, , drop = drop] else
+		function(m, i)m[, i, drop = drop];
+	setNames(lapply(1:dim(m)[MARGIN], function(i)f_(selector(m, i), ...)), Dimnames(m, MARGIN))
+}
+
+# <!> as matrix to avoid warning
+#lapplyRows = function(m, ...)lapply(split(as.matrix(m), row(m)), ...)
+# lapplyRows = function(m, f_, ..., drop = F)
+# 	setNames(lapply(1:nrow(m), function(i)f_(m[i, , drop = drop], ...), ...), Row.names(m))
+lapplyRows = function(m, f_, ..., drop = F)lapplyDir(m, 1, f_ = f_, ..., drop = drop)
+lapplyCols = function(m, f_, ..., drop = F)lapplyDir(m, 2, f_ = f_, ..., drop = drop)
+
+	
 getElement = function(v, i)if (is.list(v)) v[[i]] else v[i];
 # unify w/ list.takenFrom -> tests
 List.takenFrom = function(listOfLists, v)
@@ -1173,6 +1865,34 @@ tuapply = function(..., fct = Identity, args = list(), names = NULL) {
 	r
 }
 
+undrop2row = function(e)(if (is.vector(e)) matrix(e, ncol = length(e)) else e);
+Lundrop2row = function(l)lapply(l, undrop2row);
+
+undrop2col = function(e)(if (is.vector(e)) matrix(e, nrow = length(e)) else e);
+Lundrop2col = function(l)lapply(l, undrop2col);
+
+ByIndices = function(data, INDICES, USE.NAMES = FALSE) {
+	if (class(INDICES) == 'formula') {
+		rhs = all.vars(formula.rhs(INDICES));
+		INDICES = if (USE.NAMES) Df_(data[, rhs, drop = F], as_character = rhs) else {
+			combs = model_matrix_from_formula(INDICES, data, remove.intercept = length(rhs) > 0)$mm;
+			setNames(lapply(1:ncol(combs), function(i)combs[, i]), names(combs));
+		}
+	} else if (class(INDICES) == 'data.frame') INDICES = Df_(idcs, as_character = names(idcs));
+	INDICES
+}
+
+By = function(data, INDICES, FUN, ..., simplify = TRUE, RBIND = FALSE, USE.NAMES = FALSE, SEP = ':') {
+	idcs = ByIndices(data, INDICES, USE.NAMES);
+	r = by(data, idcs, FUN, ..., simplify = simplify);
+	if (USE.NAMES) {
+		ns = sapply(by(idcs, idcs, unique), join, sep = SEP);
+		names(r) = ns;
+	}
+	if (RBIND) r = do.call(rbind, Lundrop2col(r));
+	r
+}
+
 
 # USE.NAMES logic reversed for sapply
 sapplyn = function(l, f, ...)sapply(l, f, ..., USE.NAMES = F);
@@ -1181,6 +1901,53 @@ list.with.names = function(..., .key = 'name') {
 	ns = names(l);
 	r = nlapply(l, function(n) c(l[[n]], listKeyValue(.key, n)));
 	r
+}
+
+#
+#	<p> names
+#
+
+Row.names = function(o, vivify = T) {
+	rn = row.names(o);
+	if (is.null(rn) && vivify) 1:nrow(o) else rn
+}
+Col.names = function(o, vivify = T) {
+	rn = if (is.matrix(o)) dimnames(o)[[2]] else names(o);
+	if (is.null(rn) && vivify) 1:ncol(o) else rn
+}
+# <i> implement general MARGINs
+Dimnames = function(o, MARGIN, vivify = T) {
+	if (MARGIN == 1) Row.names(o, vivify) else Col.names(o, vivify)
+}
+
+SetNames = function(o, names, rnames, cnames, Dimnames, embed = F) {
+	if (!missing(Dimnames)) dimnames(o) = Dimnames;
+	if (!missing(rnames)) row.names(o) = rnames;
+	if (!missing(cnames)) dimnames(o)[[2]] = cnames;
+	if (!missing(names)) {
+		if (class(o) == 'matrix') {
+			if (embed) dimnames(o)[[2]][seq_along(names)] = names else {
+				ns = if (is.list(names)) vector.replace(dimnames(o)[[2]], names) else names;
+				if (is.null(dimnames(o))) dimnames(o) = list(NULL, ns) else dimnames(o)[[2]] = ns;
+			}
+		} else {
+			if (embed) names(o)[seq_along(names)] = names else {
+				names(o) = if (is.list(names)) vector.replace(names(o), names) else names;
+			}
+		}
+	}
+	o
+}
+
+
+#
+#	<p> attributes
+#
+
+Attr = function(o, plus_, min_ = NULL) {
+	if (!missing(plus_)) for (n in names(plus_)) { attr(o, n) = plus_[[n]]; }
+	if (Nif(min_)) for (a in min_) { attr(o, a) = NULL; }
+	o
 }
 
 #
@@ -1247,7 +2014,8 @@ listOfLists2data.frame = function(l, idColumn = "id", .names = NULL) {
 #	list with named vectors: get data frame that contains all vectors with all possible names represented
 #		listOfDataFrames2data.frame(cfs, colsFromUnion = T, do.transpose = T, idColumn = NULL);
 listOfDataFrames2data.frame = function(l, idColumn = "id", do.unlist = T, direction = rbind,
-	resetColNames = T, colsFromFirstDf = F, colsFromUnion = F, do.transpose = F, idAsFactor = F) {
+	resetColNames = T, colsFromFirstDf = F, colsFromUnion = F, do.transpose = F, idAsFactor = F,
+	row.names = F) {
 	# row names
 	# <!> 2009-11-20 changed from: rows = firstDef(names(l), list(1:length(l)));
 	rows = firstDef(names(l), 1:length(l));
@@ -1287,13 +2055,24 @@ listOfDataFrames2data.frame = function(l, idColumn = "id", do.unlist = T, direct
 	if (!is.null(idColumn)) names(df)[1] = idColumn;
 	if (do.unlist) for (n in names(df)) { df[[n]] = unlist(df[[n]]); }
 	if (idAsFactor) df[[idColumn]] = as.factor(df[[idColumn]]);
-	row.names(df) = NULL;
+	if (!row.names) row.names(df) = NULL;
 	df
 }
 cbindDataFrames = function(l, do.unlist = F) {
 	listOfDataFrames2data.frame(l, idColumn = NULL, do.unlist = do.unlist, direction = cbind,
 		resetColNames = F)
 }
+# @param embed corresponds to colsFromUnion in listOfDataFrames2data.frame
+RbindDfs = function(dfl, namesFromFirst = T, embed = F) {
+	if (namesFromFirst && !embed) dfl = lapply(dfl, setNames, nm = names(dfl[[1]]));
+	if (embed) {
+		ns = unique(unlist(sapply(dfl, names)));
+		df0 = Df_(listKeyValue(ns, rep(NA, length(ns))));
+		dfl = lapply(dfl, function(d)cbind(d, df0[, setdiff(ns, names(d)), drop = F]));
+	}
+	do.call(rbind, dfl)
+}
+
 rbindDataFrames = function(l, do.unlist = F, useDisk = F, idColumn = NULL, transpose = F,
 	resetColNames = F, colsFromFirstDf = F, idAsFactor = F) {
 	r = if (useDisk) {
@@ -1368,7 +2147,37 @@ listOfLists2df = function(l, columnNames = names(l[[1]])) {
 	r
 }
 
-# d: data frame, l: list with names corresponding to cols, values to be searched for in columns
+ListOfLists2df_extract = function(l, kp, template) {
+	l1 = list.kp(l, kp, null2na = T, do.unlist = F, template = template);
+	do.call(rbind, l1);
+}
+# advanced version of the above
+ListOfLists2df = function(l,
+	keyPath = '*', columnNames = names(list.kp(l[1], keyPath)[[1]]),
+	reverseKeys = F, keySep = '-', template = NA) {
+	colV = lapply(columnNames, function (n) {
+		kp = Sprintf('%{keyPath}s$%{n}s');
+		# <A> robustly choose name (assume first element is proper template)
+		#name = if (collapse) names(ListOfLists2df_extract(l[1], kp, template, collapse)) else NULL;
+		r = ListOfLists2df_extract(l, kp, template);
+		# names
+		kpk = list.kp.keys(Sprintf('%{n}s'));
+		cns = Col.names(r, vivify = F);
+		if (is.null(cns)) keySep = '';
+		ns = if (reverseKeys)
+			paste(cns, join(rev(kpk), keySep), sep = keySep) else
+			paste(join(kpk, keySep), cns, sep = keySep);
+		r = SetNames(r, ns);
+		r
+	});
+	r = do.call(cbind, colV);
+	# <!> Df_ applies as.data.frame -> normalization of column names
+	#r = if (collapse == 0) Df_(r0, names = columnNames) else r0;
+	r
+}
+
+
+# # d: data frame, l: list with names corresponding to cols, values to be searched for in columns
 searchDataFrame = function(d, l, .remove.factors = T) {
 	ns = names(l);
 	d = d[, ns, drop = F];
@@ -1428,11 +2237,29 @@ searchDataFrame = function(d, l, .remove.factors = T) {
 	d0
 }
 
+Cbind = function(..., stringsAsFactors = FALSE) {
+	l = list(...);
+	if (length(l) == 1) t_(l[[1]]) else cbind(..., deparse.level = 0)
+}
+Rbind = function(..., stringsAsFactors = FALSE) {
+	l = list(...);
+	r = if (length(l) == 1) t_(t_(l[[1]])) else {
+		if (class(l[[1]]) == 'data.frame')
+			rbind(..., stringsAsFactors = stringsAsFactors) else
+			rbind(...);
+	}
+	r
+}
+
+
 subsetTop = function(obj, sel, N = 1) {
 	d0 = subset(obj, sel);
 	d1 = d0[1:min(nrow(d0), N), ];
 	d1
 }
+
+# transpose to create column vector for vector
+t_ = function(m)(if (is.vector(m)) t(t(m)) else t(m))
 
 # convert strings to data frame names
 #	<i> create a data frame and extract names
@@ -1550,6 +2377,12 @@ vector.assign = function(v, idcs, e, na.rm = 0) {
 	if (!is.na(na.rm)) v[is.na(v)] = na.rm;
 	v
 }
+# names based assignment
+Vector.assign = function(v, e, na.rm = NA) {
+	idcs = which.indeces(names(e), names(v));
+	vector.assign(v, idcs, e, na.rm = na.rm)
+}
+
 matrix.assign = function(m, idcs, e, byrow = T) {
 	if (length(dim(idcs)) > 1) {
 		m[as.matrix(idcs)] = e
@@ -1710,12 +2543,24 @@ table.n.freq = function(...) {
 	r = t0 / sum(t0);
 	r
 }
+Table = function(v, min, max, ...) {
+	if (missing(min) && missing(max)) return(table(v, ...));
+	if (missing(min)) min = min(v);
+	if (missing(max)) max = max(v);
+	table.n(v, n = max, min = min)
+}
+
+#
+#	<p> numeric function
+#
+
+to.numeric = function(x) { suppressWarnings(as.numeric(x)) }
+minFloor = function(x)(x - floor(x))
 
 #
 #	<par> data types
 #
 
-to.numeric = function(x) { suppressWarnings(as.numeric(x)) }
 
 # set types for columns: numeric: as.numeric
 data.frame.types = function(df, numeric = c(), character = c(), factor = c(), integer = c(),
@@ -1753,6 +2598,14 @@ DfAsInteger = function(dataFrame, as_integer) {
 	dataFrame[, as_integer] = as.data.frame(do.call(cbind, dfn));
 	dataFrame
 }
+DfAsLogical = function(dataFrame, as_logical) {
+	dfn = nlapply(as_logical, function(n) {
+		col = dataFrame[[n]];
+		if (is.factor(col)) (col == levels(col)[1]) else avu(as.logical(col));
+	});
+	dataFrame[, as_logical] = as.data.frame(do.call(cbind, dfn));
+	dataFrame
+}
 DfAsCharacter = function(dataFrame, as_character) {
 	#dfn = apply(dataFrame[, as_character, drop = F], 2, function(col)as.character(avu(col)));
 	#dataFrame[, as_character] = as.data.frame(dfn, stringsAsFactors = FALSE);
@@ -1767,20 +2620,30 @@ DfAsCharacter = function(dataFrame, as_character) {
 # as of 13.11.2014 <!>: sapply -> simplify_
 #' Create data frames with more options than \code{data.frame}
 Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
-	as_numeric = NULL, as_character = NULL, as_factor = NULL, as_integer = NULL,
+	as_numeric = NULL, as_character = NULL, as_factor = NULL, as_integer = NULL, as_logical = NULL,
 	row.names = NA, valueMap = NULL, Df_as_is = TRUE, simplify_ = FALSE,
 	deep_simplify_ = FALSE, t_ = FALSE, unlist_cols = F, transf_log = NULL, transf_m1 = NULL,
 	Df_doTrimValues = FALSE, Df_mapping_value = '__df_mapping_value__',
 	Df_mapping_empty = '__DF_EMPTY__', Do_Df_mapping_empty = TRUE, apply_ = FALSE) {
+	# <p> input sanitation
 	#r = as.data.frame(df0);
-	if (apply_) df0 = apply(df0, 2, identity);
+	# for a vector with identical names for each entry, use this as a column name
+	if (length(unique(names(df0))) == 1 && !Nif(names)) names = unique(names(df0));
+	# sanitize row.names
+	dn = dimnames(df0);
+	if (Nif(dn) && any(duplicated(dn[[1]]))) dimnames(df0)[[1]] = NULL;
+
+	if (apply_) df0 = as.data.frame(apply(df0, 2, identity));
+	#if (!Nif(Apply_)) df0 = as.data.frame(apply(df0, 2, Apply_));
 	if (t_) df0 = t(df0);
+	# reset_row_names breaks unit tests (27.9.2017)
+	#r = data.frame(df0, stringsAsFactors = !Df_as_is, row.names = if (reset_row_names) NA else NULL);
 	r = data.frame(df0, stringsAsFactors = !Df_as_is);
 	if (notE(min_)) {
 		is = which.indeces(min_, names(r));
 		if (length(is) > 0) r = r[, -is, drop = F];
 	}
-	if (simplify_) r = sapply(r, identity);
+	if (simplify_) r = as.data.frame(sapply(r, identity));
 	if (deep_simplify_) r = as.data.frame(
 		nlapply(r, function(col)sapply(r[[col]], unlist)), stringsAsFactors = !Df_as_is
 	);
@@ -1796,10 +2659,12 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	#
 	#	<p> column types
 	#
+#if (class(df0) == 'data.frame' && ncol(df0) >= 3) browser();
 	if (notE(as_numeric)) {
 		dfn = apply(r[, as_numeric, drop = F], 2, function(col)as.numeric(avu(col)));
 		r[, as_numeric] = as.data.frame(dfn);
 	}
+	if (notE(as_logical)) r = DfAsLogical(r, as_logical);
 	if (notE(as_integer)) r = DfAsInteger(r, as_integer);
 	if (notE(as_character)) r = DfAsCharacter(r, as_character);
 	if (notE(as_factor)) {
@@ -1823,7 +2688,7 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 					vm = c(vm, listKeyValue(Df_mapping_empty, NA));
 			}
 			vs = nina(valueMap[[n]][vs], Df_mapping_value);
-			vs = ifelse(vs == Df_mapping_value, as.character(r[[n]]), vs)
+			vs = ifelse(vs == Df_mapping_value, as.character(r[[n]]), vs);
 			r[[n]] = vs;
 		}
 	}
@@ -1859,7 +2724,19 @@ Dfselect = function(data, l, na.rm = nif) {
 	r = data[na.rm(sel), ];
 	r
 }
+DfDiff = function(d1, d2) {
+	dC = rbind(d2, d1);
+	row.names(dC) = NULL;
+	dCu = unique(dC);
+	# d2 comes first, non-unique rows left out from d1, sames as ones diffed out
+	r = if (nrow(dCu) == nrow(d2)) dCu[c(), ] else dCu[(nrow(d2) + 1):nrow(dCu), , drop = F];
+	r
+}
 
+DfNames2std = function(d, nmsFormula, nmsStandard) {
+	d1 = Df_(d, headerMap = listKeyValue(all.vars(nmsFormula), nmsStandard));
+	d1
+}
 
 List_ = .List = function(l, min_ = NULL, sel_ = NULL,
 	rm.null = F, names_ = NULL, null2na = F, simplify_ = F, rm.na = F) {
@@ -1882,7 +2759,11 @@ List_ = .List = function(l, min_ = NULL, sel_ = NULL,
 	if (rm.na) {
 		l = l[!is.na(l)];
 	}
-	if (!is.null(names_)) names(l)[Seq(1, length(names_))] = names_;
+	if (notE(names_)) {
+		if (is.character(names_)) names(l)[Seq(1, length(names_))] = names_;
+		if (is.list(names_)) names(l) = vector.replace(names(l), names_);
+		if (is.na(names_)) names(l) = NULL;
+	}
 	if (simplify_) l = sapply(l, identity);
 	l
 }
@@ -1896,8 +2777,10 @@ Unlist = function(l, ..., null2na_ = FALSE) {
 	unlist(l, ...)
 }
 
+#last = function(v)(rev(v)[1])
 last = function(v)(v[length(v)])
 pop = function(v)(v[-length(v)])
+shift = function(v)(v[-1])
 # differences between successive elements, first diff is first element with start
 vectorLag = function(v, start = 0)pop(c(v, start) - c(start, v))
 splitN = function(N, by = 4) vectorLag(round(cumsum(rep(N/by, by))));
@@ -2042,7 +2925,7 @@ recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevel
 		}
 		v = vector.replace(as.character(f), map);
 		if (is.integer(f)) v = as.integer(v);
-		if (is.factor(f)) v = as.factor(v);
+		if (is.factor(f)) v = factor(v, levels = unique(as.character(map)));
 		r = v;
 	}
 	if (!is.null(levels) || !is.null(setLevels)) {
@@ -2075,6 +2958,12 @@ factorFromFactors = function(d, sep = ';', safeNames = TRUE) {
 	combsM = merge(Df(d, j = 1:nrow(d)), combsI, all.x = T, sort = F);
 	factorN = as.factor((levels[combsM$i])[order(combsM$j)]);
 	factorN
+}
+# ~ cat1 + cat2
+# create combinations from cat1/cat2, enumerate
+factorFromFormula = function(d, form, sep = ';', safeNames = TRUE) {
+	vars = formula.covariates(form);
+	factorFromFactors(d[, vars, drop = F], sep = sep, safeNames = safeNames)
 }
 factorFromModelMatrix = function(mm, sep = ';') {
 	combs = unique(mm);
@@ -2167,9 +3056,12 @@ size = function(set)length(unique(set));
 #nif = function(b)sapply(b, function(b)(!(is.null(b) || is.na(b) || !b)))
 nif = function(b) {
 	if (length(b) == 0) return(F);
+	if (class(b) %in% c('formula', 'function', 'list', 'data.frame')) return(T);
 	!(is.null(b) | is.na(b) | !b)
 }
 Nif = function(b, allnif = T, nonLogicalIsTrue = T) {
+	if (is.null(b)) return(F);
+	if (class(b) %in% c('formula', 'function')) return(T);
 	bLog = sapply(b, as.logical);
 	b = ifelse(is.na(b) | sapply(b, class) == 'logical', bLog, nonLogicalIsTrue);
 	summ = (if (allnif) all else any);
@@ -2194,6 +3086,9 @@ Nina = function(e, value = NA)if (length(e) == 0) value else nina(e, value);
 
 # not empty
 notE = function(e)(length(e) > 0);
+
+plus = function(x)ifelse(x > 0, x, 0)
+minus = function(x)ifelse(x < 0, x, 0)
 
 #
 #	<p> complex structures
@@ -2334,6 +3229,10 @@ list.takenFrom = function(listOfLists, v) {
 	names(l) = names(v);
 	l
 }
+# simplified version of list.takenFrom
+list.extract = function(lol, idcs)pairsapplyLV(lol, idcs, function(l, i)l[i])
+list.extractRows = function(lol, idcs)t(pairsapplyLV(lol, idcs, function(l, i)l[i, ]))
+
 
 merge.lists.takenFrom = function(listOfLists, v) {
 	merge.lists(list.takenFrom(listOfLists, v), listOfLists = TRUE);
@@ -2421,6 +3320,12 @@ Do.callIm = function(im__f, args, ..., restrictArgs = TRUE, callMode = 'inline')
 		.do.call(im__f, args, restrictArgs = restrictArgs)
 	} else stop('Unknown call mode');
 }
+
+Kronecker = function(l, ...) {
+	if (length(l) == 1) return(l[[1]]);
+	kronecker(l[[1]], Kronecker(l[-1], ...), ...);
+}
+
 
 # <!> should be backwards compatible with iterateModels_old, not tested
 # modelList: list of lists/vectors; encapuslate blocks of parameters in another level of lists
@@ -2643,7 +3548,7 @@ reshape.wide = function(d, ids, vars, blockVars = F, reverseNames = F, sort.by.i
 #' Convert data in wide format to long format
 #' 
 #' Long format duplicates certain columns and adds rows for which one new column hold values coming
-#' from a set of columns in wide format.
+#' from a set of columns in wide format. Does not allow for parallel reshaping.
 #'
 #' @param d data frame with columns in wide format
 #' @param vars columns in wide format by name or index
@@ -2694,11 +3599,109 @@ reshape.long = function(d, vars = NULL, factorColumn = 'factor', valueColumn = '
 	r
 }
 
-#' Reduce data frame by picking the first row of blocks for which \code{cols} has the same values
-uniqueByCols = function(d, cols) {
+DfUniqueRowsByCols = function(d, cols) {
 	row.names(d) = NULL;
-	d[as.integer(row.names(unique(d[, cols, drop = F]))), ]
+	as.integer(row.names(unique(d[, cols, drop = F])))
 }
+
+#' Reduce data frame by picking the first row of blocks for which \code{cols} has the same values
+DfUniqueByCols = uniqueByCols = function(d, cols, drop = FALSE) {
+	d[DfUniqueRowsByCols(d, cols), , drop = drop]
+}
+
+# robustly access columns: if column name is NA, add column of NAs
+DfSelectCols = function(d, vars) {
+	d0 = do.call(cbind, lapply(vars, function(v)if (is.na(v)) NA else d[, v]));
+	d0
+}
+
+#	vars:	columns for which are to be in long format
+#	lvMap:	mapping from levels to columns in d (wide columns)
+Reshape.long.raw = function(d, vars, lvMap, factorColumn = 'repeat',
+	valuePostfix = '_long', varsLong = paste(vars, valuePostfix, sep = '')) {
+	if (any(sapply(lvMap, length) != length(vars)))
+		stop('selected variables per level of different length to result columns');
+	# remaining vars
+	rvars = setdiff(names(d), na.omit(Avu(lvMap)));
+	# levels
+	lvls = names(lvMap);
+	# create list of data frames
+	dfs = lapply(1:nrow(d), function(i) {
+		dR = d[i, rvars, drop = F];	# fixed, repeated part of the data set
+		d0 = t_(sapply(lvls, function(l)DfSelectCols(d[i, ], lvMap[[l]])));
+		d1 = Df(index = lvls, d0, dR, names = c(factorColumn, varsLong));
+		d1
+	});
+	r = do.call(rbind, dfs);
+	r
+}
+
+Reshape.levelMap_re = function(ns, vars, factorsRe) {
+	# regular expressions for columns to be reshaped
+	Res = sapply(vars, function(v)Sprintf(factorsRe, COLIDENT = v));
+	# perform RE search
+	lvlsRaw = Regex(Res, ns);
+	lvlsRawL = sapply(lvlsRaw, length);
+	if (!all(lvlsRawL == lvlsRawL[1])) {
+		print(lvlsRaw);
+		stop('Different number of levels per factor');
+	}
+	# levels of index/reshape column
+	cols = Df_(lvlsRaw, names = vars);
+	# level belonging to column (non-simplifying Regex)
+	lvCol = RegexL(Res, ns, captures = T);
+	# prepare level -> column mapping
+	names(lvCol) = vars;
+	lvls = unique(Avu(lvCol));
+	# map from level to columns
+	lvMap = nlapply(lvls, function(l)Avu(nina(lapply(lvCol, function(c)names(c)[which(c == l)]))));
+}
+
+Reshape.levelMap_list = function(ns, vars, factorsRe) {
+	lels = sapply(vars, is.list);	# list elements
+	vL = vars[lels];
+
+	# <p> check input
+	unmatched = unlist(vL)[which(!(unlist(vL) %in% ns))];
+	if (length(unmatched) > 0)
+		stop(Sprintf('reshape variables [%{r}s] do not exist in data', r = join(unmatched, ', ')));
+
+	# <p> process re-matched variables
+	lvMapRe = if (any(!lels)) Reshape.levelMap_re(ns, unlist(vars[!lels]), factorsRe) else list();
+	# <p> take levels of repetition from Re variables if available, else enumerate
+	levels = if (length(lvMapRe) > 0) names(lvMapRe) else as.character(1:length(vL[[1]]));
+
+	# <p> construct level-map for explicit variable names
+	lvMapL = lapply(Df(sapply(vL, identity), t_ = T), unlist);
+	names(lvMapL) = levels;
+	lvMap = merge.lists(lvMapRe, lvMapL, concat = T)
+	lvMap
+}
+
+Reshape.levelMap = function(ns, vars, factorsRe) {
+	if (is.character(vars)) return(Reshape.levelMap_re(ns, vars, factorsRe));
+	if (!is.list(vars)) stop('invalid variable specification');
+	lvMap = Reshape.levelMap_list(ns, vars, factorsRe);
+	lvMap
+}
+
+# allow parallel re-shaping, i.e. take columns of form 'prefix.\d' and take \d as the value for the new
+#	index column (reshape-column)
+#	vars: prefix of columns to be reshaped
+#	factorsRe: re to append to vars to identify wide columns
+Reshape.long = function(d, vars, factorColumn = 'repeat', valuePostfix = '_long',
+	factors = NULL, factorsRe = '^%{COLIDENT}s[._]?(\\d+)', useDisk = F, rowNamesAs = NULL,
+	varsLong = paste(vars, valuePostfix, sep = '')) {
+
+	lvMap = Reshape.levelMap(names(d), vars, factorsRe);
+	if (is.list(vars)) {
+		nsVars = names(vars);
+		varsLong[nsVars != ''] = nsVars[nsVars != ''];
+	}
+	Reshape.long.raw(d, vars, lvMap,
+		factorColumn = factorColumn, valuePostfix = valuePostfix, varsLong = varsLong);
+}
+
 
 
 #
@@ -2707,6 +3710,20 @@ uniqueByCols = function(d, cols) {
 
 uc.first = firstUpper = function(s) {
 	paste(toupper(substring(s, 1, 1)), substring(s, 2), sep = "", collapse = "");
+}
+substrM1 = function(s)substr(s, 1, nchar(s) - 1)
+strAbbr = function(s, N = 15, ellipsis = '...') {
+	r = if (nchar(s) <= N) s else join(c(substr(s, 1, N - nchar(ellipsis)), ellipsis));
+	r
+}
+
+deduplicateLabels = function(v, labels = v[duplicated(v)], sep = '-', firstUntouched = TRUE) {
+	for (label in labels) {
+		idcs = which(v == label);
+		if (firstUntouched) idcs = shift(idcs);
+		v[idcs] = paste(label, 1:length(idcs), sep = sep);
+	}
+	v
 }
 
 #
@@ -2752,12 +3769,12 @@ coefficientNamesForData = function(vars, data) {
 # <p> statistic oriented data frame manipulation
 #
 
-variableIndecesForData = function(d, vars, varsArePrefixes = T) {
-	if (varsArePrefixes) vars = sapply(vars, function(e)sprintf('%s.*', e));
+variableIndecesForData = function(d, vars, varsArePrefixes = T, varRegex = '%s.*') {
+	if (varsArePrefixes) vars = sapply(vars, function(e)sprintf(varRegex, e));
 	which.indeces(vars, names(d), regex = T, match.multi = T)
 }
-variablesForData = function(d, vars, varsArePrefixes = T) {
-	names(d)[variableIndecesForData(d, vars, varsArePrefixes)]
+variablesForData = function(d, vars, varsArePrefixes = T, varRegex = '%s.*') {
+	names(d)[variableIndecesForData(d, vars, varsArePrefixes, varRegex)]
 }
 
 subData = function(d, vars, varsArePrefixes = T) {
@@ -2914,6 +3931,41 @@ data.vars.after = function(data, col, skip = T) {
 	ns[(which(ns == col) + skip):length(ns)]
 }
 
+dataColRange = function(data, from = NULL, to = NULL) {
+	ns = names(data);
+	start = if (is.integer(from)) from else (if (notE(from)) which(ns == from) else 1);
+	stop = if (is.integer(to)) to else (if (notE(to)) which(ns == to) else ncol(data));
+	data[, start:stop, drop = F]
+}
+
+
+# select column names based on res, negation or literal names
+# dataSelectVars(data, ~ cg + ab, ~ 0)
+# dataSelectVars(data, list(~ cg, ~ !ab))
+dataSelectVars = function(data, prefix = list(), fixed = list()) {
+	# <p> input sanitation
+	ns = names(data);
+	if (class(prefix) == 'formula') prefix = list(prefix);
+	if (class(fixed) == 'formula') fixed = list(fixed);
+
+	# <p> fixed
+	vsF = do.call(Union, lapply(fixed, function(e)setdiff(all.vars(e), '0')));
+	# <p> prefix
+	vsP = do.call(Union, lapply(prefix, function(e) {
+		negation = class(as.list(e)[[2]]) == 'call' && as.list(e)[[2]][[1]] == '!';
+		formula = join(c('~', join(sapply(all.vars(e), function(v)sprintf('%s%%', v)), ' + ')));
+		vars = all.vars(formula.re(formula, data));
+		if (negation) setdiff(ns, vars) else vars
+	}));
+
+	r = Union(vsF, vsP);
+	r
+}
+dataSelectCols = function(data, prefix, fixed = ~ 0) {
+	data[, dataSelectVars(data, prefix, fixed), drop = F]
+}
+
+
 formula.add.rhs = function(f0, f1, envir = parent.frame()) {
 	as.formula(join(c(
 		formula.to.character(f0),
@@ -2923,13 +3975,18 @@ vars.as.rhs = function(v)as.formula(Sprintf('~ %{vars}s', vars = join(v, '+')))
 formula.set.rhs = function(f0, f1, envir = parent.frame()) {
 	as.formula(join(c(formula.response(f0), formula.rhs(f1, as_character = T))), env = envir)
 }
-formula.add.response = function(f0, f1, envir = parent.frame()) {
-	formula = join(c(formula.response(f1), formula.rhs(f0, noTilde = FALSE)), ' ');
+formula.add.responseByName = function(f0, response, envir = parent.frame()) {
+	formula = join(c(response, formula.rhs(f0, noTilde = FALSE)), ' ');
 	as.formula(formula, env = envir)
 }
+formula.add.response = function(f0, f1, envir = parent.frame()) {
+	formula.add.responseByName(f0, formula.response(f1), envir = envir)
+}
+# <!><t> w/ transformations in formula
 formula.predictors = function(f, data, dataFrameNames = TRUE) {
 	if (formula.rhs(f) == ~ 1) return('(Intercept)');
-	mm = model.matrix(model.frame(formula.rhs(f), data), data);
+	#mm = model.matrix(model.frame(formula.rhs(f), data), data);
+	mm = model.matrix(formula.rhs(f), data);
 	ns = dimnames(mm)[[2]];
 
 	# <p> create data frame to extract proper names
@@ -2961,8 +4018,10 @@ covariatePairs = function(covs) {
 	df
 }
 
-formulaWith = function(repsonse = "y", covariates = "x")
-	as.formula(sprintf("%s ~ %s", repsonse,  paste(covariates, collapse = "+")))
+formulaWith = function(response = "y", covariates = "x") {
+	if (!Nif(response)) response = '';
+	as.formula(sprintf("%s ~ %s", response,  paste(covariates, collapse = "+")))
+}
 
 #
 #	<p> set operations
@@ -2971,6 +4030,16 @@ formulaWith = function(repsonse = "y", covariates = "x")
 minimax = function(v, min = -Inf, max = Inf) {
 	r = ifelse(v < min, min, ifelse(v > max, max, v));
 	r
+}
+
+#
+#	<p> recycling
+#
+
+recycle = function(...)lapply(apply(cbind(...), 2, as.list), unlist)
+recycleTo = function(..., to, simplify = T) {
+	r = recycle(to, ...)[-1];
+	if (simplify && length(r) == 1) r[[1]] else r
 }
 #
 #	Rsystem.R
@@ -3083,6 +4152,14 @@ dirList = function(dir, regex = T, case = T) {
 }
 list_files_with_exts = function(path, exts, full.names = T)
 	list.files(path, pattern = Sprintf('.(%{Exts}s)$', Exts = join(exts, '|')), full.names = full.names);
+
+list_files_with_base = function(path, exts, full.names = T) {
+	sp = splitPath(path);
+	list.files(sp$dir,
+		pattern = Sprintf('^%{base}s.(%{Exts}s)$', base = sp$base, Exts = join(exts, '|')),
+		full.names = full.names
+	);
+}
 
 write.csvs = function(t, path, semAppend = "-sem", ...) {
 	s = splitPath(path);
@@ -3326,54 +4403,15 @@ handleTriggers = function(o, triggerDefinition = NULL) {
 
 }
 
-
 #
-#	level dependend logging
+#	<p> extended system call
 #
-#Global..Log..Level = 4;
-#Default..Log..Level = 4;
-#assign(Default..Log..Level, 4, envir = .GlobalEnv);
-Log_env__ <- new.env();
-assign('DefaultLogLevel', 4, envir = Log_env__);
 
-#' Log a message to stderr.
-#' 
-#' Log a message to stderr. Indicate a logging level to control verbosity.
-#' 
-#' This function prints a message to stderr if the condition is met that a
-#' global log-level is set to greater or equal the value indicated by
-#' \code{level}. \code{Log.level} returns the current logging level.
-#' 
-#' @aliases Log Log.setLevel Log.level
-#' @param o Message to be printed.
-#' @param level If \code{Log.setLevel} was called with this value, subsequent
-#' calls to \code{Log} with values of \code{level} smaller or equal to this
-#' value will be printed.
-#' @author Stefan Böhringer <r-packages@@s-boehringer.org>
-#' @seealso \code{\link{Log.setLevel}}, ~~~
-#' @keywords ~kwd1 ~kwd2
-#' @examples
-#' 
-#' 	Log.setLevel(4);
-#' 	Log('hello world', 4);
-#' 	Log.setLevel(3);
-#' 	Log('hello world', 4);
-#' 
-Log = function(o, level = get('DefaultLogLevel', envir = Log_env__), doPrint = NULL) {
-	if (level <= get('GlobalLogLevel', envir = Log_env__)) {
-		cat(sprintf("R %s: %s\n", date(), as.character(o)));
-		if (!is.null(doPrint)) print(doPrint);
-	}
-}
-Logs = function(o, level = get('DefaultLogLevel', envir = Log_env__), ..., envir = parent.frame()) {
-	Log(Sprintf(o, ..., envir = envir), level = level);
-}
+# Example of patterns:
+# 	System(cmd, 5, patterns = c('cwd', 'qsub', 'ssh'),
+# 		cwd = sp$path, ssh_host = sp$userhost,
+# 		qsubPath = sprintf('%s/qsub', sp$path), qsubMemory = self@config$qsubRampUpMemory);
 
-Log.level = function()get('GlobalLogLevel', envir = Log_env__);
-Log.setLevel = function(level = get('GlobalLogLevel', envir = Log_env__)) {
-	assign("GlobalLogLevel", level, envir = Log_env__);
-}
-Log.setLevel(4);	# default
 
 .System.fileSystem = list(
 	#tempfile = function(prefix, ...)tempfile(splitPath(prefix)$base, tmpdir = splitPath(prefix)$dir, ...),
@@ -3518,6 +4556,21 @@ ipAddress = function(interface = "eth0") {
 	ip
 }
 
+#
+#	<p> io
+#
+
+# Capture.ouput(..., type = c('input', 'output', 'merged', 'all', 'none', 'discard'), split = c('input', 'output', 'all', 'none'), append = c('input', 'output', 'all', 'none'), return = T)
+silence = function(expr, verbose = F) {
+	if (verbose) eval(expr) else {
+		sink('/dev/null', type = 'output');
+		sink(stdout(), type = 'message');
+		r = eval(expr);
+		sink(type = 'message');
+		sink(type = 'output');
+		r
+	}
+}
 
 #
 #	<p> cluster abstraction
@@ -3538,13 +4591,15 @@ ipAddress = function(interface = "eth0") {
 Snow_cluster_env__ = new.env();
 specifyCluster = function(localNodes = 8, sourceFiles = NULL, cfgDict = list(), hosts = NULL,
 	.doSourceLocally = F, .doCopy = T, splitN = NULL, reuseCluster = F, libraries = NULL,
-	evalEnvironment = F) {
+	evalEnvironment = F, varsEnv = NULL, doSinkOutput = NULL) {
 	#<!> might not be available/outdated
 	Require('parallel');
 	cfg = merge.lists(.defaultClusterConfig,
 		cfgDict,
 		list(splitN = splitN, reuseCluster = reuseCluster, evalEnvironment = evalEnvironment),
-		list(local = F, source = sourceFiles, libraries = libraries, hosts = (if(is.null(hosts))
+		list(local = F, source = sourceFiles, libraries = libraries, varsEnv = varsEnv,
+			doSinkOutput = doSinkOutput,
+			hosts = (if(is.null(hosts))
 			list(list(host = "localhost", count = localNodes, type = "PSOCK",
 				environment = list(setwd = getwd()))) else
 				hosts)
@@ -3587,23 +4642,32 @@ clapply_cluster = function(l, .f, ..., clCfg = NULL) {
 	#clusterSetupRNG(cl);	# snow
 	clusterSetRNGStream(cl, iseed = NULL);	# parallel
 
-	clusterExport(cl, clCfg$vars);
+	clusterExport(cl, clCfg[['vars']]);
 
 	# <p> establish node environment
 	envs = listKeyValue(list.key(clCfg$hosts, "host"), list.key(clCfg$hosts, "environment", unlist = F));
 	if (Log.level() >= 7) print(clCfg);
 
-	if (establishEnvironment) r = clusterApply(cl, hosts, function(host, environments, cfg){
-		env = environments[[host]];
-		if (!is.null(env$setwd)) setwd(env$setwd);
-		if (!is.null(cfg$source)) for (s in cfg$source) source(s, chdir = TRUE);
-		if (!is.null(cfg$libraries)) for (package in cfg$libraries) library(package, character.only = TRUE);
-		# <!> as of 3.4.2013: stop support of exporting global variables to enable CRAN submission
-		#if (!is.null(env$globalVars))
-		#	for (n in names(env$globalVars)) assign(n, env$globalVars[[n]], pos = .GlobalEnv);
-		#sprintf("%s - %s - %s", host, hapmap, getwd());
-		NULL
-	}, environments = envs, cfg = clCfg);
+	if (establishEnvironment) {
+		r = clusterApply(cl, seq_along(hosts), function(i, environments, cfg){
+			host = hosts[i];
+			env = environments[[host]];
+			if (!is.null(env$setwd)) setwd(env$setwd);
+			if (!is.null(cfg$source)) for (s in cfg$source) source(s, chdir = TRUE);
+			if (!is.null(cfg$libraries))
+				for (package in cfg$libraries) library(package, character.only = TRUE);
+			# <!> as of 3.4.2013: stop support of exporting global variables to enable CRAN submission
+			#if (!is.null(env$globalVars))
+			#	for (n in names(env$globalVars)) assign(n, env$globalVars[[n]], pos = .GlobalEnv);
+			#sprintf("%s - %s - %s", host, hapmap, getwd());
+			if (Nif(cfg$doSinkOutput)) sink(sprintf('%s-%d.out', cfg$doSinkOutput, i));
+			NULL
+		}, environments = envs, cfg = clCfg);
+		nlapply(clCfg[['varsEnv']], function(envName) {
+			envir = get(envName);
+			clusterExport(cl, clCfg$varsEnv[[envName]], envir = envir);
+		});
+	}
 
 	# <p> iterate
 	N = clCfg$splitN * length(hosts);	# No of splits
@@ -3823,6 +4887,14 @@ compressedConnectionPath = function(conn) {
 #	<p> readTable
 #
 
+readTableSplitToDict = function(e){
+	r = lapply(splitString(';', e), function(e) {
+		r = splitString(':', e);
+		listNamed(list(shift(r)), r[1])
+	});
+	unlist.n(r, 1)
+}
+
 # complete: return only complete data with respect to specified colums
 # NA: specify 'NA'-values
 readTableSepMap = list(T = "\t", S = ' ', C = ',', `;` = ';', `S+` = '');
@@ -3834,7 +4906,9 @@ optionParser = list(
 	ROW.NAMES = function(e)list(T = T, F = F)[[e]],
 	NAMES = function(e)splitString(';', e),
 	FACTORS = function(e)splitString(';', e),
+	NUMERIC = function(e)splitString(';', e),
 	DATE = function(e)splitString(';', e),
+	DATEF = readTableSplitToDict,
 	PROJECT = function(e)splitString(';', e),
 	`NA` = function(e)splitString(';', e),
 	complete = function(e)splitString(';', e),
@@ -3845,22 +4919,13 @@ optionParser = list(
 		});
 		unlist.n(r, 1)
 	},
-	HEADERMAP = function(e){ r = lapply(splitString(';', e), function(e){
-			r = splitString(':', e);
-			listKeyValue(r[1], r[2])
-		});
-		unlist.n(r, 1)
-	},
+	HEADERMAP = readTableSplitToDict,
 	# tb implemented: <i>: merge.lists recursive
-	VALUEMAP = function(e){ r = lapply(splitString(';', e), function(e){
-			r = splitString(':', e);
-			listKeyValue(r[1], r[2])
-		});
-		unlist.n(r, 1)
-	},
+	VALUEMAP = readTableSplitToDict,
 	COLNAMESFILE = identity,
 	SHEET = as.integer,
-	SKIP = as.integer
+	SKIP = as.integer,
+	DELETE = Eval
 );
 
 splitExtendedPath = function(path) {
@@ -3877,10 +4942,12 @@ splitExtendedPath = function(path) {
 }
 path2simple = function(pathes)sapply(pathes, function(path)splitExtendedPath(path)$path);
 
-readTable.ods = function(path, options = NULL) {
+readTable.ods = function(path, options = NULL, verbose = F) {
 	Require('readODS');
 	sheet = firstDef(options$SHEET, 1);
-	read_ods(path, sheet = sheet, col_names = options$HEADER);
+	silence(read_ods(path, sheet = sheet, col_names = options$HEADER),
+		verbose = firstDef(options$VERBOSE, verbose)
+	);
 }
 
 # <!> changed SEP default "\t" -> ",", 20.5.2015
@@ -3902,13 +4969,19 @@ readTable.txt = readTable.csv = function(
 spssDate = function(date, tz = 'MET', spss.origin = as.POSIXct('2003/02/11', tz = tz) - 13264300800)
 	(spss.origin + date)
 
+# convert "labelled" columns to factors
+haven2earth = function(d)Df_(lapply(d, function(c) if (is.labelled(c)) as_factor(c) else c))
+
 readTable.SAV = readTable.sav = function(path, options = NULL, headerMap = NULL, stringsAsFactors = F) {
-	Require('foreign');
 	# read file
-	r0 = read.spss(path);
+	#Require('foreign');
+	#r0 = suppressWarnings(read.spss(path));
+	Require('haven');
+	r0 = haven2earth(suppressWarnings(read_spss(path)));
 	r1 = as.data.frame(r0, stringsAsFactors = stringsAsFactors);
-	if (notE(options$DATE))
-		r1[, options$DATE] = do.call(data.frame, lapply(r1[, options$DATE, drop = F], spssDate));
+# 	if (notE(options[['DATE']]))
+# 		r1[, options[['DATE']]] = do.call(data.frame,
+# 			lapply(r1[, options[['DATE']], drop = F], spssDate));
 	r1
 }
 
@@ -3923,7 +4996,9 @@ readTable.xls = function(path, options = NULL, ..., row.names = NULL, sheet = 1)
 	read.xls(path, sheet = sheet, ..., row.names = row.names, verbose = FALSE);
 }
 
-tableFunctionConnect = c('csv', 'RData');
+#tableFunctionConnect = c('csv', 'RData', 'gz');
+tableFunctionConnect = c('bz2', 'RData', 'gz');
+readersAcceptingFilesOnly = c('xls');
 
 tableFunctionForPathMeta = function(path, template = 'readTable.%{ext}s', default = readTable.csv,
 	forceReader = NULL) {
@@ -3953,13 +5028,21 @@ tableFunctionForPathReader = function(path, template = 'readTable.%{ext}s', defa
 	forceReader = NULL) {
 	m = m0 = tableFunctionForPathMeta(path, template = 'readTable.%{ext}s', default = default, forceReader);
 	if (!is.null(m$compression)) {
-		path = if (m0$compression %in% tableFunctionConnect)
+		path = if (m0$compression %in% tableFunctionConnect &&
+				 !(m0$ext %in% readersAcceptingFilesOnly))
 			compressedConnection(m0$path, m0$compression) else
 			decompressPath(m0$path, m0$tempfile, m0$compression)$destination
 		m = merge.lists(m0, list(path = path));
 	}
 	m
 }
+
+readTableDate = function(o, colName, col, defaultTz = 'MET') {
+	dateFormat = o$DATEF[[colName]];
+	r = strptime(col, dateFormat[1], tz = firstDef(dateFormat[2], defaultTz));
+	r
+}
+
 
 readTable.defaultOptions = list(HEADER = TRUE);
 # <!> as of 23.5.2014: headerMap after o$NAMES assignment
@@ -4003,10 +5086,14 @@ readTable = function(path, autodetect = T, headerMap = NULL, extendedPath = T, c
 		ns = read.table(colnamesFile, header = F, as.is = T)[, 1];
 		names(r)[1:length(ns)] = ns;
 	}
-	if (!is.null(o$PROJECT)) r = r[, o$PROJECT];
+	if (!is.null(o$PROJECT)) r = r[, o$PROJECT, drop = FALSE];
 	if (!is.null(o$complete)) r = r[apply(r[, o$complete], 1, function(e)!any(is.na(e))), ];
 	if (!is.null(o$CONST)) { for (n in names(o$CONST)) r[[n]] = o$CONST[[n]]; }
 	if (!is.null(as_factor)) r = Df_(r, as_factor = as_factor);
+	if (Nif(o$FACTORS)) r = Df_(r, as_factor = o$FACTORS);
+	if (Nif(o$NUMERIC)) r = Df_(r, as_numeric = o$NUMERIC);
+	if (!is.null(o$DELETE)) r = r[-o$DELETE, , drop = F];
+	if (notE(o[['DATEF']])) { for (n in names(o$DATEF)) r[[n]] = readTableDate(o, n, r[[n]]); }
 	r
 }
 
@@ -4129,6 +5216,7 @@ writeTable = function(object, path, ..., doCompress = NULL, row.names = TRUE, au
 		o = r$options;
 		defaultWriter = writeTable.table;
 	}
+	if (!is.null(o$PROJECT)) object = object[, o$PROJECT, drop = FALSE];
 	r = lapply(path, function(p)
 		writeTableRaw(object, p, ...,
 			doCompress = doCompress, row.names = row.names, autodetect = autodetect,
@@ -4359,12 +5447,18 @@ activateModule = function(path) {
 #	<p> sqlite
 #
 
-sqlCreateTable = function(columns, types = list, index = NULL, createAt = NULL) {
-	# <p> create database
+sqlCreateTable = function(columns, types = list, index = NULL, createAt = NULL, unique = list()) {
+	# <p> types
 	types = merge.lists(listKeyValue(columns, rep('text', length(columns))), types);
+	# <p> cols
+	cols = join(sep = ', ', sapply(columns, function(e)sprintf('%s %s', e, types[e])));
+	# <p> unique constraints
+	#UNIQUE (col_name1, col_name2) ON CONFLICT REPLACE)
+	unique = circumfix(join(sapply(unique, function(u) {
+		Sprintf('UNIQUE (%{cols}s) ON CONFLICT FAIL', cols = join(u, ', '))
+	}), ', '), pre = ' , ');
 	createDbSql = join(sep = "\n", c(
-		sprintf('CREATE TABLE data (%s);',
-			join(sep = ', ', sapply(columns, function(e)sprintf('%s %s', e, types[e])))),
+		Sprintf('CREATE TABLE data (%{cols}s%{unique}s);'),
 		if (is.null(index)) c() else sapply(1:length(index), function(i)
 			sprintf('CREATE INDEX index_%d ON data (%s);', i, join(index[[i]], sep = ', '))),
 		'.quit', ''
@@ -4384,7 +5478,9 @@ csv2sqlite = function(path, output = tempfile(),
 	columnsNames = NULL, columnsSelect = NULL,
 	index = NULL,
 	inputSep = 'T', inputHeader = T, inputSkip = NULL,
-	NULLs = NULL, types = list()) {
+	NULLs = NULL, types = list(), newDb = T, unique = list()) {
+	if (is.null(output)) stop(Sprintf('No ouput path given for sqlite DB [NULL]@csv2sqlite'));
+	if (newDb) file.remove(output);
 
 	# <!> cave: does not heed skip
 	if (!inputHeader && is.null(columnsNames)) {
@@ -4400,7 +5496,7 @@ csv2sqlite = function(path, output = tempfile(),
 	} else '';
 	columns = if (is.null(columnsSelect)) columnsNames else columnsSelect;
 	types = merge.lists(listKeyValue(columns, rep('text', length(columns))), types);
-	sqlCreateTable(columns, types, index, createAt = output);
+	sqlCreateTable(columns, types, index, createAt = output, unique = unique);
 
 	# <p> import data
 	skipCommand = if (is.null(inputSkip)) '' else sprintf('| tail -n +%d ', inputSkip + 1);
@@ -4417,7 +5513,7 @@ csv2sqlite = function(path, output = tempfile(),
 	cmd = Sprintf(con(
 		"%{reader}s %{path}Q %{skipCommand}s %{cut}s %{filter}s",
 		" | sqlite3 -init %{importSql}Q %{output}Q"));
-	System(cmd, 1);
+	System(cmd, 2);
 	output
 }
 # <!> unfinished, siphones code from old csv2sqlite function
@@ -4454,10 +5550,35 @@ sqliteOpen = function(path) {
 	Require('RSQLite');
 	dbConnect(SQLite(), dbname = path);
 }
+
+sqliteQueryParticle = function(q) {
+	opRaw = if(length(q) > 2) q[[2]] else 'equal';
+	op = switch(opRaw,
+		equal = '=',
+		`<` = '<',
+		`>` = '>',
+		`< Int` = '<',
+		`> Int` = '>'
+	);
+	add = if (opRaw %in% c('< Int', '> Int')) ' + 0' else '';
+	value = if(length(q) > 2) q[[3]] else q[[2]];
+	value = if (opRaw %in% c('< Int', '> Int')) value else Sprintf('%{value}Q');
+	with(q, Sprintf('%{name}Q%{add}s %{op}s %{value}s'));
+}
+sqliteBuildQuery = function(table, query, distinct = TRUE) {
+	ns = names(query);
+	qs = ilapply(query, function(q, i)sqliteQueryParticle(c(list(name = ns[i]), q)));
+	condition = join(unlist(qs), sep = ' AND ');
+	isDistinct = if (distinct) 'DISTINCT' else '';
+	query = Sprintf('SELECT %{isDistinct}s * FROM %{table}Q WHERE %{condition}s');
+	query
+}
+
 sqliteQuery = function(db, query, table = NULL) {
 	if (is.null(table)) table = dbListTables(db)[1];
-	query = con(sapply(names(query), function(n)Sprintf('%{n}Q = %{v}s', v = qs(query[[n]], force = T))));
-	query1 = Sprintf('SELECT * FROM %{table}Q WHERE %{query}s');
+# 	query = con(sapply(names(query), function(n)Sprintf('%{n}Q = %{v}s', v = qs(query[[n]], force = T))));
+# 	query1 = Sprintf('SELECT * FROM %{table}Q WHERE %{query}s');
+	query1 = sqliteBuildQuery(table, query);
 	Log(query1, 5);
 	dbGetQuery(db, query1);
 }
@@ -4588,29 +5709,74 @@ clearWarnings = function()assign('last.warning', NULL, envir = baseenv())
 #	<p> packages
 #
 
-# name has to be character of length 1
-Library = function(name, ...,
-	repos = getOption('repos'), repoNoInteraction = TRUE, repoDefault = "http://cran.rstudio.com",
-	quietly = TRUE) {
+LibraryRaw = function(name, ..., repos, repoNoInteraction, repoDefault, quietly,
+	dependencies, reposSupplementary) {
 	# force evaluation
 	#if (!Eval(Sprintf('require(%{name}s)'))) {
 	if (!Require(name, character.only = TRUE, quietly = TRUE)) {
 		if (repoNoInteraction) repos[repos == '@CRAN@'] = repoDefault[1];
+		repos = c(repos, reposSupplementary);
 		#expr = Sprintf('install.packages(%{name}s)');
-		r = try(install.packages(name, repos = repos, ...));
+		r = try(install.packages(name, repos = repos, ..., dependencies = dependencies));
 		# if installation from CRAN fails, try bioconductor
-		if (class(r) == 'try-error') {
-			if (!exists('biocLite')) source("http://bioconductor.org/biocLite.R");
-			biocLite(name, suppressUpdates = TRUE, suppressAutoUpdate = TRUE)
+		Log(Sprintf('Trying to install "%{name}s" from bioconductor'), 5);
+		if (is.null(r) || class(r) == 'try-error') {
+			if (!exists('biocLite')) source("https://bioconductor.org/biocLite.R");
+			biocLite(name, suppressUpdates = TRUE, suppressAutoUpdate = TRUE, dependencies = dependencies)
 		}
 		#Eval(Sprintf('library(%{name}s)'));
 		library(name, character.only = TRUE, quietly = quietly);
 	}
 }
+
+# name has to be character of length 1
+LibrarySingle = function(name, ...,
+	repos = getOption('repos'), repoNoInteraction = TRUE, repoDefault = "http://cran.rstudio.com",
+	quietly = TRUE, dependencies = TRUE, reposSupplementary = 'http://www.rforge.net/') {
+
+	wrapper = if (quietly) suppressWarnings else eval;
+	for (name in name) {
+		wrapper(LibraryRaw(name, ...,
+			repos = repos, repoNoInteraction = repoNoInteraction, repoDefault = repoDefault,
+			quietly = quietly, dependencies = dependencies, reposSupplementary = reposSupplementary));
+	}
+}
+Library = function(name, ...,
+	repos = getOption('repos'), repoNoInteraction = TRUE, repoDefault = "http://cran.rstudio.com",
+	quietly = TRUE, dependencies = TRUE, reposSupplementary = 'http://www.rforge.net/') {
+
+	for (name in name) {
+		LibrarySingle(name, ..., repos = repos, repoNoInteraction = repoNoInteraction,
+			repoDefault = repoDefault, quietly = quietly,
+			dependencies = dependencies, reposSupplementary = reposSupplementary
+		);
+	}
+}
 Require = function(..., quietly = TRUE) {
-	if (quietly)
-		suppressPackageStartupMessages(require(..., quietly = quietly)) else
-		require(..., quietly = quietly)
+	wrapper = if (quietly) function(call_)suppressWarnings(suppressPackageStartupMessages(call_)) else eval
+	wrapper(require(..., quietly = quietly))
+}
+
+DumpPackageNames = function(path = '~/Documents/AdminComputer/R/packages-%{version}s.csv',
+	version = with(R.Version(), Sprintf('%{major}s.%{minor}s')), n = 1) {
+	Logs('Writing package names to file:%{path}s', path = Sprintf(path), logLevel = 2);
+	lib = .libPaths()[n];
+	writeTable(Df(pkg = row.names(installed.packages(lib))), path = Sprintf(path));
+}
+ReadPackageNames = function(path = '~/Documents/AdminComputer/R/packages-%{version}s.csv',
+	version = R.Version()$version.string) {
+	Logs('Reading package names to file:%{path}s', path = Sprintf(path), logLevel = 2);
+	readTable(Sprintf(path))$pkg;
+}
+ReinstallPackages = function(packages, n = 1, type = 'source') {
+	lib = lib <- .libPaths()[n];
+	install.packages(lib  = lib, pkgs = packages, type = type)
+}
+Reinstall = function(n = 1, type = 'source') {
+	ReinstallPackages(row.names(installed.packages(lib)), n = n , type = type);
+}
+ReinstallFromVersion = function(version, n = 1, type = 'source') {
+	ReinstallPackages(ReadPackageNames(version = version), n = n , type = type);
 }
 
 #
@@ -4619,379 +5785,45 @@ Require = function(..., quietly = TRUE) {
 
 agenda = function()system('bash -l', input = c('shopt -s expand_aliases', 'agenda'))
 agenda_stop = function()system('bash -l', input = c('shopt -s expand_aliases', 'agenda-stop'))
-runTests = function()system('RrunTests')#
-#	Rmeta.R
-#Wed Jun  3 15:11:27 CEST 2015
-
+runTests = function()system('RrunTests')
 
 #
-#	<p> Meta-functions
+#	<p> random numbers
 #
 
-#
-#		Environments
-#
-
-# copy functions code adapted from restorepoint R package
-object.copy = function(obj) {
-	# Dealing with missing values
-	if (is.name(obj)) return(obj);
-	obj_class = class(obj);
-
-	copy =
-		if ('environment' %in% obj_class) environment.copy(obj) else
-		if (all('list' == class(obj))) list.copy(obj) else
-		#if (is.list(obj) && !(is.data.frame(obj))) list.copy(obj) else
-		obj;
-	return(copy)
-}
-list.copy = function(l)lapply(l, object.copy);
-environment.restrict = function(envir__, restrict__= NULL) {
-	if (!is.null(restrict__)) {
-		envir__ = as.environment(List_(as.list(envir__), min_ = restrict__));
-	}
-	envir__
-}
-environment.copy = function(envir__, restrict__= NULL) {
-	as.environment(eapply(environment.restrict(envir__, restrict__), object.copy));
-}
-
-bound_vars = function(f, functions = F) {
-	fms = formals(f);
-	# variables bound in default arguments
-	vars_defaults = unique(unlist(sapply(fms, function(e)all.vars(as.expression(e)))));
-	# variables used in the body
-	vars_body = setdiff(all.vars(body(f)), names(fms));
-	vars = setdiff(unique(c(vars_defaults, vars_body)), c('...', '', '.GlobalEnv'));
-	if (functions) {
-		vars = vars[!sapply(vars, function(v)is.function(rget(v, envir = environment(f))))];
-	}
-	vars
-}
-bound_fcts_std_exceptions = c('Lapply', 'Sapply', 'Apply');
-bound_fcts = function(f, functions = F, exceptions = bound_fcts_std_exceptions) {
-	fms = formals(f);
-	# functions bound in default arguments
-	fcts_defaults = unique(unlist(sapply(fms, function(e)all.vars(as.expression(e), functions = T))));
-	# functions bound in body
-	fcts = union(fcts_defaults, all.vars(body(f), functions = T));
-	# remove variables
-	#fcts = setdiff(fcts, c(bound_vars(f, functions), names(fms), '.GlobalEnv', '...'));
-	fcts = setdiff(fcts, c(bound_vars(f, functions = functions), names(fms), '.GlobalEnv', '...'));
-	# remove functions from packages
-	fcts = fcts[
-		sapply(fcts, function(e) {
-			f_e = rget(e, envir = environment(f));
-			!is.null(f_e) && environmentName(environment(f_e)) %in% c('R_GlobalEnv', '') && !is.primitive(f_e)
-	})];
-	fcts = setdiff(fcts, exceptions);
-	fcts
-}
-
-
-environment_evaled = function(f, functions = FALSE, recursive = FALSE) {
-	vars = bound_vars(f, functions);
-	e = nlapply(vars, function(v) rget(v, envir = environment(f)));
-	#Log(sprintf('environment_evaled: vars: %s', join(vars, ', ')), 7);
-	#Log(sprintf('environment_evaled: functions: %s', functions), 7);
-	if (functions) {
-		fcts = bound_fcts(f, functions = TRUE);
-		fcts_e = nlapply(fcts, function(v){
-			#Log(sprintf('environment_evaled: fct: %s', v), 7);
-			v = rget(v, envir = environment(f));
-			#if (!(environmentName(environment(v)) %in% c('R_GlobalEnv')))
-			v = environment_eval(v, functions = TRUE);
-		});
-		#Log(sprintf('fcts: %s', join(names(fcts_e))));
-		e = c(e, fcts_e);
-	}
-	#Log(sprintf('evaled: %s', join(names(e))));
-	r = new.env();
-	lapply(names(e), function(n)assign(n, e[[n]], envir = r));
-	#r = if (!length(e)) new.env() else as.environment(e);
-	parent.env(r) = .GlobalEnv;
-	#Log(sprintf('evaled: %s', join(names(as.list(r)))));
-	r
-}
-environment_eval = function(f, functions = FALSE, recursive = FALSE) {
-	environment(f) = environment_evaled(f, functions = functions, recursive = recursive);
-	f
+getRandomSeed = function(tag = date()) {
+	md5 = md5sumString(join(c(getwd(), tag)));
+	is = hex2ints(md5);
+	seed = is[1];
+	for (i in 2:length(is)) { seed = bitwXor(seed, is[i]); }
+	seed
 }
 
 #
-#	Parsing, evaluation
+#	<p> Reporting
 #
 
-Parse = function(text, ...) {
-	parse(text = text, ...)
-}
-Eval = function(e, ..., envir = parent.frame(), autoParse = T) {
-	if (autoParse && is.character(e)) e = Parse(e, ...);
-	eval(e, envir = envir)
-	
-}
-
-#
-#		Freeze/thaw
-#
-
-delayed_objects_env = new.env();
-delayed_objects_attach = function() {
-	attach(delayed_objects_env);
-}
-delayed_objects_detach = function() {
-	detach(delayed_objects_env);
-}
-
-thaw_list = function(l)lapply(l, thaw_object, recursive = T);
-thaw_environment = function(e) {
-	p = parent.env(e);
-	r = as.environment(thaw_list(as.list(e)));
-	parent.env(r) = p;
-	r
-}
-
-# <i> sapply
-thaw_object_internal = function(o, recursive = T, envir = parent.frame()) {
-	r = 		 if (class(o) == 'ParallelizeDelayedLoad') thaw(o) else
-	#if (recursive && class(o) == 'environment') thaw_environment(o) else
-	if (recursive && class(o) == 'list') thaw_list(o) else o;
-	r
-}
-
-thaw_object = function(o, recursive = T, envir = parent.frame()) {
-	if (all(search() != 'delayed_objects_env')) delayed_objects_attach();
-	thaw_object_internal(o, recursive = recursive, envir = envir);
-}
-
-#
-#	<p> backend classes
-#
-
-setGeneric('thaw', function(self, which = NA) standardGeneric('thaw'));
-
-setClass('ParallelizeDelayedLoad',
-	representation = list(
-		path = 'character'
-	),
-	prototype = list(path = NULL)
-);
-setMethod('initialize', 'ParallelizeDelayedLoad', function(.Object, path) {
-	.Object@path = path;
-	.Object
-});
-
-setMethod('thaw', 'ParallelizeDelayedLoad', function(self, which = NA) {
-	if (0) {
-	key = sprintf('%s%s', self@path, ifelse(is.na(which), '', which));
-	if (!exists(key, envir = delayed_objects_env)) {
-		Log(sprintf('Loading: %s; key: %s', self@path, key), 4);
-		ns = load(self@path);
-		object = get(if (is.na(which)) ns[1] else which);
-		assign(key, object, envir = delayed_objects_env);
-		gc();
-	} else {
-		#Log(sprintf('Returning existing object: %s', key), 4);
-	}
-	#return(get(key, envir = delayed_objects_env));
-	# assume delayed_objects_env to be attached
-	return(as.symbol(key));
-	}
-
-	delayedAssign('r', {
-		gc();
-		ns = load(self@path);
-		object = get(if (is.na(which)) ns[1] else which);
-		object
-	});
-	return(r);
-});
-
-RNGuniqueSeed = function(tag) {
-	if (exists('.Random.seed')) tag = c(.Random.seed, tag);
-	md5 = md5sumString(join(tag, ''));
-	r = list(
-		kind = RNGkind(),
-		seed = hex2int(substr(md5, 1, 8))
-	);
-	r
-}
-
-RNGuniqueSeedSet = function(seed) {
-	RNGkind(seed$kind[1], seed$kind[2]);
-	#.Random.seed = freeze_control$rng$seed;
-	set.seed(seed$seed);
-}
-
-FreezeThawControlDefaults = list(
-	dir = '.', sourceFiles = c(), libraries = c(), objects = c(), saveResult = T,
-	freeze_relative = F, freeze_ssh = T, logLevel = Log.level()
-);
-
-thawCall = function(
-	freeze_control = FreezeThawControlDefaults,
-	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag)) {
-
-	load(freeze_file, envir = .GlobalEnv);
-	r = with(callSpecification, {
-		for (library in freeze_control$libraries) {
-			eval(parse(text = sprintf('library(%s)', library)));
-		}
-		for (s in freeze_control$sourceFiles) source(s, chdir = T);
-		Log.setLevel(freeze_control$logLevel);
-		if (!is.null(freeze_control$rng)) RNGuniqueSeed(freeze_control$rng);
-
-		if (is.null(callSpecification$freeze_envir)) freeze_envir = .GlobalEnv;
-		# <!> freeze_transformation must be defined by the previous source/library calls
-		transformation = eval(parse(text = freeze_control$thaw_transformation));
-		r = do.call(eval(parse(text = f)), transformation(args), envir = freeze_envir);
-		#r = do.call(f, args);
-		if (!is.null(freeze_control$output)) save(r, file = freeze_control$output);
-		r
-	});
-	r
-}
-
-frozenCallWrap = function(freeze_file, freeze_control = FreezeThawControlDefaults,
-	logLevel = Log.level(), remoteLogLevel = logLevel)
-	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
-	sp = splitPath(freeze_file, ssh = freeze_ssh);
-	file = if (freeze_relative) sp$file else sp$path;
-browser();
-	#wrapperPath = sprintf("%s-wrapper.RData", splitPath(file)$fullbase);
-	r = sprintf("R.pl --template raw --no-quiet --loglevel %d --code 'eval(get(load(\"%s\")[[1]]))' --",
-		logLevel, file);
-	r
-})
-
-frozenCallResults = function(file) {
-	callSpecification = NULL;	# define callSpecification
-	load(file);
-	get(load(callSpecification$freeze_control$output)[[1]]);
-}
-
-freezeCallEncapsulated = function(call_,
-	freeze_control = FreezeThawControlDefaults,
-	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
-	freeze_save_output = F, freeze_objects = NULL, thaw_transformation = identity)
-	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
-
-	sp = splitPath(freeze_file, ssh = freeze_ssh);
-	outputFile = if (freeze_save_output)
-		sprintf("%s_result.RData", if (freeze_relative) sp$base else sp$fullbase) else
-		NULL;
-
-	callSpecification = list(
-		f = deparse(call_$fct),
-		#f = freeze_f,
-		args = call_$args,
-		freeze_envir = if (is.null(call_$envir)) new.env() else call_$envir,
-		freeze_control = list(
-			sourceFiles = sourceFiles,
-			libraries = libraries,
-			output = outputFile,
-			rng = freeze_control$rng,
-			logLevel = freeze_control$logLevel,
-			thaw_transformation = deparse(thaw_transformation)
+# Knit('dir/input.Rmd')
+Knit = function(input, output = NULL, ..., format = 'html') {
+	Require('knitr');
+	Require('markdown');
+	sp = splitPath(input);
+# 	knit(input, output = with(sp, Sprintf('%{fullbase}s.md')));
+# 	switch(format,
+# 		'html' = markdownToHTML(with(sp, Sprintf('%{fullbase}s.md')), with(sp, Sprintf('%{fullbase}s.html')))
+# 	)
+	owd = getwd();
+	setwd(sp$dir);
+	for (f in format) {
+		switch(f,
+			'html' = rmarkdown::render(sp$file,
+				output_format = rmarkdown::html_document(),
+				output_file = with(sp, Sprintf('%{base}s.html')), ...)
 		)
-	);
-	thawFile = if (freeze_relative) sp$file else sp$path;
-	callWrapper = call('thawCall', freeze_file = thawFile);
-	#Save(callWrapper, callSpecification, thawCall, file = file);
-	#Save(c('callWrapper', 'callSpecification', 'thawCall', objects),
-	#	file = freeze_file, symbolsAsVectors = T);
-	#Save(c(c('callWrapper', 'callSpecification', 'thawCall'), objects),
-	Save(c('callWrapper', 'callSpecification', 'thawCall', freeze_objects),
-		file = freeze_file, symbolsAsVectors = T);
-	freeze_file
-})
-
-# <!> assume matched call
-# <A> we only evaluate named args
-callEvalArgs = function(call_, env_eval = FALSE) {
-	#if (is.null(call_$envir__) || is.null(names(call_$args))) return(call_);
-	#if (is.null(call_$envir) || !length(call_$args)) return(call_);
-
-	# <p> evaluate args
-	if (length(call_$args)) {
-		args = call_$args;
-		callArgs = lapply(1:length(args), function(i)eval(args[[i]], envir = call_$envir));
-		# <i> use match.call instead
-		names(callArgs) = setdiff(names(call_$args), '...');
-		call_$args = callArgs;
 	}
-
-	if (env_eval) {
-		call_$fct = environment_eval(call_$fct, functions = FALSE, recursive = FALSE);
-	}
-	# <p> construct return value
-	#callArgs = lapply(call_$args, function(e){eval(as.expression(e), call_$envir)});
-	call_
+	setwd(owd);
 }
 
-#callWithFunctionArgs = function(f, args, envir__ = parent.frame(), name = NULL) {
-callWithFunctionArgs = function(f__, args__, envir__ = environment(f__), name = NULL, env_eval = FALSE) {
-	if (env_eval) f = environment_eval(f__, functions = FALSE, recursive = FALSE);
-	call_ = list(
-		fct = f__,
-		envir = environment(f__),
-		args = args__,
-		name = name
-	);
-	call_
-}
-
-freezeCall = function(freeze_f, ...,
-	freeze_control = FreezeThawControlDefaults,
-	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
-	freeze_save_output = F, freeze_envir = parent.frame(), freeze_objects = NULL, freeze_env_eval = F,
-	thaw_transformation = identity) {
-
-	# args = eval(list(...), envir = freeze_envir)
-	call_ = callWithFunctionArgs(f = freeze_f, args = list(...),
-		envir__ = freeze_envir, name = as.character(sys.call()[[2]]), env_eval = freeze_env_eval);
-
-	freezeCallEncapsulated(call_,
-		freeze_control = freeze_control, freeze_tag = freeze_tag,
-		freeze_file = freeze_file, freeze_save_output = freeze_save_output, freeze_objects = freeze_objects,
-		thaw_transformation = thaw_transformation
-	);
-}
-
-
-encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate_args__ = FALSE,
-	unbound_functions = F) {
-	# function body of call
-	name = as.character(.call[[1]]);
-	fct = get(name);
-	callm = if (!is.primitive(fct)) {
-		callm = match.call(definition = fct, call = .call);
-		as.list(callm)[-1]
-	} else as.list(.call)[-1];
-	args = if (do_evaluate_args__) {
-		nlapply(callm, function(e)eval(callm[[e]], envir = envir__))
-	} else nlapply(callm, function(e)callm[[e]])
-	# unbound variables in body fct
-	#unbound_vars = 
-
-	call_ = list(
-		fct = fct,
-		envir = envir__,
-
-		#args = as.list(sys.call()[[2]])[-1],
-		args = args,
-
-		name = name
-	);
-	call_
-}
-
-
-#
-#	</p> freeze/thaw functions
-#
-
-Deparse = function(o)join(deparse(o));
 #
 #	Rgraphics.R
 #Mon 27 Jun 2005 10:52:17 AM CEST
@@ -5187,35 +6019,94 @@ ggplot_qqunif = function(p.values, alpha = .05, fontsize = 6,
 		theme(text = element_text(size = fontsize));
 	p
 }
-#ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
-QQunif = Qqunif = function(p.values, alpha = .05, fontsize = 12,
-	tr = function(P)-log10(P), trName = Deparse(body(tr)), colorCI = "#000099",
-	bins = c(2e2, 2e2), Nrep = 10) {
 
-	# <p> preparation
-	if (any(p.values <= 0 | p.values > 1)) stop("P.values not in interval (0, 1)");
-	p.values = tr(sort(na.omit(p.values)));
+QQunifPlotDf = function(p.values, alpha = .05, tr = function(P)-log10(P), trName = Deparse(body(tr)),
+	bins = c(2e2, 2e2), Nrep = 10, p.bottom = 1e-300, na.rm = T) {
+
+	# <p> filter
+	Logs('#p-values being NA: %{Nna}d', Nna = sum(is.na(p.values)), logLevel = 4);
+	if (na.rm) p.values = p.values[!is.na(p.values)];
+	Logs('#p-values < %{p.bottom}.1e: %{Nceil}d', Nceil = sum(p.values < p.bottom), logLevel = 4);
+	p.values = ifelse(p.values < p.bottom, p.bottom, p.values);
+
+	# <p> data frame
+	if (any(p.values < 0 | p.values > 1)) stop("P.values not in interval (0, 1)");
+	o = order(p.values)
+	p.values = tr(p.values[o]);
+
+	# <p> data frame
 	N = length(p.values);
 	d = data.frame(theoretical = tr((1:N)/N), p.value = p.values);
 
 	# <p> binning
-	if (!is.null(bins)) {
-		Ns = binPlot(d, bins = bins, Nrep = Nrep, returnIdcs = T);
-		d = d[Ns, ];
-	} else Ns = 1:N;
+	Ns = if (!is.null(bins)) binPlot(d, bins = bins, Nrep = Nrep, returnIdcs = T) else Ns = 1:N;
+	d = d[Ns, ];
 
 	# j-th order statistic from a uniform(0,1) sample has beta(j,n-j+1) distribution
 	# (Casella & Berger, 2002, 2nd edition, pg 230, Duxbury)
 	dPlot = data.frame(d,
-		ciU = tr(qbeta(1 - alpha/2, Ns, N - Ns + 1)), ciL = tr(qbeta(    alpha/2, Ns, N - Ns + 1)),
-		colorCI = colorCI);
+		ciU = tr(qbeta(1 - alpha/2, Ns, N - Ns + 1)), ciL = tr(qbeta(alpha/2, Ns, N - Ns + 1)));
+	dPlot
+}
+
+#ggplot_qqunif(seq(1e-2, 3e-2, length.out = 1e2))
+QQunif = Qqunif = function(p.values, alpha = .05, fontsize = 12,
+	tr = function(P)-log10(P), trName = Deparse(body(tr)), colorCI = "#000099",
+	bins = c(2e2, 2e2), Nrep = 10, p.bottom = 0) {
+
+	dPlot = QQunifPlotDf(p.values, alpha, tr, trName, bins, Nrep, p.bottom, na.rm = T);
+	dPlot = Df(dPlot, colorCI = colorCI);
+
 	p = ggplot(dPlot) +
 		geom_line(aes(x = theoretical, y = ciU, colour = colorCI)) +
 		geom_line(aes(x = theoretical, y = ciL, colour = colorCI)) +
 		geom_point(aes(x = theoretical, y = p.value), size = 1) +
-		theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(p.values)*1.1)) +
+		theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(dPlot$p.value)*1.1)) +
 		scale_y_continuous(name = trName) +
 		theme(text = element_text(size = fontsize));
+
+	p
+}
+
+cbPalette1 = c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7");
+cbPalette2 = c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7");
+QQunifDfPalette = c(cbPalette1, cbPalette2);
+
+QQunifDf = function(f1, data, alpha = .05, fontsize = 12,
+	tr = function(P)-log10(P), trName = Deparse(body(tr)), trI = function(Ptr)exp(Ptr * log(10)),
+	colorCI = "#000099", bins = c(2e2, 2e2), Nrep = 10, p.bottom = 0, byCutoff = 1, legendTitle = 'Test') {
+	# <p> variable names
+	p.value = formula.response(f1);
+
+	cats0 = factorFromFormula(data, formula.rhs(f1));
+	plotDfs = by(data, cats0, function(d0)
+		QQunifPlotDf(d0[[p.value]], alpha, tr, trName, bins, Nrep, p.bottom, na.rm = T));
+	#color = recodeLevels(as.character(cats0), levels = c('odd', 'even'));
+	dPlot = do.call(rbind, nlapply(plotDfs, function(n)Df(name = n, plotDfs[[n]])));
+	dPlot = dPlot[!is.na(dPlot[[p.value]]),, drop = F];
+	dPlot = dPlot[order(dPlot[[p.value]]), ];
+	myBreaks = function()cats0;	# work around for ggplot2 behavior of lexically scoping to data set only
+	palette = c(colorCI, QQunifDfPalette)[1:(length(cats0) + 1)];
+
+	# <p> data frame CI
+	pRangeTh = range(dPlot$theoretical);
+	N = ceiling(trI(pRangeTh[2]));	# <!> inverse of tr
+	dCi = data.frame(
+		theoretical = tr((1:N - .5)/N),
+		ciU = tr(qbeta(1 - alpha/2, 1:N, N - (1:N) + 1)), ciL = tr(qbeta(alpha/2, 1:N, N - (1:N) + 1))
+	);
+
+	p = ggplot(dPlot) +
+		geom_point(aes(x = theoretical, y = p.value, colour = name), size = 1) +
+		scale_color_manual(name = get('legendTitle'), breaks = get('cats0'), values = get('palette')) + 
+		#theme_bw() + theme(legend.position = 'none') + coord_cartesian(ylim = c(0, max(dPlot$p.value)*1.1)) +
+		theme_bw() + coord_cartesian(ylim = c(0, max(dPlot$p.value)*1.1)) +
+		scale_y_continuous(name = trName) +
+		theme(text = element_text(size = fontsize)) +
+		# CI
+		geom_line(data = dCi, aes(x = theoretical, y = ciU, colour = colorCI)) +
+		geom_line(data = dCi, aes(x = theoretical, y = ciL, colour = colorCI))
+
 	p
 }
 
@@ -5234,20 +6125,41 @@ plot_grid_grid = function(plots, coords) {
 	});
 }
 
-plot_grid_base = function(plots, coords, envirPlotVar = 'plot') {
+plot_error = function(msg, errN = 10) {
+	plot(1:errN, type = 'n', xlab = '', ylab = '', axes = FALSE, frame.plot = FALSE);
+	text(errN/2, errN/2, msg);
+}
+
+plot_grid_base = function(plots, coords, envirPlotVar = 'plot', verbose = F, errN = 10) {
 	# <p> do plotting
 	coordMat0 = matrix(0, nrow = max(coords[, 1]), ncol = max(coords[, 2]));
-	coordMat = matrix.assign(coordMat0, coords, 1:length(plots));
+	coordMat = matrix.assign(coordMat0, coords, 1:prod(dim(coordMat0)));
 	layout(coordMat);
 
 	sapply(1:length(plots), function(i) {
-		eval(get(envirPlotVar, plots[[i]]));
+		if (verbose) LogS(2, 'plot_grid#: %{i}d');
+		this = try({
+			switch(class(plots[[i]]),
+				environment = eval(get(envirPlotVar, plots[[i]])),
+				`function` = do.call(plots[[i]], list()),
+				eval(plots[[i]]))
+		});
+		if (class(this) == 'try-error') plot_error(this)
 	});
 # 			if (is.environment(plots[[i]])) eval(get(envirPlotVar, plots[[i]])) else print(plots[[i]]);
 }
 
+# plot_grid(list(
+# 	quote(plot(t0, col = d$sex)),
+# 	quote(plot(pca0$x[, 1:2], col = d$sex)),
+# 	function() {
+# 		plot(1:10, type = 'n', xlab = '', ylab = '');
+# 		text(5, 5, join(c(Sprintf('Family: %{myFid}d'), pedPed), "\n")) }
+# ), nrow = 2);
+# plot_save(plts, file = .fn('tsne-pca', 'pdf'));
 
-plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar = 'plot') {
+
+plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar = 'plot', verbose = F) {
 	if (missing(nrow)) {
 		if (missing(ncol)) {
 			ncol = 1;
@@ -5260,14 +6172,16 @@ plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar =
 	coords = if (is.null(mapper))
 		merge.multi(1:nrow, 1:ncol, .first.constant = byrow) else
 		mapper(1:length(plots));
-		
-	if (is.environment(plots[[1]]))
-		plot_grid_base(plots, coords, envirPlotVar) else
-		plot_grid_grid(plots, coords)
+
+	switch(class(plots[[1]]),
+		viewport = plot_grid_grid(plots, coords),
+		plot_grid_base(plots, coords, envirPlotVar, verbose = verbose)
+	);
 }
 
 plot_grid_to_path =  function(plots, ..., path,
-	width = valueU(21, 'cm'), height = valueU(29.7, 'cm'), NperPage = NULL, pdfOptions = list(paper = 'a4')) {
+	width = valueU(21, 'cm'), height = valueU(29.7, 'cm'), NperPage = NULL, pdfOptions = list(paper = 'a4'),
+	verbose = F) {
 
 	if (class(width) == 'numeric') width = valueU(width, 'inch');
 	if (class(height) == 'numeric') height = valueU(height, 'inch');
@@ -5287,8 +6201,9 @@ plot_grid_to_path =  function(plots, ..., path,
 	), pdfOptions);
 	do.call(pdf, pdfArgs);
 
-	lapply(pages, function(plotIdcs) {
-		plot_grid(plots[plotIdcs], ...);
+	ilapply(pages, function(plotIdcs, i) {
+		if (verbose) LogS(2, 'Plotting page: %{i}d');
+		plot_grid(plots[plotIdcs], ..., verbose = verbose);
 	});
 
 	dev.off();
@@ -5304,7 +6219,7 @@ plot_adjacent = function(fts, factor, N = ncol(fts)) {
 }
 
 plot_grid_pdf = function(plots, file, nrow, ncol, NperPage, byrow = T, mapper = NULL,
-	pdfOptions = list(paper = 'a4')) {
+	pdfOptions = list(paper = 'a4'), verbose = F) {
 	Nplots = length(plots);
 	if (missing(nrow)) nrow = NperPage / ncol;
 	if (missing(ncol)) ncol = NperPage / nrow;
@@ -5313,9 +6228,10 @@ plot_grid_pdf = function(plots, file, nrow, ncol, NperPage, byrow = T, mapper = 
 
 	do.call(pdf, c(list(file = file), pdfOptions));
 	sapply(1:Npages, function(i) {
+		if (verbose) LogS(2, 'Plotting page: %{i}d');
 		Istrt = (i - 1) * NperPage + 1;
 		Istop = min(i * NperPage, Nplots);
-		plot_grid(plots[Istrt:Istop], nrow, ncol, byrow = byrow, mapper = mapper);
+		plot_grid(plots[Istrt:Istop], nrow, ncol, byrow = byrow, mapper = mapper, verbose = verbose);
 	});
 	dev.off();
 }
@@ -5585,6 +6501,16 @@ Device = function(type, plot_path, width, height, ..., units = 'cm', dpi = NA, a
 # if unit_out is from a class beginning with unitDpi, produce a resolution argument correpsonding
 #	to that many dpi
 
+plot_draw = function(object, envir) {
+	ret = if (any(class(object) == 'grob')) {
+		grid.draw(object)
+	} else if (any(class(object) %in% c('ggplot', 'plot'))) {
+		print(object)
+	} else {
+		eval(object, envir = envir);
+	}
+}
+
 plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	type = NULL, options = list(), unit = 'cm', unit_out = NULL, autoScale = FALSE, envir = parent.frame()) {
 
@@ -5599,13 +6525,14 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 	Device(type, plot_path, width = width, height = height, units = 'cm', dpi = dpi, ...,
 		autoScale = autoScale);
 		#ret = eval(object, envir = envir);
-		ret = if (any(class(object) == 'grob')) {
-			grid.draw(object)
-		} else if (any(class(object) %in% c('ggplot', 'plot'))) {
-			print(object)
-		} else {
-			eval(object, envir = envir);
-		}
+# 		ret = if (any(class(object) == 'grob')) {
+# 			grid.draw(object)
+# 		} else if (any(class(object) %in% c('ggplot', 'plot'))) {
+# 			print(object)
+# 		} else {
+# 			eval(object, envir = envir);
+# 		}
+		ret = plot_draw(object, envir = envir);
 	dev.off();
 }
 
@@ -5618,7 +6545,7 @@ plotSizes = list(
 );
 #
 #	Examples:
-#	plot_save(c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
+#	plot_save(object, c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
 plot_typeMap = list(jpg = 'jpeg');
 plot_save = function(object, ..., size, width, height, plot_path = NULL,
 	type = NULL,
@@ -5912,6 +6839,7 @@ latex = list(
 	},
 	quote = function(s, detectFormula = T) {
 		s = gsub('_', '\\\\_', s, perl = T);
+		s = gsub('#', '\\\\#', s, perl = T);
 		s = gsub('&', '\\\\&', s, perl = T);
 		s = gsub('~', '$\\\\sim$', s, perl = T);
 		s = gsub('([<>])', '$\\1$', s, perl = T);
@@ -6615,7 +7543,6 @@ REP.finalize = function(conditionals = list(), verbose = FALSE, cycles = 1, outp
 		if (r$error > 0 || (verbose && i == 1)) Log(r$output, 1);
 		#if (r$error > 0) break;
 	}
-
 	# <p> output
 	postfix = join(names(conditionals[unlist(conditionals)]), '-');
 	if (postfix != '') postfix = sprintf('-%s', postfix);
@@ -6759,6 +7686,45 @@ benchmark.timed = function(.f, ..., N__ = 1e1) {
 	print(r$time);
 	print(r$t0);
 	print(r$t1);
+	r
+}
+
+Benchmark = function(expr, N__ = 1, verbose = T, returnTiming = F, Nabbr = 20, logLevel = 2,
+	gcFirst = FALSE, timeStat = sum, envir = parent.frame()) {
+	s = Deparse(substitute(expr));
+
+	# <p> timing
+	t0 = Sys.time();
+	# <i> for-loop required due to side-effects
+	r0 = NULL;
+	timesCal = NULL;
+	timesSys = NULL;
+	for (i in 1:N__) {
+		t0i = Sys.time();
+		t = system.time(r0 <- eval(expr, envir = envir), gcFirst = gcFirst);
+		t1i = Sys.time();
+		timesCal[i] = t1i - t0i;
+		timesSys[i] = timeStat(t);
+	}
+	t1 = Sys.time();
+
+	# <p> stats
+	#timeTotal = t1 - t0;
+	#timeIteration = timeTotal/N__;
+	timing = list(
+		timeCal = sum(timesCal), timeCalIter = mean(timesCal), timeCalSd = sd(timesCal),
+		timeSys = sum(timesSys), timeSysIter = mean(timesSys), timeSysSd = sd(timesSys),
+		lastResult = r0, t0 = t0, t1 = t1
+	);
+
+	if (verbose) with(timing, {
+		exprStr = strAbbr(s, Nabbr);
+		l = logLevel;
+		Logs('Timing of %{exprStr}s', logLevel = l);
+		Logs('\tCal: %{timeCal}.2f Iter: %{timeCalIter}.2f (%{timeCalSd}.1f)', logLevel = l);
+		Logs("\tSys: %{timeSys}.2f Iter: %{timeSysIter}.2f (%{timeSysSd}.1f)", logLevel = l);
+	})
+	r = if (returnTiming) timing else r0;
 	r
 }
 #
@@ -7444,16 +8410,20 @@ regressionMethods = list(
 		}
 	),
 	gee = list(
-		fit = function(formula, data, clusterCol, ...) {
+		fit = function(formula, data, clusterCol, family = binomial(), ...) {
 			if (!length(formula.covariates(formula))) return(NULL);
-			# geeglm needs ordered clusterIds <!>
-			data = data[order(data[[clusterCol]]), ];
-			names(data)[which(names(data) == clusterCol)] = "..gee.clusters";	# hack to make geeglm work
-			r = geeglm(formula, data = data, id = ..gee.clusters, ...);
+			# geeglm needs ordered clusterIds <!> <N> now pre-processed
+			#data = data[order(data[[clusterCol]]), , drop = F];
+			#data = Df_(data, headerMap = listKeyValue(clusterCol, 'regrCompClusters'));
+			#names(data)[which(names(data) == clusterCol)] = "regrCompClusters";	# hack to make geeglm work
+			#geeClusters = as.integer(data[[clusterCol]]);
+			myFamily = get(family$family)();
+			r = geeglm(formula, data = data, id = regrCompClusters, ...);
 			r
 		},
 		compare = function(m1, m0){
-			a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			#a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			a = if (is.null(m0)) anova(m1$r) else { anova(m0$r, m1$r); }
 			list(anova = a, m0 = m0, m1 = m1, p.value = a[["P(>|Chi|)"]][1],
 				effects0 = coefficients(summary(m0$r))[, "Estimate"],
 				sdevs0 = coefficients(summary(m0$r))[, "Std.err"],
@@ -7461,10 +8431,51 @@ regressionMethods = list(
 				sdevs1 = coefficients(summary(m1$r))[, "Std.err"]
 			)
 		}
+	),
+	geebin = list(
+		fit = function(formula, data, clusterCol, ...) {
+			if (!length(formula.covariates(formula))) return(NULL);
+			# <!> workaround for generic approach that gives obscure error message
+			#	gee with family = binomial()
+			r = geeglm(formula, data = data, id = regrCompClusters, family = binomial(), ...);
+			r
+		},
+		compare = function(m1, m0){
+			#a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			a = if (is.null(m0)) anova(m1$r) else { anova(m0$r, m1$r); }
+			list(anova = a, m0 = m0, m1 = m1, p.value = a[["P(>|Chi|)"]][1],
+				effects0 = coefficients(summary(m0$r))[, "Estimate"],
+				sdevs0 = coefficients(summary(m0$r))[, "Std.err"],
+				effects1 = coefficients(summary(m1$r))[, "Estimate"],
+				sdevs1 = coefficients(summary(m1$r))[, "Std.err"]
+			)
+		}
+	),
+	surv = list(
+		fit = function(formula, data, clusterCol, ...)
+			list(r = coxph(formula, data = data), formula = formula, data = data),
+		compare = function(m1, m0){
+			vars0 = formula.predictors(m0$r$formula, m0$r$data);
+			Nvars0 = length(vars0);
+			vars1 = formula.predictors(m1$r$formula, m1$r$data);
+			Nvars1 = length(vars1);
+			p.value = if (Nvars0 == 0 || (Nvars1 - Nvars0) == 1) {
+				v = setdiff(vars1, vars0);
+				summary(m1$r$r)$coefficients[v, 'Pr(>|z|)']
+			} else {
+				anova(m0$r$r, m1$r$r)[2, 'P(>|Chi|)']
+			}
+			r = list(
+				p.value = p.value,
+				effects0 = coefficients(summary(m0$r$r)),
+				effects1 = coefficients(summary(m1$r$r))
+			);
+			r
+		}
 	)
 );
 
-completeRows = function(f1, data) {
+CompleteRows = function(f1, data) {
 	vars = all.vars(as.formula(f1));
 	rows = apply(data[, vars, drop = F], 1, function(r)all(!is.na(r)));
 	r = which(rows);
@@ -7483,18 +8494,26 @@ regressionCompare = function(m1, m0) {
 }
 
 regressionCompareModelsRaw = function(f1, f0, data, type = "lm", clusterCol = NULL, ...) {
+	f0 = as.formula(f0);
+	f1 = as.formula(f1);
 	# <p> jointly trim data according to missing data
 	#rows = which(apply(data[, c(formula.vars(f1), clusterCol)], 1, function(r)all(!is.na(r))));
 	# more robust version
 	row.names(data) = NULL;
 	#rows = as.integer(row.names(model.frame(f1, data = data)));
 	# robust for random effects
-	rows = apply(data[, all.vars(as.formula(f1)), drop = F], 1, function(r)!any(is.na(r)));
-	d0 = data[rows, ];
+	#rows = apply(data[, all.vars(as.formula(f1)), drop = F], 1, function(r)!any(is.na(r)));
+	#d0 = data[rows, ];
+	# <p> general cluster processing: order (<!> required for geeglm, rename <!> required for geeglm
+	if (Nif(clusterCol)) {
+		data = data[order(data[[clusterCol]]), , drop = F];
+		data = Df_(data, headerMap = listKeyValue(clusterCol, 'regrCompClusters'));
+	}
+	d0 = model_matrix_from_formula(f1, data, returnComplete = T)$data;
 
 	# <p> fit and compare models
-	m1 = regressionFit(as.formula(f1), data = d0, type = type, clusterCol = clusterCol, ...);
-	m0 = regressionFit(as.formula(f0), data = d0, type = type, clusterCol = clusterCol, ...);
+	m1 = regressionFit(f1, data = d0, type = type, clusterCol = clusterCol, ...);
+	m0 = regressionFit(f0, data = d0, type = type, clusterCol = clusterCol, ...);
 	a = regressionCompare(m1, m0);
 	a
 }
@@ -7603,6 +8622,33 @@ permute = function(data, stat, vars, ..., Nperm = 5e3, Pvalue = 'lower', na.rm =
 	r
 }
 
+calibrate = function(f1, data, regression = glm, family = binomial(), quantiles = seq(0, 1, 0.25), ...) {
+	stat0 = regression(f1, data, family = family);
+	scores = predict(stat0, data, type = 'link');
+	ps = predict(stat0, data, type = 'response');
+	y = data[[formula.response(f1)]];
+	groups = quantile(scores, probs = quantiles, na.rm = FALSE);
+
+	calibration = lapply(2:length(quantiles), function(i) {
+		group = scores > groups[i - 1] & scores <= groups[i];
+		c(mean(y[group]), mean(ps[group]), sum(group))
+	});
+	c0 = Df(do.call(rbind, calibration),
+		row.names = paste0(sprintf('%.1f', quantiles[-1] * 100), '%'),
+			names = c('truth', 'prediction', 'N'));
+	r = list(calibration = c0, model = summary(stat0), quantiles = groups[-1], scores = scores);
+	r
+}
+
+#
+#	<p> P-values
+#
+
+alphaLevels = function(ps, Nalpha = 40, alphas = seq(1/Nalpha, 1 - 1/Nalpha, length.out = Nalpha)) {
+	lvls = setNames(sapply(alphas, function(alpha)mean(ps < alpha)), round(alphas, 2));
+	lvls
+}
+
 #
 #	<p> error propagation
 #
@@ -7629,7 +8675,7 @@ errSum = function(sdx, cx = 1, sdy = 0, cy = 1, covxy = 0) {
 #
 
 # convert confidence interval to standard dev based on a normality assumption
-ciToSd = function(ci.lo, ci.up, level = .95) {
+ciToSd_old = function(ci.lo, ci.up, level = .95) {
 	# upper centered limit
 	ciU = ci.up - mean(c(ci.lo, ci.up));
 	span = ci.up - ci.lo;
@@ -7637,7 +8683,7 @@ ciToSd = function(ci.lo, ci.up, level = .95) {
 	sd = Vectorize(inverse(function(s)qnorm(1 - (1 - level)/2, 0, s), interval = c(0, span * 8)))(ciU);
 	sd
 }
-ciToSd_1 = function(ci.lo, ci.up, level = .95) {
+ciToSd = function(ci.lo, ci.up, level = .95) {
 	alpha = 1 - level;
 	widthStd = qnorm(1 - alpha/2) * 2;
 	(ci.up - ci.lo)/widthStd
@@ -7661,8 +8707,8 @@ betaSdToCi = ciFromBetaSdev = function(beta, sdev, level = .95) {
 }
 
 ciFromSummary = function(s, var, level = .95) {
-	cs = coefficients(s)[var, ];
-	ciFromBetaSdev(cs[["Estimate"]], cs[["Std. Error"]], level = level);
+	cs = as.matrix(coefficients(s)[var, ]);
+	ciFromBetaSdev(cs[, 'Estimate'], cs[, 'Std. Error'], level = level);
 }
 
 pFromBetaSd = function(beta, sd, null = 0)pnorm(null, abs(beta), sd)
@@ -7672,6 +8718,21 @@ betaPtoCi = function(beta, p) {
 	ciFromBetaSdev(beta, sd)
 }
 betaVarToCi = function(beta, var)ciFromBetaSdev(beta, sqrt(var))
+
+coefficientsOR = function(s, level = .95) {
+	cis = do.call(cbind, ciFromSummary(s, level = level));
+
+	# <p> ORs
+	cisOR = Df_(exp(cis));
+	cisOR['(Intercept)', ] = NA;	# intercept does not have an OR interpretation
+	names(cisOR) = paste(names(cisOR), 'OR', sep = '');
+
+	# <p> result
+	cfs = coefficients(s);
+	r = cbind(cfs, cis[, -1], as.matrix(cisOR));
+	r
+}
+coefficientsORmodel = function(model, level = .95)coefficientsORsModel(summary(model), level)
 
 #
 #	meta analysis
@@ -7727,26 +8788,27 @@ imputeMean = function(data) {
 
 # impute using mice
 imputeVariables = function(data, formula = NULL, vars = NULL, Nimp = 10, returnOriginal = FALSE,
-	imputationColumn = 'Imputation_') {
+	imputationColumn = 'Imputation_', returnMice = FALSE) {
 	require('mice');
 
 	# <p> preparation
 	if (notE(formula)) vars = all.vars(formula.re(formula, data = data));
-	if (any(!lapply(data[, vars], class) %in% c('factor', 'numeric'))) {
-		stop('come columns not factor or numeric');
+	invalidVars = vars[!lapply(data[, vars], class) %in% c('factor', 'numeric')];
+	if (length(invalidVars) > 0) {
+		stop(Sprintf('some columns neither factor nor numeric: %{v}s', v = join(invalidVars, ', ')));
 	}
-	s = Summary(data[, vars]);
+	s = descriptives(data[, vars]);
 	
 	# <p> imputation
-	dataImputed = mice(data[, vars], m = Nimp);
+	dataImputed = mice(data[, vars, drop = F], m = Nimp);
 	dataL = Df_(complete(dataImputed, "long", include = returnOriginal),
 		min_ = c('.id'), headerMap = list(`.imp` = imputationColumn), as_numeric = imputationColumn);
 
-	N = if (returnOriginal) Nimp + 1 else Nimp;
-	dataC = DfStack(data, N);
+	dataC = DfStack(data, (Nimp + returnOriginal));
 	dataC[, vars] = Df_(dataL, min_ = imputationColumn);
 	dataR = Df(dataL[, imputationColumn], dataC, names = imputationColumn);
 	r = list(data = dataR, summary = s, vars = vars);
+	if (returnMice) r = c(r, list(mice = dataImputed));
 	#r = list(data = dataImputed, summary = s, vars = vars);
 	r
 }
@@ -7870,11 +8932,12 @@ seq.transf = function(from = 0, to = 1, length.out = 1e1, ..., transf = log, tra
 #
 
 completeRows = function(data)!apply(data, 1, function(r)any(is.na(r)))
+completeData = function(f, data)data[completeRows(data[, all.vars(f), drop = F]), , drop = F]
 
 model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F,
-	returnComplete = F) {
+	returnComplete = F, formulaAsIs = F) {
 	# <p> prepare data matrices
-	f1 = formula.re(f, data = data, ignore.case = ignore.case);
+	f1 = if (formulaAsIs) f else formula.re(f, data = data, ignore.case = ignore.case);
 	f1vars = all.vars(f1);
 	response = formula.response(f1);
 	responseVars = all.vars(as.formula(con(response, ' ~ 1')));
@@ -7882,14 +8945,17 @@ model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, re
 	# <p> complete data
 	complete = completeRows(data[, f1vars, drop = F]);
 	data = droplevels(data[complete, , drop = F]);
-
+	
 	# <p> response
 	responseData = if (notE(responseVars)) with(data, Eval(response)) else NULL;
 	# <p> offset
 	offset = if (!is.null(offset)) offset[complete] else NULL;
 	# <p> model matrix
-	mm = model.matrix(f1, model.frame(f1, data = data));
-	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)')];
+	#mm = if (exists('lFormula') && length(unlist(Regex('[+]\\s*[(]', Deparse(f1)))) > 0)
+	mm = if (exists('lFormula') && length(unlist(Regex('[+]\\s*[(].*?[|].*[)]', Deparse(f1)))) > 0)
+		lFormula(f1, data)$X else	# lme4
+		model.matrix(f1,  model.frame(f1, data = data));
+	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)'), drop = F];
 
 	# <p> return
 	r = list(mm = mm, response = responseData, offset = offset, indeces = which(complete),
@@ -8234,7 +9300,7 @@ compareVectors = function(l) {
 }
 
 pairs_std.panel.hist <- function(x, ...) {
-	usr <- par("usr"); on.exit(par(usr))
+	usr <- par("usr"); on.exit(par(usr));	# restore settings
 	par(usr = c(usr[1:2], 0, 1.5) )
 	h <- hist(x, plot = FALSE)
 	breaks <- h$breaks; nB <- length(breaks)
@@ -8252,8 +9318,41 @@ pairs_std.panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
 	if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
 	text(0.5, 0.5, txt, cex = cex.cor * 1)	# used tb cex.cor * r
 }
+
+unique_fraction = function(x) (length(unique(x))/length(x))
+guess_is_factor = function(x, na.rm = T) {
+	all(as.integer(x) == x, na.rm = na.rm) && unique_fraction(x) < .1
+}
+
+
+panel.scatter = function(x, y, col = par("col"), bg = NA, pch = par("pch"), 
+	cex = 1, col.smooth = "red", span = 2/3, iter = 3, blotSize = cm2in(.3), ...) 
+{
+	#call_ = match.call(envir = parent.frame(1L));
+	# it is difficult to get information on the plotted variables, for now a heuristics is used
+	#	to determine factor status
+	if (guess_is_factor(x) && guess_is_factor(y)) {
+		pars = par(c('usr', 'xaxt', 'yaxt')); on.exit(par(pars));
+		t0 = table(x, y);
+		#plot(t0);
+		mx = max(as.integer(t0));
+		d0 = Df(merge.multi.list(dimnames(t0)), w = sqrt(as.integer(t(t0))), as_numeric = c('x', 'y'));
+		#par(new = TRUE);
+		#plot(d0[, c('x', 'y')], type = 'n', xaxt='n', yaxt = 'n');
+		par(new = TRUE);
+		with(d0,
+			symbols(x = x, y = y, circles = w, inches = blotSize, ann = F, bg = "steelblue2", fg = NULL,
+			 xaxt='n', yaxt = 'n')
+		)
+		#return();
+	} else {
+		# <i> call forwarding
+		panel.smooth(x, y, col, bg, pch, cex, span, iter);
+	}
+}
+
 pairs_std = function(...,
-	lower.panel = panel.smooth, diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor) {
+	lower.panel = panel.scatter, diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor) {
 	pairs(...,
 		lower.panel = lower.panel, diag.panel = diag.panel, upper.panel = upper.panel)
 }
@@ -8443,6 +9542,39 @@ Summary = function(d) {
 	r
 }
 
+
+descriptivesNumeric = function(data) {
+	bp = apply(data, 2, boxplot.stats);
+	N = list.kp(bp, 'n', do.unlist = T);
+	r = data.frame(
+		N = N,
+		Nna = nrow(data) - N,
+		mean = apply(data, 2, mean, na.rm = T),
+		median = apply(data, 2, median, na.rm = T),
+		se = apply(data, 2, sd, na.rm = T) / sqrt(N),
+		Nout = sapply(bp, function(v)length(v$out))
+	);
+	r
+}
+descriptivesFactor = function(data) {
+	Nnas = apply(data, 2, function(c)sum(is.na(c)));
+	r = data.frame(
+		N = nrow(data) - Nnas,
+		Nna = Nnas,
+		Ncat = sapply(lapply(data, levels), length)
+	);
+	r
+}
+
+descriptives = function(data) {
+	r1 = descriptivesFactor(data[, DfClasses(data) == 'factor']);
+	r2 = descriptivesNumeric(data[, DfClasses(data) == 'numeric']);
+	r = listOfDataFrames2data.frame(list(r1, r2), idColumn = NULL, colsFromUnion = T, row.names = T);
+	r$`NAperc` = with(r, Nna / nrow(data) * 100);
+	r
+}
+
+
 #
 #	<p> survival
 #
@@ -8476,6 +9608,237 @@ survfit2m = function (x, scale = 1, ..., rmean = 'none') {
 	temp$matrix <- drop(mtemp)
 	temp$matrix
 }
+
+#
+#	<p> mixed models
+#
+
+lmer2ci = function(object, method = 'profile')confint.merMod(object, method = method);
+
+lmer2p = function(object, method = 'profile') {
+	cis = lmer2ci(object, method = method);
+	apply(cis, 1, function(ci)ciToP(ci[1], ci[2]))
+}
+
+#
+#	<p> simulation studies
+#
+
+dataSimulation = function(Niteration, fSim, fStat = function(data, ...)summary(data), ...,
+	parSim = list(), parStat = list()) {
+	parShared = list(...);
+	r = Lapply(1:Niteration, function(i) {
+		data = do.call(fSim, c(parSim, parShared));
+		r = do.call(fStat, c(list(data = data), parStat, parShared));
+	});
+}
+
+#
+#	<p> Rrubin.R
+#Wed Aug 30 13:45:03 CEST 2017
+
+regressionEffectsLme = function(fit) {
+	qhat =  fit$coefficients$fixed;
+	ui <- vcov(fit)
+	if (ncol(ui) != length(qhat)) stop("Different number of parameters: class lme")
+	u = array(ui, dim = c(1, dim(ui)));
+	r = list(qhat = qhat, u = u);
+	r	
+}
+regressionEffectsLmerMod = function(fit) {
+	qhat = lme4::fixef(fit);
+	ui = vcov(fit);
+	u = array(ui, dim = c(1, dim(ui)));
+	r = list(qhat = qhat, u = u);
+	r	
+}
+
+# regressionEffectsMer = function(fit) {
+# 			qhat = lme4::fixef(fit)
+# 			ui <- as.matrix(vcov(fit))
+# 			if (ncol(ui) != ncol(qhat)) 
+# 				stop("Different number of parameters: class mer, fixef(fit): ", 
+# 					ncol(qhat), ", as.matrix(vcov(fit)): ", ncol(ui))
+# 			u[i, , ] <- array(ui, dim = c(1, dim(ui)))
+# 		}
+# 		else if (class(fit)[1] == "lmerMod") {
+# 			qhat[i, ] <- lme4::fixef(fit)
+# 			ui <- vcov(fit)
+# 			if (ncol(ui) != ncol(qhat)) 
+# 				stop("Different number of parameters: class lmerMod, fixed(fit): ", 
+# 					ncol(qhat), ", vcov(fit): ", ncol(ui))
+# 			u[i, , ] <- array(ui, dim = c(1, dim(ui)))
+# 		}
+# 		else if (class(fit)[1] == "polr") {
+# 			qhat[i, ] <- c(coef(fit), fit$zeta)
+# 			ui <- vcov(fit)
+# 			if (ncol(ui) != ncol(qhat)) 
+# 				stop("Different number of parameters: class polr, c(coef(fit, fit$zeta): ", 
+# 					ncol(qhat), ", vcov(fit): ", ncol(ui))
+# 			u[i, , ] <- array(ui, dim = c(1, dim(ui)))
+# 		}
+# 		else if (class(fit)[1] == "survreg") {
+# 			qhat[i, ] <- coef(fit)
+# 			ui <- vcov(fit)
+# 			parnames <- dimnames(ui)[[1]]
+# 			select <- !(parnames %in% "Log(scale)")
+# 			ui <- ui[select, select]
+# 			if (ncol(ui) != ncol(qhat)) 
+# 				stop("Different number of parameters: class survreg, coef(fit): ", 
+# 					ncol(qhat), ", vcov(fit): ", ncol(ui))
+# 			u[i, , ] <- array(ui, dim = c(1, dim(ui)))
+# 		}
+# 		else {
+# 			qhat[i, ] <- coef(fit)
+# 			ui <- vcov(fit)
+# 			ui <- expandvcov(qhat[i, ], ui)
+# 			if (ncol(ui) != ncol(qhat)) 
+# 				stop("Different number of parameters: coef(fit): ", 
+# 					ncol(qhat), ", vcov(fit): ", ncol(ui))
+# 			u[i, , ] <- array(ui, dim = c(1, dim(ui)))
+
+
+pool.rubin = function (models, method = "smallsample")  {
+	m = length(models);
+
+	rL = lapply(models, function(fit)callDelegate('regressionEffects', class(fit), list(fit = fit)));
+
+	# <p> raw input for Rubin's rule
+	qhat = do.call(rbind, list.kp(rL, 'qhat'));
+	uRaw = list.kp(rL, 'u');
+	#u = array(unlist(uRaw), dim = c(length(rL), dim(rL[[1]]$u)[-1]))
+	u = aperm(do.call(abind, lapply(uRaw, aperm, perm = c(2, 3, 1))), perm = c(3, 1, 2));
+	dimnames(u)[2:3] = rep.list(dimnames(qhat)[[2]], 2);
+
+	# <p> Rubin's rule
+	names = dimnames(qhat)[[2]];
+	qbar <- apply(qhat, 2, mean)
+    ubar <- apply(u, c(2, 3), mean)
+    e <- qhat - matrix(qbar, nrow = m, ncol = ncol(qhat), byrow = TRUE)
+    b <- (t(e) %*% e)/(m - 1)
+    t <- ubar + (1 + 1/m) * b
+    r <- (1 + 1/m) * diag(b/ubar)
+    lambda <- (1 + 1/m) * diag(b/t)
+    dfcom <- df.residual(models[[1]])
+    df <- mice:::mice.df(m, lambda, dfcom, method)
+    fmi <- (r + 2/(df + 3))/(r + 1)
+    names(r) <- names(df) <- names(fmi) <- names(lambda) <- names
+    fit <- list(N = m, qhat = qhat, u = u, qbar = qbar, 
+        ubar = ubar, b = b, t = t, r = r, dfcom = dfcom, df = df, 
+        fmi = fmi, lambda = lambda)
+    return(fit)
+}
+
+summary.rubin = function(fit) {
+    x <- fit
+    table <- array(x$qbar, dim = c(length(x$qbar), 10))
+    dimnames(table) <- list(labels(x$qbar), c("est", "se", "t", 
+        "df", "Pr(>|t|)", "lo 95", "hi 95", "nmis", "fmi", "lambda"))
+    table[, 2] <- sqrt(diag(x$t))
+    table[, 3] <- table[, 1]/table[, 2]
+    table[, 4] <- x$df
+    table[, 5] <- if (all(x$df > 0)) 
+        2 * (1 - pt(abs(table[, 3]), x$df))
+    else NA
+    table[, 6] <- table[, 1] - qt(0.975, x$df) * table[, 2]
+    table[, 7] <- table[, 1] + qt(0.975, x$df) * table[, 2]
+    if (is.null(x$nmis) | is.null(names(x$qbar))) 
+        table[, 8] <- NA
+    else table[, 8] <- x$nmis[names(x$qbar)]
+    table[, 9] <- x$fmi
+    table[, 10] <- x$lambda
+    return(table)
+}
+
+statMI = function(data, stat, ..., MIcolumn = 'Imputation_', skip0 = TRUE) {
+	if (skip0) data = data[data[[MIcolumn]] != 0, , drop = F];
+	rs = by(data, data[[MIcolumn]],
+		function(data)stat(..., data = data)
+	);
+	rRubin = pool.rubin(rs);
+	r = list(rubin = rRubin, r = rs);
+	r
+}
+
+MIcompare = function (fit1, fit0, data = NULL, method = "Wald") {
+	LLlogistic <- function(formula, data, coefs) {
+		logistic <- function(mu) exp(mu)/(1 + exp(mu))
+		Xb <- model.matrix(formula, data) %*% coefs
+		y <- model.frame(formula, data)[1][, 1]
+		p <- logistic(Xb)
+		y <- (y - min(y))/(max(y) - min(y))
+		term1 <- term2 <- rep(0, length(y))
+		term1[y != 0] <- y[y != 0] * log(y[y != 0]/p[y != 0])
+		term2[y == 0] <- (1 - y[y == 0]) * log((1 - y[y == 0])/(1 - 
+			p[y == 0]))
+		return(-(2 * sum(term1 + term2)))
+	}
+	call <- match.call()
+	meth <- match.arg(tolower(method), c("wald", "likelihood"))
+# 	if (!is.mira(fit1) | !is.mira(fit0)) 
+# 		stop("fit1 and fit0 should both have class 'mira'.\n")
+	m1 <- length(fit1$r)
+	m0 <- length(fit0$r)
+	if (m1 != m0) 
+		stop("Number of imputations differs between fit1 and fit0.\n")
+	if (m1 < 2) 
+		stop("At least two imputations are needed for pooling.\n")
+	m <- m1
+	est1 <- fit1$rubin;	# pool.rubin(fit1)
+	est0 <- fit0$rubin;	# pool.rubin(fit0)
+	dimQ1 <- length(est1$qbar)
+	dimQ2 <- dimQ1 - length(est0$qbar)
+	formula1 <- formula(fit1$r[[1]])
+	formula0 <- formula(fit0$r[[1]])
+	vars1 = names(est1$qbar)
+	vars0 = names(est0$qbar)
+	if (is.null(vars1) | is.null(vars0)) 
+		stop("coefficients do not have names")
+	if (dimQ2 < 1) 
+		stop("The larger model should be specified first and must be strictly larger than the smaller model.\n")
+	if (!setequal(vars0, intersect(vars0, vars1))) 
+		stop("The smaller model should be fully contained in the larger model. \n")
+	if (meth == "wald") {
+		Q <- diag(rep(1, dimQ1), ncol = dimQ1)
+		where_new_vars = which(!(vars1 %in% vars0))
+		Q <- Q[where_new_vars, , drop = FALSE]
+		qbar <- Q %*% est1$qbar
+		Ubar <- Q %*% est1$ubar %*% (t(Q))
+		Bm <- Q %*% est1$b %*% (t(Q))
+		rm <- (1 + 1/m) * sum(diag(Bm %*% (solve(Ubar))))/dimQ2
+		Dm <- (t(qbar)) %*% (solve(Ubar)) %*% qbar/(dimQ2 * (1 + 
+			rm))
+	}
+	if (meth == "likelihood") {
+		if (is.null(data)) 
+			stop("For method=likelihood the imputed data set (a mids object) should be included.\n")
+		devM <- devL <- 0
+		for (i in (1:m)) {
+			devL <- devL + LLlogistic(formula1, complete(data, 
+				i), est1$qbar) - LLlogistic(formula0, complete(data, 
+				i), est0$qbar)
+			devM <- devM + LLlogistic(formula1, complete(data, 
+				i), est1$qhat[i, ]) - LLlogistic(formula0, complete(data, 
+				i), est0$qhat[i, ])
+		}
+		devL <- devL/m
+		devM <- devM/m
+		rm <- ((m + 1)/(dimQ2 * (m - 1))) * (devM - devL)
+		Dm <- devL/(dimQ2 * (1 + rm))
+	}
+	v <- dimQ2 * (m - 1)
+	if (v > 4) 
+		w <- 4 + (v - 4) * ((1 + (1 - 2/v) * (1/rm))^2)
+	else w <- v * (1 + 1/dimQ2) * ((1 + 1/rm)^2)/2
+	statistic <- list(call = call, call11 = fit1$call, call12 = fit1$call1, 
+		call01 = fit0$call, call02 = fit0$call1, method = method, 
+		nmis = fit1$nmis, m = m, qhat1 = est1$qhat, qhat0 = est0$qhat, 
+		qbar1 = est1$qbar, qbar0 = est0$qbar, ubar1 = est1$ubar, 
+		ubar0 = est0$ubar, Dm = Dm, rm = rm, df1 = dimQ2, df2 = w, 
+		pvalue = 1 - pf(Dm, dimQ2, w))
+	return(statistic)
+}
+
 
 #
 #	Rpatches.R
@@ -9392,6 +10755,14 @@ delayed_load = function(path) {
 }
 
 delayed_load_dummy = function(path) get(load(path)[1])
+# might exist from reconstructions on remote machines
+if (!exists('parallelize_env')) parallelize_env <<- new.env();
+Lapply = lapply;
+Sapply = sapply;
+Apply = apply;
+parallelize = function(.f, ..., Lapply_config = NULL, envir__ = NULL).f(...);
+parallelize_call = function(.call, Lapply_config = NULL, envir__ = parent.frame(n = 2)) 
+	base:::eval(.call, envir = envir__);
 #
 #	Rinitialize.R
 #

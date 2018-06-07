@@ -9,12 +9,14 @@
 #	<p> standard analysis functions
 #
 
+# <!><i> coefficient matrix 12.3.2018
 glmBin = function(data, f1, f0, o) {
 	r = regressionCompareModels(f1, f0, data, type = "glm", clusterCol = NULL, family = binomial());
 	r = c(r[c('effects0', 'effects1', 'p.value')], list(ci1 = confint(r$m1$r)));
 	r
 }
 
+# <!><i> coefficient matrix 12.3.2018
 glmLm = function(data, f1, f0, o) {
 	r = regressionCompareModels(f1, f0, data, type = "glm", clusterCol = NULL, family = gaussian());
 	r = c(r[c('effects0', 'effects1', 'p.value')], list(ci1 = confint(r$m1$r)));
@@ -35,7 +37,9 @@ glmOrd = function(data, f1, f0, o) {
 		#p.value = anova(m0, m1)[2,'Pr(>Chisq)'],
 		effects0 = coefficients(m0),
 		effects1 = coefficients(m1),
-		ci1 = confint(m1)
+		ci1 = confint(m1),
+		coeff0 = coefficients(summary(m0)),
+		coeff1 = coefficients(summary(m1))
 	);
 	r
 }
@@ -64,7 +68,9 @@ glmSurv = function(data, f1, f0, o) {
 		p.value = p.value,
 		effects0 = m0$coef,
 		effects1 = m1$coef,
-		ci1 = confint(m1)
+		ci1 = confint(m1),
+		coeff0 = coefficients(summary(m0)),
+		coeff1 = coefficients(summary(m1))
 	);
 	r
 }
@@ -77,7 +83,9 @@ glmBinRE = function(data, f1, f0, o) {
 		#p.value = anova(m0, m1)[2,'Pr(Chi)'],
 		p.value = anova(m0, m1)[2, 'Pr(>Chisq)'],
 		effects0 = fixef(m0),
-		effects1 = fixef(m1)
+		effects1 = fixef(m1),
+		coeff0 = coefficients(summary(m0)),
+		coeff1 = coefficients(summary(m1))
 	);
 	r
 }
@@ -91,7 +99,9 @@ glmRE = function(data, f1, f0, o) {
 		p.value = anova(m0, m1)[2, 'Pr(>Chisq)'],
 		effects0 = fixef(m0),
 		effects1 = fixef(m1),
-		ci1 = confint(m1)
+		ci1 = confint(m1),
+		coeff0 = coefficients(summary(m0)),
+		coeff1 = coefficients(summary(m1))
 	);
 	r
 }

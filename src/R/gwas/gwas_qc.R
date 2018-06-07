@@ -391,10 +391,16 @@ qcMhwe = function(input, output = NULL, o = list(), pattern = NULL) with(o, {
 	#qcMarkerHWE = nif(hwe1$hwe < qcParHweCutoff);
 	qcMarkerHWEExcl = hwe1$SNP[qcMarkerHWE];
 	Sow(hwe = qcMarkerHWEExcl, sow_field = 'excl_marker');
+	# prune
+	#hwe1 = hwe1[!qcMarkerHWE, , drop = F];
+	# show QQ before pruning
 
 	# <p> reporting
-	REP.plot('QC:MARKER:HWE', Qplot(sample = hwe1$hwe, dist = qunif,
-		file = sprintf('%s-qc-markers-hwe_qq.jpg', outputPrefixQc)));
+	#REP.plot('QC:MARKER:HWE', Qplot(sample = hwe1$hwe, dist = qunif,
+	#	file = sprintf('%s-qc-markers-hwe_qq.jpg', outputPrefixQc)));
+	plotPathQQ = Sprintf('%{outputPrefixQc}s-qc-markers-hwe_qq.jpg');
+	plot_save(QQunif(hwe1$hwe, p.bottom = 1e-20), plot_path = plotPathQQ);
+	REP.plot('QC:MARKER:HWE', plotPathQQ);
 
 	qcParHWEzoom = qcParHWEzoomQuantile *  length(hwe1$hwe);
 	REP.plot('QC:MARKER:HWEZ', Qplot((1:qcParHWEzoom)/(qcParHWEzoom * length(hwe1$hwe)),
@@ -503,9 +509,15 @@ qcMDSplot = function(mds, input, output = NULL, d, o = list()) with(o, {
 	r = iterateModels_old(list(var = colVars, dim = 2:qcParMDSDims), function(var, dim) {
 		i = dim;
 		plotName = sprintf('QC:SAMPLE:MDS%d%d:%s', i - 1, i, var);
+# 		mdsPlot = qplot(
+# 			d0[[sprintf('C%d', i - 1)]], d0[[sprintf('C%d', i)]],
+# 			colour = d0[[var]], data = d0,
+# 			xlab = sprintf('MDS%d', i - 1), ylab = sprintf('MDS%d', i)
+# 		);
+		# <!> as of 23.5.2018, data = d0 argument generates error
 		mdsPlot = qplot(
 			d0[[sprintf('C%d', i - 1)]], d0[[sprintf('C%d', i)]],
-			colour = d0[[var]], data = d0,
+			colour = d0[[var]],
 			xlab = sprintf('MDS%d', i - 1), ylab = sprintf('MDS%d', i)
 		);
 		mdsPlot = mdsPlot + scale_colour_brewer(name = var, palette = 'Set1');
@@ -541,7 +553,7 @@ qcMDSreportPlots = function(input, run = NULL, o = list(), namePostfix = '') wit
 # null or empty
 noe = function(x)(length(x) == 0 || is.null(x) || x == '');
 
-qcMDS = function(input, output = NULL, d, o = list(), pattern = 'qsub') with(o, {
+qcMDS = function(input, output = NULL, d, o = list(), pattern = 'qsub', .do.run = TRUE) with(o, {
 	prefix = sprintf('%s/%s', output, splitPath(input)$file);
 
 	# <p> MDS
@@ -566,7 +578,7 @@ qcMDS = function(input, output = NULL, d, o = list(), pattern = 'qsub') with(o, 
 
 	# <p> re-run MDS if exclusion rule is present
 	if (runIndex == 1 || firstDef(o$qcParMdsRule, '') != '' || firstDef(o$qcParMdsForce, '') != '') {
-		mds = qcMDSperform(input, output, o, pattern = pattern);
+		mds = qcMDSperform(input, output, o, pattern = pattern, .do.run = .do.run);
 		mds = data.frame.types(read.table(sprintf('%s-mds.mds', prefix), header = T, sep = ''),
 			character = 'IID');
 		qcMDSplot(mds, input, output, d, o);

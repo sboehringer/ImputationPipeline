@@ -10,8 +10,11 @@ gwasParameterDefaults = list(
 	# flags controlling execution of the pipeline
 	readVariablesCache = F,
 	readVariablesDeduplicateFam = FALSE,	#<!> not implemented
+	#Example: readVariablesDeduplicateIdLabels = 'Leeg',
+	# deduplicate ids starting with 'Leeg'
 	readVariablesDeduplicateIds = FALSE,
 	readVariablesEnforceUniqueIds = TRUE,
+	readVariablesRemoveNAids = TRUE,
 	qcParPathesExludedSNPs = NULL,
 	qcPerformDistRun = T,	# run long running jobs
 	# shell environment
@@ -31,15 +34,24 @@ gwasParameterDefaults = list(
 
 	qcParMissingLcutoff = 0.02,
 
+	# individuals
 	qcParIMissCutOff = 0.02,
+	qcParIexlusionCol = NULL,
+	qcParIexclusionFiles = NULL,	# fed into readTable, use first column or column specified (next par)
+	qcParIexclusionFilesColumn = NULL,
+	qcParIexclusionList = NULL,		# list ids directly for exclusion
 	qcIgnoreSexCheck = F,
 
+	# markers
+	qcParAfCutoff = 0.01,
 	qcParHWEzoom = 1e3,
 	qcParHWEzoomQuantile = .05,
 	qcParInbreedingCIlevel = .95,
 	qcParTechnicalDuplicatesListCount = 30,
+
 	# <p> integrative analysis
 	qcParPruning = list(windowSize = 50, windowShift = 5, thresholdVIF = 2),
+	qcParMDSDims = 7,
 	qcParMdsUsePrunedSnps = T,
 	qcParMdsRule = '',
 	qcParMdsForce = '',
@@ -53,10 +65,10 @@ gwasParameterDefaults = list(
 	qcParIBSruleIBS01 = '',
 	qcParPruning = list(windowSize = 50, windowShift =  5, thresholdVIF = 2),
 
-	assParMaf = 0.01,
+	# association
 	assParCountMDScomponents = c(),
 	assParFlipToRare = T,	# recode genotypes to calculate effect according to allele w/ MAF < 0.5
-	assParTopN = 70,
+	assParTopN = 100,
 	assParMafTest = 0.00,	# maf for complete data to be tested (0 for compatibility as default)
 							# reasonably 0.01 or 0.05 depending on sample size
 	assParGtfsTest = 0.005,	# if two genotypes have frequency less than assParGtfsTest,
@@ -87,16 +99,22 @@ gwasParameterEraser = list(
 	assParCountMDScomponents = c()
 );
 
+gwasReadVariablesDeduplicateFam = function(o) with(o, {
+	fam = readTable(sprintf('[HEADER=F,SEP=S,NAMES=fid;id;pid;mid;sex;y]:%s.fam', o$input));
+	if (!any(duplicated(fam$id))) return();
+	Log(join(c("Duplicated ids in fam-file: ", fam$id[duplicated(fam$id)])), 2);
+	Logs("Warning: modifying fam-file. Original stored in %{input}q.fam-duplicated-ids", logLevel = 2);
+	System(Sprintf("cp %{input}q.fam %{input}q.fam-duplicated-ids"), 2);
+	fam$id = deduplicateLabels(fam$id);
+	write.table(fam, file = Sprintf('%{input}q.fam'), col.names = F, row.names = F, quote = F);
+})
+
 gwasReadVariablesStd = function(o, readVariables.headermap = list()) with(o, {
-	if (readVariablesDeduplicateFam) {
-		fam = readTable(sprintf('%s:%s.fam', filesFamFormat, o$input));
-		stop("readVariablesDeduplicateFam option not implemented");
-	} else {
-		files = c(
-			readVariables.file,
-			sprintf('%s:%s.fam', filesFamFormat, o$input)
-		);
-	}
+	if (readVariablesDeduplicateFam) gwasReadVariablesDeduplicateFam(o);
+	files = c(
+		readVariables.file,
+		sprintf('%s:%s.fam', filesFamFormat, o$input)
+	);
 	d = NULL;
 	for (file in files) {
 		Logs('gwasReadVariablesStd: reading %{file}s', logLevel = 5);
@@ -242,10 +260,12 @@ gwasInitializeGlobalData = function(o) with(o, {
 	# <p> bim database
 	bimDb = Sprintf('%{outputPrefixGlobal}s_bim.sqlite');
 	bimPath = Sprintf('%{input}s.bim');
-	if (!file.exists(bimDb) || file.info(bimDb)$mtime < file.info(bimPath)$mtime) {
+	fi = file.info(bimDb);
+	if (!file.exists(bimDb) || fi$mtime < fi$mtime || fi$size == 0) {
 		csv2sqlite(bimPath, bimDb, columnsNames = qquote('chr id mapGen mapPhy a1 a2'),
 			index = 'id', inputSep = 'T', inputHeader = F,
-			types = list(chr = 'integer', pos_gen = 'real', pos_phy = 'integer'));
+			types = list(chr = 'integer', pos_gen = 'real', pos_phy = 'integer'),
+			unique = list('id'));
 	}
 	o
 })
@@ -425,34 +445,57 @@ gwasCheckInput = function(o, d) {
 		Logs('Essential column(s) "%{cols}s" missing from data', cols = join(nsMiss, ', '), level = 1);
 		stop('essential column missing from data');
 	}
-	if (o$readVariablesEnforceUniqueIds && sum(duplicated(d$id)) > 0) {
-		Logs('Id column not unique: "%{ids}s" duplicated.',
+	if (o$readVariablesRemoveNAids) {
+		d = d[!is.na(d$id), , drop = F];
+		if (nrow(d) == 0) stop('id column only contains NAs');
+	}
+	if (o$readVariablesEnforceUniqueIds && any(duplicated(d$id))) {
+		Logs('id column not unique: "%{ids}s" duplicated.',
 			ids = join(d$id[duplicated(d$id)], ', '), level = 1);
-		stop('Id column not unique');
+		stop('id column not unique');
 	}
 
-	sexF = as.factor(d$sex);
-	if (!all(sort(levels(sexF)) == 1:2)) {
+	sexFL = sort(levels(as.factor(d$sex)));
+	if (!all(sexFL %in% 1:2)) {
 		Logs('Sex must be coded as 1:male, 2:female', level = 1);
 		stop('Sex column wrongly coded');
 	}
-	# check variables of association model
+	if (!all(sexFL == 1:2)) {
+		Logs('Warning only one gender present: %{sex}s [expected coding: 1:male, 2:female]',
+			sex = join(sexFL, ','), level = 1);
+	}
+	# <p> check variables of association model
 	varsResponses = list.kp(o$assParModels, 'responses', do.unlist = TRUE);
 	varsU = setdiff(unique(c(
 		unlist(lapply(list.kp(o$assParModels, 'f1'), function(e)all.vars(as.formula(e)))),
 		varsResponses
 	)), c('MARKER', 'RESPONSE'));
 	Logs('Variables used in analysis: %{vars}s', vars = join(varsU, ', '), level = 4);
-	if (!all(all(varsU %in% names(d)))) {
-		varMiss = join(varsU[!(varsU %in% names(d))], ', ');
+	varsMDS = paste('C', 1:o$qcParMDSDims, sep = '');
+	varsAvail = union(names(d), varsMDS)
+	if (!all(varsU %in% varsAvail)) {
+		varMiss = join(varsU[!(varsU %in% varsAvail)], ', ');
 		Logs('Variables used in formulas not present in data: %{varMiss}s', level = 1);
 		stop('Variables missing from data');
 	}
-	Ncomplete = sum(!apply(d[, setdiff(varsU, varsResponses), drop = F], 1, function(r)any(is.na(r))));
+	varsUM = setdiff(varsU, varsMDS);	# MDS vars will only be available later
+	Ncomplete = sum(!apply(d[, setdiff(varsUM, varsResponses), drop = F], 1, function(r)any(is.na(r))));
 	Logs('Number of complete cases: %{Ncomplete}s', level = 4);
 	if (Ncomplete == 0) {
 		stop('No non-missing data (except genotypes, response)');
 	}
+
+	# <p> check subsetting
+	subsets = unlist.n(list.kp(o$assParModels, 'subSets'), 1)
+	lapply(subsets, function(subset) {
+		if (is.null(subset)) return();
+		d1 = try(subset(d, with(d, eval(subset))));
+		if (class(d1) == 'try-error') {
+			LogS(1, 'Could not create subset: %{ss}s', ss = Deparse(subset));
+			stop('subsetting failed');
+		}
+		NULL
+	});
 
 	# <p> check data types
 	classes = lapply(d, class);

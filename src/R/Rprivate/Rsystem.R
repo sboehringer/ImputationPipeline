@@ -148,8 +148,8 @@ File.copy_raw = function(from, to, ..., recursive = F, agent = 'scp', logLevel =
 	symbolicLinkIfLocal = T) {
 	spF = splitPath(from, ssh = T);
 	spT = splitPath(to, ssh = T);
-	is.remote.f = !spF$is.remote || spF$host == 'localhost';
-	is.remote.t = !spT$is.remote || spT$host == 'localhost';
+	is.remote.f = spF$is.remote || spF$host == 'localhost';
+	is.remote.t = spT$is.remote || spT$host == 'localhost';
 
 	r = if (!is.remote.f && !is.remote.t) {
 		if (symbolicLinkIfLocal) {
@@ -864,6 +864,7 @@ optionParser = list(
 	NAMES = function(e)splitString(';', e),
 	FACTORS = function(e)splitString(';', e),
 	NUMERIC = function(e)splitString(';', e),
+	AS_CHARACTER = function(e)splitString(';', e),
 	DATE = function(e)splitString(';', e),
 	DATEF = readTableSplitToDict,
 	PROJECT = function(e)splitString(';', e),
@@ -920,6 +921,7 @@ readTable.txt = readTable.csv = function(
 	if (!is.null(headerMap)) names(t) = vector.replace(names(t), headerMap);
 	if (!is.null(setHeader)) names(t) =  c(setHeader, names(t)[(length(setHeader)+1): length(names(t))]);
 	if (!is.null(options$FACTORS)) t = Df_(t, as_factor = options$FACTORS);
+	if (!is.null(options$AS_CHARACTER)) t = Df_(t, as_character = options$AS_CHARACTER);
 	t
 }
 

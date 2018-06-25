@@ -292,6 +292,11 @@ gwasInitialize = function(optionsFile, run = NULL, doReset = F) {
 	runI = o$runIndex;
 	outputPrev = Sprintf('%{output}s/sowreap', output = o$previousOutputDir);
 
+	# <p> batch queueing
+	logOption = Sprintf('--outputDir %{od}q/qsubLogs', od = o$outputDir);
+	o$qsubOptions = join(c(o$qsubOptions, logOption));
+	o$qsubOptionsBigMem = join(c(o$qsubOptionsBigMem, logOption));
+
 	# <p> prepare directory, document parameters
 	if (!file.exists(o$outputDir)) dir.create(o$outputDir, recursive = T);
 	writeFile(sprintf('%s/options', o$outputDir), stringFromProperty(o));
@@ -513,7 +518,6 @@ gwasRun = function(optionsFile, run = NULL, opts = NULL, resetCache = F) {
 	# <p> initialize options and files
 	r = gwasInitialize(optionsFile, run, doReset = resetCache);
 	o = r$options;
-
 	# <p> prepare reporting
 	# set variable global to the ensuing analysis
 	.globalOutput = list(prefix = con(o$outputDir, '/'));

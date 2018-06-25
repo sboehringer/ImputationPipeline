@@ -61,6 +61,9 @@ Log.setLevel = function(level = get('GlobalLogLevel', envir = Log_env__)) {
 }
 Log.setLevel(4);	# default
 
+Stop = function(..., call. = TRUE, domain = NULL, envir = parent.frame()) {
+	stop(Sprintf(list(...)[[1]], envir = envir), call., domain)
+}
 
 #
 #	<p> Meta-functions
@@ -925,6 +928,11 @@ matchRegexCapture = function(reg, str, pos = NULL) {
 	names(captures) = attr(reg, 'capture.names');
 	captures
 }
+MatchRegexExtract = function(m, s, pos = seq_along(m)) {
+	matches = ifelse(m[pos] < 0, character(0),
+		sapply(pos, function(i)Substr(s[i], m[i], attr(m, 'match.length')[i])));
+	matches
+}
 matchRegexExtract = function(reg, str, pos = NULL) {
 	if (!is.null(pos)) str = str[pos] else pos = seq_along(reg);
 	matches = ifelse(reg[pos] < 0, character(0),
@@ -970,6 +978,42 @@ MatchRegex = function(re, str, mode = 'return') {
 	}
 	r
 }
+# handle attributes
+As.list = function(v) {
+	as = Recycle(attributes(v));
+	l = lapply(seq_along(v), function(i) {
+		Attr(v[i], list.kp(as, Sprintf('[[%{i}d]]')))
+	});
+	l
+}
+
+
+# interface as of 2018/06
+# if re is vector, iterate over
+# by default, return matches
+RegexprSingle = function(re, s, captures = F, global = T, simplify = T, concatMatches = T, drop = T) {
+	matches = if (global) gregexpr(re, s, perl = T) else As.list(regexpr(re, s, perl = T));
+	r = pairslapply(matches, s, function(m, s) {	# iterate strings
+		if (captures) {
+			r = matchRegexCapture(m, s);
+			if (concatMatches) r = apply(do.call(cbind, r), 1, join, sep = '');
+		} else {
+			r = MatchRegexExtract(m, s);
+			if (drop) r = r[!is.na(r)];
+		}
+		r
+	});
+	if (simplify && (
+		(length(s) == 1 && captures && concatMatches) || !global
+	)) r = r[[1]];
+	return(r);
+}
+
+Regexpr = function(re, s, ..., reSimplify = T) {
+	r = lapply(re, RegexprSingle, s = unlist(s), ...);
+	if (length(re) == 1 && reSimplify) r = r[[1]];
+	return(r);
+}
 
 splitString = function(re, str, ..., simplify = T) {
 	l = lapply(str, function(str) {
@@ -985,8 +1029,13 @@ splitString = function(re, str, ..., simplify = T) {
 	l
 }
 # modeled after perl's qq
-qw = function(s, re = '\\s+', names = NULL, byrow = T) {
-	r = unlist(splitString(re, s));
+reString = '(?:([_\\/\\-a-zA-Z0-9.]+)|(?:\\"((?:\\\\\\\\.)*(?:[^"\\\\]+(?:\\\\\\\\.)*)*)\\"))';
+# use reSep = '\\s+' to split based on a separator RE
+qw = function(s, re = reString, reSep = NULL, names = NULL, byrow = T) {
+	r = if (notE(reSep)) unlist(splitString(reSep, s)) else {
+	#r = if (T) unlist(splitString('\\s+', s)) else
+		unlist(Regexpr(re, unlist(s), captures = T));
+	}
 	if (notE(names)) r = Df_(matrix(r, ncol = length(names), byrow = byrow), names = names);
 	r
 }
@@ -1827,8 +1876,9 @@ pairsapplyLV = function(l1, l2, f, ..., simplify = T, USE.NAMES = TRUE) {
 	r
 }
 pairslapply = function(l1, l2, f, ...) {
-	if (length(l1) != length(l2)) stop('pairlapply: pair of collections of unequal length.');
+	if (length(l1) != length(l2)) stop('pairslapply: pair of collections of unequal length.');
 	r = lapply(seq_along(l1), function(i)f(l1[[i]], l2[[i]], ...));
+	names(r) = names(l1);
 	r
 }
 
@@ -2237,9 +2287,24 @@ searchDataFrame = function(d, l, .remove.factors = T) {
 	d0
 }
 
-Cbind = function(..., stringsAsFactors = FALSE) {
+# alignByRowNames: logical: use row.names from first element, else use provided vector
+Cbind = function(..., stringsAsFactors = FALSE, deparse.level = 0, alignByRowNames = NULL) {
 	l = list(...);
-	if (length(l) == 1) t_(l[[1]]) else cbind(..., deparse.level = 0)
+	if (notE(alignByRowNames)) {
+		if (is.null(row.names(l[[1]]))) stop('Cbind[alignByRowNames]: No row names @ 1');
+		ref = if (is.logical(alignByRowNames) && alignByRowNames)
+			row.names(l[[1]]) else
+			alignByRowNames;
+		l = pairslapply(l, seq_along(l), function(e, i) {
+			if (is.null(row.names(e))) stop('Cbind[alignByRowNames]: No row names @ %{i}d');
+			e[order_align(ref, row.names(e)), , drop = F]
+		});
+	}
+	if (length(l) == 1)
+		# <p> special case vector
+		t_(l[[1]]) else
+		# <p> standard invocation
+		do.call(cbind, c(l, list(deparse.level = deparse.level)))
 }
 Rbind = function(..., stringsAsFactors = FALSE) {
 	l = list(...);
@@ -4036,7 +4101,9 @@ minimax = function(v, min = -Inf, max = Inf) {
 #	<p> recycling
 #
 
-recycle = function(...)lapply(apply(cbind(...), 2, as.list), unlist)
+# different types not correctly handles <!>
+Recycle = function(l)lapply(apply(do.call(cbind, l), 2, as.list), unlist)
+recycle = function(...)Recycle(list(...));
 recycleTo = function(..., to, simplify = T) {
 	r = recycle(to, ...)[-1];
 	if (simplify && length(r) == 1) r[[1]] else r
@@ -4191,8 +4258,8 @@ File.copy_raw = function(from, to, ..., recursive = F, agent = 'scp', logLevel =
 	symbolicLinkIfLocal = T) {
 	spF = splitPath(from, ssh = T);
 	spT = splitPath(to, ssh = T);
-	is.remote.f = !spF$is.remote || spF$host == 'localhost';
-	is.remote.t = !spT$is.remote || spT$host == 'localhost';
+	is.remote.f = spF$is.remote || spF$host == 'localhost';
+	is.remote.t = spT$is.remote || spT$host == 'localhost';
 
 	r = if (!is.remote.f && !is.remote.t) {
 		if (symbolicLinkIfLocal) {
@@ -4907,6 +4974,7 @@ optionParser = list(
 	NAMES = function(e)splitString(';', e),
 	FACTORS = function(e)splitString(';', e),
 	NUMERIC = function(e)splitString(';', e),
+	AS_CHARACTER = function(e)splitString(';', e),
 	DATE = function(e)splitString(';', e),
 	DATEF = readTableSplitToDict,
 	PROJECT = function(e)splitString(';', e),
@@ -4963,6 +5031,7 @@ readTable.txt = readTable.csv = function(
 	if (!is.null(headerMap)) names(t) = vector.replace(names(t), headerMap);
 	if (!is.null(setHeader)) names(t) =  c(setHeader, names(t)[(length(setHeader)+1): length(names(t))]);
 	if (!is.null(options$FACTORS)) t = Df_(t, as_factor = options$FACTORS);
+	if (!is.null(options$AS_CHARACTER)) t = Df_(t, as_character = options$AS_CHARACTER);
 	t
 }
 

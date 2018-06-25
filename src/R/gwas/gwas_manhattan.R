@@ -168,6 +168,7 @@ gwasManhattanPlotMatrix = function(formula, data, chromosomes = 1:23, yaxisCutof
 	nsStd = c('p', 'chr', 'position');
 	d1 = DfNames2std(data, formula, nsStd);
 	chrs = sort(intersect(chromosomes, unique(d1$chr)));
+	d1 = subset(d1, chr %in% chrs);
 
 	# <p> raw data to plot
 	f1 = ~ 0 + mlog10(p) + chr + position;

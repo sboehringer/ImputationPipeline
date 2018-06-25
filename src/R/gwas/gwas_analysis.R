@@ -354,6 +354,16 @@ analyzeChunk = function(i, input, outputDir, d, o, indExcl, markerExcl,
 	NULL
 }
 
+# function to reproduce analysis manually
+# compare: analyzeChunk above
+analyzeSnp = function(d, snp, model, o, ...) with(model, {
+	d1 = Df_(d, headerMap = listKeyValue(snp, 'MARKER'));
+	statF = get(stat);
+	r = statF(d1, as.formula(f1), as.formula(f0), o, ...);
+	return(r);
+})
+
+
 formulaWithoutMarker = function(f1) {
 	f1 = gsub('\\s*[+*]\\s*MARKER', '', f1);
 	f1 = gsub('MARKER\\s*[+*]\\s*', '', f1);

@@ -48,7 +48,8 @@ postGWASassociation = function(exportPath = 'results/export/clean', optionsFile 
 		with(spR, Sprintf('%{path}s/imputation_06')));
 
 	# <p> write and create pipeline file
-	remotePath = with(o, Sprintf('%{remotePath}s-assoc-%{run}s'));
+	#remotePath = with(o, Sprintf('%{remotePath}s-assoc-%{run}s'));
+	remotePath = remotePathForOptionsFileAssoc(optionsFile, run);
 	createPipelineRaw(exportPath, optionsFile, run = run, templatePath = 'gwas/gwasAssociationTemplate.pipe',
 		files = files, extraInterpolation = c(models, input), remotePath = remotePath);
 }
@@ -212,13 +213,25 @@ writePipeFile = function(prefix = 'results/data-cleaned-%D', optionsFile = optio
 	pipe
 }
 
+remotePathForOptionsFile = function(remotePath = NULL, optionsFile, run = 'R03') {
+	if (is.null(remotePath)) remotePath = gwasInitialize(optionsFile, run = run)$options$remotePath;
+	remotePath
+}
+remotePathForOptionsFileAssoc = function(optionsFile, run = 'R03') {
+	o = gwasInitialize(optionsFile, run = run)$options;
+	remotePath = remotePathForOptionsFile(o$remotePath, optionsFile, run);
+	with(o, Sprintf('%{remotePath}s-assoc-%{run}s'))
+}
+
 # <A> names pipeline file as dir with extension .pipe
 transferPipeline = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
 	doCopy = T, doCopyPipeFile = T,
 	files = Sprintf('%{prefix}s%{file}s', file = c('.bim', '.bed', '.fam', '.pipe')),
 	remotePath = NULL) {
 	sp = splitPath(prefix);
-	if (is.null(remotePath)) remotePath = gwasInitialize(optionsFile, run = run)$options$remotePath;
+	#if (is.null(remotePath)) remotePath = gwasInitialize(optionsFile, run = run)$options$remotePath;
+	# equivalent to the line above
+	remotePath = remotePathForOptionsFile(remotePath, optionsFile, run);
 	Dir.create(remotePath, recursive = T);
 	print(files);
 	if (doCopy) File.copy(files, remotePath);
@@ -239,11 +252,13 @@ startPipeline = function(prefix = 'results/data-cleaned-%D', optionsFile = optio
 
 pipelineGetResultDir = function(prefix, optionsFile, run,
 	pipeline_pattern = 'imputation_%{stage}02d', postfix = '', resultRe = '(\\d+)\\s+-gwasReport',
-	remotePath = NULL) {
+	remotePath = NULL, pipelineFile = NULL) {
 	o = gwasInitialize(optionsFile, run = run)$options;
 	sp = splitPath(prefix);
 	spR = splitPath(firstDef(remotePath, o$remotePath), ssh = T);
-	cmd = Sprintf('pipeline.pl --print-pipeline %{base}s%{postfix}s.pipe', base = sp$file);
+	#cmd = Sprintf('pipeline.pl --print-pipeline %{base}s%{postfix}s.pipe', base = sp$file);
+	if (is.null(pipelineFile)) pipelineFile = Sprintf('%{base}s%{postfix}s.pipe', base = sp$file)
+	cmd = Sprintf('pipeline.pl --print-pipeline %{pipelineFile}s');
 	r = System(cmd, patterns = c('cwd', 'ssh'), 1, return.output = T, doLogOnly = F,
 		ssh_host = spR$userhost, cwd = Sprintf('%{base}s%{postfix}s', base = spR$path));
 	stage = as.integer(fetchRegexpr(resultRe, r$output, captures = T));
@@ -307,6 +322,15 @@ postGWAStopSNPs = function(exportPath = 'results/export/clean', optionsFile = op
 #	<p> select SNPs from imputation pipeline
 #
 
+pipelineRemotePath = function(remotePath, postfix, run)
+	with(o, Sprintf('%{remotePath}s-%{postfix}s-%{run}s'));
+# use remote information + local export path which includes file prefix
+pipelineRemotePrefix = function(remotePath, postfix, run, exportPath) {
+	prefix = splitPath(exportPath)$file;
+	pathWprefix = Sprintf('%{remote}s/%{prefix}s', remote = pipelineRemotePath(remotePath, postfix, run));
+	pathWprefix
+}
+
 # <i> refactor postGWASassociationt to use createPipeline
 createPipeline = function(
 	exportPath = 'results/export/clean', optionsFile, run = 'R03',
@@ -326,7 +350,7 @@ createPipeline = function(
 	interStd = list(IMPUTATION_PIPELINE = with(spR, Sprintf('%{path}s/imputation_06')));
 
 	# <p> write and create pipeline file
-	remotePath = with(o, Sprintf('%{remotePath}s-%{postfix}s-%{run}s'));
+	remotePath = pipelineRemotePath(remotePath, postfix, run);
 	# returns remotePath
 	createPipelineRaw(exportPath, optionsFile, run = run, templatePath = templatePath,
 		files = files, extraInterpolation = c(interStd, interpolationExtra), remotePath = remotePath);
@@ -349,17 +373,29 @@ postGWASsnpSelectionRaw = function(snps, exportPath = 'results/export/clean', op
 }
 
 # snps: output from postGWAStopSNPs: file description + table with snps
+# snps can be modified to contain an element marker which is then used instead of snps[[i]]$table$marker
+#	use to complemente with external snp names
 postGWASsnpSelection = function(snps, exportPath = 'results/export/clean', optionsFile, run = 'R03',
 	postfix = 'selection-top') {
 
+	if (notE(exportPath)) {
+		o = gwasReadOptionsFile(optionsFile, run = run);
+		famFile = splitPath(exportPath)$file;
+		# assume the imputation to live@ remotepath/file(exportPath) (see createPipeline), IMPUTATION_PIPELINE
+		famPath = splitPath(famFilePathFromRemotePath(with(o, Sprintf('%{remotePath}s')), famFile))$path;
+		dest = Sprintf('%{remote}s/%{famFile}s.fam',
+			remote = pipelineRemotePath(o$remotePath, postfix, run))
+		File.copy(famPath, dest, symbolicLinkIfLocal = F);
+	}
+
 	snpFiles = sapply(snps, function(snp) {
 		postfix = Sprintf('selection-%{postf}s', postf = splitPath(snp$desc$name)$file);
-		path = writeSNPcsv(snp$table$marker, exportPath, postfix);
+		path = writeSNPcsv(firstDef(snp$marker, snp$table$marker), exportPath, postfix);
 		path
 	});
+
 	snpFileNames = sapply(snpFiles, function(p)splitPath(p)$file);
 	interpolation = list(SNP_FILE = join(snpFileNames, ','));
-	# returns remotePath
 	createPipeline(exportPath = exportPath, optionsFile = optionsFile,
 		files = snpFiles, interpolationExtra = interpolation,
 		postfix = postfix, templatePath = 'gwas/gwasSnpSelectionTemplate.pipe');
@@ -367,12 +403,13 @@ postGWASsnpSelection = function(snps, exportPath = 'results/export/clean', optio
 
 # fam: data frame with ped (plink) file; otherwise a try to read from local file is made
 postGWASsnpSelectionRead = function(exportPath = 'results/export/clean', optionsFile, run = 'R03',
-	postfix = 'selection-top', imputationFileIdColumns = c('snpId', 'snp', 'posPhy', 'A1', 'A2'),
-	remotePath = NULL, fam = NULL) {
+	postfix = 'selection-top', imputationFileIdColumns = c('snpId', 'snp', 'posPhy', 'A1', 'A2'), fam = NULL,
+	# overwriting the pipe-file as generated by previous steps for debuggin/worarounds <A><N>
+	pipelineFile = NULL) {
 
 	rd = pipelineGetResultDir(splitPath(exportPath)$path, optionsFile, run,
 		postfix = Sprintf('-%{postfix}s-%{run}s'),
-		resultRe = '(\\d+)\\s+-Copy:Union');
+		resultRe = '(\\d+)\\s+-Copy:Union', pipelineFile = pipelineFile);
 	# <!><%> tb removed
 	#rd$remote_path = 'shark:/exports/molepi/users/sboehringer/eurotarget-201609-selection-top-R03/R_04/imputation_17';
 	pl = propertyFromString(readFile(Sprintf('%{dir}s/files.spec', dir = rd$remote_path), ssh = T));
@@ -381,7 +418,6 @@ postGWASsnpSelectionRead = function(exportPath = 'results/export/clean', options
 	pl1 = apply(matrix(1:length(pl$files), byrow = T, ncol = 2), 1, function(idcs) {
 		list(genotypes = pl$files[[idcs[1]]], info = pl$files[[idcs[2]]])
 	});
-
 	# <p> fam file
 	if (is.null(fam))
 		fam = readTable(Sprintf('[SEP=S,HEADER=F,NAMES=fid;iid;pid;fid;y]:%{exportPath}s.fam'),
@@ -403,11 +439,11 @@ postGWASsnpSelectionRead = function(exportPath = 'results/export/clean', options
 		gtsByCall = matrix(as.vector(gtsStacked), ncol = 3*Nsnps);
 		gtsByGt = lapply(1:3, function(i)gtsByCall[, rangeBlock(i, Nsnps)]);
 		gtsBySnps = matrix.intercalate(gtsByGt, listOfMatrices = T, direction = 2);
-		dimnames(gtsBySnps) = list(fam$iid, pastem(snps$snp, 0:2, sep = ':'));
+		dimnames(gtsBySnps) = list(as.character(fam$iid), pastem(snps$snp, 0:2, sep = ':'));
 
 		# <p> dosage
 		dosage = matrix(gtsStacked %*% 0:2, ncol = Nsnps);
-		dimnames(dosage) = list(fam$iid, snps$snp);
+		dimnames(dosage) = list(as.character(fam$iid), snps$snp);
 
 		# <p> info file
 		pathInfo = Sprintf('[SEP=S,HEADER=T]:%{dir}s/%{file}s',
@@ -456,13 +492,12 @@ postGWASwriteSnpSelectionData = function(dataSnps, exportPath, optionsFile, run 
 #	<p> other helpers
 #
 
-# read fam file from imputation dir
-# assume that the pipe file has the same name as the directory <!>
-readFamFileFromRemotePath = function(remotePath) {
+famFilePathFromRemotePath = function(remotePath, pipeFile = NULL) {
 	# <p> get input prefix
 	sp = splitPath(remotePath, ssh = T);
+	pipeFile = if (notE(pipeFile)) splitPath(pipeFile, ssh = T)$file else sp$file;
 	command = with(sp, Sprintf(con(
-		"pipeline.pl --print-parameters %{file}s.pipe 2>&1 | ",
+		"pipeline.pl --print-parameters %{pipeFile}s.pipe 2>&1 | ",
 		"perl -ne 'print $1 if (m{^G:PipeInput\\s+(.*)}m)'"
 	)));
 	famPrefix = System(command, 1, patterns = c('cwd', 'ssh'),
@@ -471,28 +506,27 @@ readFamFileFromRemotePath = function(remotePath) {
 	famPath = Sprintf(con(
 		'[HEADER=F,SEP=S,NAMES=fid;id;pid;mid;sex;affected]:',
 		'%{remotePath}s/%{famPrefix}s.fam'));
+	print(famPath);
+	famPath
+}
+
+# read fam file from imputation dir
+# assume that the pipe file has the same name as the directory <!>
+readFamFileFromRemotePath = function(remotePath) {
+	famPath = famFilePathFromRemotePath(remotePath);
 	# <p> read file
 	fam = readTable(famPath, ssh = T);
 }
 
 
 #
-#	<p> export data
+#	<p> export data [non-imputed]
 #
 
-# Novershoot: maximal expected number of SNPs in region
-# Nregion: def of physical size of region
-snpDataTopHits = function(optionsFile, model = 1, run = 'R03', Ntop = 1, Novershoot = 30, Nregion = 3e4,
-	sizeExtract = 5e4) {
-	# <p> initialization
-	#snps = postGWAStopSNPs(imputationPrefix, optionsFile, run = 'R03');
-	i = gwasInitialize(optionsFile, run = run);
-	o = gwasReadOptionsFile(optionsFile, run = run);
-	d = gwasReadVariables(o, genotyped = TRUE);
-	mds = expandedModelsData(d, o);
-
+# model: mds[[model]]$model
+snpsTopHitsSingle = function(o, model, Ntop = 1, Novershoot = 30, Nregion = 3e4, sizeExtract = 5e4) {
 	# <p> read associations
-	assFile = exportFileName(o, analysisTag(mds[[model]]$model), 'snpAssociations.csv', mkdir = F);
+	assFile = exportFileName(o, analysisTag(model), 'snpAssociations.csv', mkdir = F);
 	ass = readTable(assFile);
 
 	# <p> extract top regions
@@ -515,8 +549,34 @@ snpDataTopHits = function(optionsFile, model = 1, run = 'R03', Ntop = 1, Noversh
 	e = readExclusions(o);
 	rangesClean = ranges[!(ranges$id %in% e$markers), , drop = F];
 
+	rangesClean
+}
+
+# model: mds[[model]]$model
+snpDataTopHitsSingle = function(o, model, Ntop = 1, Novershoot = 30, Nregion = 3e4, sizeExtract = 5e4) {
+	rangesClean = snpsTopHitsSingle(o, model, Ntop, Novershoot, Nregion, sizeExtract);
 	# <p> read genotypes
 	gts = readPlinkBed(o$input, rangesClean$id, usePedIid = TRUE);
-	gtsClean = gts[!(row.names(gts) %in% e$individuals), , drop = F];
+	gtsClean = gts[!(row.names(gts) %in% readExclusions(o)$individuals), , drop = F];
 	gtsClean
+}
+
+# Novershoot: maximal expected number of SNPs in region
+# Nregion: def of physical size of region
+# sizeExtract: physical distance how much to export
+snpDataTopHits = function(optionsFile, models = NULL, run = 'R03', Ntop = 1, Novershoot = 30,
+	Nregion = 3e4, sizeExtract = 5e4, snpNamesOnly = F) {
+	# <p> initialization
+	#snps = postGWAStopSNPs(imputationPrefix, optionsFile, run = 'R03');
+	i = gwasInitialize(optionsFile, run = run);
+	o = gwasReadOptionsFile(optionsFile, run = run);
+	d = gwasReadVariables(o, genotyped = TRUE);
+	mds = expandedModelsData(d, o);
+	if (is.null(models)) models = 1:length(mds);
+
+	extractor = if (snpNamesOnly) snpsTopHitsSingle else snpDataTopHitsSingle;
+	r = lapply(models, function(i) {
+		extractor(o, mds[[i]]$model, Ntop, Novershoot, Nregion, sizeExtract)
+	});
+	r
 }

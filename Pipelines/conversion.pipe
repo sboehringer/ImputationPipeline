@@ -18,6 +18,7 @@ MapReplace:Options
 MapReplace:ENV_ADD_QSUB_OPTIONS	 --memory 16G
 
 InputPlink:cmd		loaddata.py -m G:PipeInput -o OUTPUT_DIR InputPlink:Options	
+InputPlink:ENV_ADD_QSUB_OPTIONS	 --memory 16G
 # map-replace
 MapReplace:cmd		mapreplace.py --spec INPUTS --hapmap G:referencePanel -o OUTPUT_DIR MapReplace:Options
 # convert to tped format

@@ -116,3 +116,19 @@ applyCoxPerSnp:select			TRUE
 applyCoxPerSnp:select_example	nit(type = 'CCC')
 applyCoxPerSnp:extraOptions		--formula1 'applyCoxPerSnp:formula1' --formula0 'applyCoxPerSnp:formula0' --select 'applyCoxPerSnp:select'
 applyCoxPerSnp:meta				{ formula0 = "applyCoxPerSnp:formula0"; formula1 = "applyCoxPerSnp:formula1"; }
+
+#
+#	Instance: perform cox-regression per SNP
+#
+
+applyGlmOrdPerSnp:isa				applyRperSnp
+applyGlmOrdPerSnp:RfunctionSource	testGlmOrdPerSnp.R
+applyGlmOrdPerSnp:RfunctionName		testGlmOrdPerSnp
+applyGlmOrdPerSnp:formula1			__must_be_specified__
+applyGlmOrdPerSnp:formula1_example	y ~ MARKER + age + sex
+applyGlmOrdPerSnp:formula0			__must_be_specified__
+applyGlmOrdPerSnp:formula0_example	y ~ age + sex
+applyGlmOrdPerSnp:select			TRUE
+applyGlmOrdPerSnp:select_example	nit(type = 'CCC')
+applyGlmOrdPerSnp:extraOptions		--formula1 'applyGlmOrdPerSnp:formula1' --formula0 'applyGlmOrdPerSnp:formula0' --select 'applyGlmOrdPerSnp:select'
+applyGlmOrdPerSnp:meta				{ formula0 = "applyGlmOrdPerSnp:formula0"; formula1 = "applyGlmOrdPerSnp:formula1"; }

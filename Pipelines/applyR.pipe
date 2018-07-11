@@ -118,7 +118,7 @@ applyCoxPerSnp:extraOptions		--formula1 'applyCoxPerSnp:formula1' --formula0 'ap
 applyCoxPerSnp:meta				{ formula0 = "applyCoxPerSnp:formula0"; formula1 = "applyCoxPerSnp:formula1"; }
 
 #
-#	Instance: perform cox-regression per SNP
+#	Instance: perform ordinal regression per SNP
 #
 
 applyGlmOrdPerSnp:isa				applyRperSnp
@@ -132,3 +132,19 @@ applyGlmOrdPerSnp:select			TRUE
 applyGlmOrdPerSnp:select_example	nit(type = 'CCC')
 applyGlmOrdPerSnp:extraOptions		--formula1 'applyGlmOrdPerSnp:formula1' --formula0 'applyGlmOrdPerSnp:formula0' --select 'applyGlmOrdPerSnp:select'
 applyGlmOrdPerSnp:meta				{ formula0 = "applyGlmOrdPerSnp:formula0"; formula1 = "applyGlmOrdPerSnp:formula1"; }
+
+#
+#	Instance: perform logistic mixed model per SNP
+#
+
+applyGlmrPerSnp:isa				applyRperSnp
+applyGlmrPerSnp:RfunctionSource	testGlmrPerSnp.R
+applyGlmrPerSnp:RfunctionName	testGlmrPerSnp
+applyGlmrPerSnp:formula1		__must_be_specified__
+applyGlmrPerSnp:formula1_example	y ~ MARKER + age + sex
+applyGlmrPerSnp:formula0		__must_be_specified__
+applyGlmrPerSnp:formula0_example	y ~ age + sex
+applyGlmrPerSnp:select			TRUE
+applyGlmrPerSnp:select_example	nit(type = 'CCC')
+applyGlmrPerSnp:extraOptions	--formula1 'applyGlmrPerSnp:formula1' --formula0 'applyGlmrPerSnp:formula0' --select 'applyGlmrPerSnp:select'
+applyGlmrPerSnp:meta			{ formula0 = "applyGlmrPerSnp:formula0"; formula1 = "applyGlmrPerSnp:formula1"; }

@@ -37,6 +37,7 @@ tped:ENV_ADD_QSUB_OPTIONS	--memory 32G
 # <p> convert to 3column format
 #
 3col:Options		--type tped2tped3col --qsub
+3col:ENV_ADD_QSUB_OPTIONS	--memory 32G
 
 #
 #	<p> input plink for X-chromosome analysis

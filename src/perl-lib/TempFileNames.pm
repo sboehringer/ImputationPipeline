@@ -3,7 +3,7 @@ require 5.000;
 require Exporter;
 
 @ISA       = qw(Exporter);
-@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &existsWithBase &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &qs2 &uqs &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix &slurpToTemp &slurpPipeToTemp &pathInter);
+@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &verbosityLevel &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &existsWithBase &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &qs2 &uqs &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix &slurpToTemp &slurpPipeToTemp &pathInter &pathUnInter);
 
 #@EXPORT_OK = qw($sally @listabob %harry func3);
 
@@ -147,6 +147,11 @@ sub pathInter { my ($p) = @_;
 	$p =~ s{^~}{$ENV{HOME}}o;
 	return $p;
 }
+sub pathUnInter { my ($p) = @_;
+	$p =~ s{^$ENV{HOME}}{~}o;
+	return $p;
+}
+
 sub resourcePath { my ($resource) = @_;
 	foreach $path (@INC)
 	{
@@ -166,7 +171,10 @@ sub firstFile { my ($filePath, $dirs, $extensions, $c) = @_;
 	my $p = splitPathDict($filePath);
 	# <!> changed [23.8.2003]: $p->{base} -> $p->{basePath}
 	my $base = $c->{useBase}? $p->{base}: $p->{basePath};
-	foreach $dir ($p->{directory}, @$dirs) {
+	# used to include $p->{directory} but undefined (dir would be correct)
+	# commented out 27.9.2018
+	#foreach $dir ($p->{directory}, @$dirs) {
+	foreach $dir (@$dirs) {
 		foreach $ext ($p->{extension}, @$extensions) {
 			my $file = firstDef($dir, '.'). "/$base". ($ext ne ''? ".$ext": '');
 			$file =~ s{^~}{$ENV{HOME}}o if (!$c->{dontInterpolateHome});
@@ -215,7 +223,8 @@ sub readConfigFile { my ($fileName, $c, @paths) = @_;
 		die "Config file $fileName not found" if (!defined($c->{default}));
 		$plist = $c->{default};
 	} else {
-		$plist = $c->{returnPath}? propertyFromString($plistFile->{file}): propertyFromString($plistFile);
+		my $plistFct = $c->{noExtendedPlist}? \&propertyFromString: \&propertyFromStringExt;
+		$plist = $c->{returnPath}? $plistFct->($plistFile->{file}): $plistFct->($plistFile);
 	}
 	return $c->{returnPath}
 	? { path => $plistFile->{path}, propertyList => $plist } : $plist;
@@ -330,9 +339,9 @@ sub writeFile { my ($path, $buffer, $doMakePath, $fileMode, $dirMode, $host) = @
 		($doMakePath, $fileMode, $dirMode, $host, $group) = @$c{
 		('doMakePath','fileMode','dirMode','host','group')};
 	}
-	if ($c->{encodeFrom} ne 'raw') {
+	if (defined($c->{encodeFrom}) && $c->{encodeFrom} ne 'raw') {
 		my $enc = firstDef($c->{encodeFrom}, 'utf8');
-		eval("use Encode;");
+		load('Encode', 'encode'); #eval("use Encode;");
 		$buffer = encode($enc, $buffer);
 	}
 	if (defined($host)) {

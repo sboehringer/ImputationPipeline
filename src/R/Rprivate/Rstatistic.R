@@ -57,7 +57,30 @@ logSumExp = function(x) {
 	Imx = which.max(x);
 	log1p(sum(exp(x[-Imx] - x[Imx]))) + x[Imx]
 }
-   
+logSumExp_add = function(v, bins) {
+	diff = abs(bins - v);
+	diffB = pop(bins) - shift(bins);
+	if (max(diff) > max(diffB)) {	# bin-reshuffeling
+		Ibin = which.min(diffB);
+		bins[Ibin] = logSumExp(bins[c(Ibin, Ibin + 1)]);
+		bins[Ibin + 1] = v;
+	} else {
+		Ibin = which.min(abs(diff));
+		bins[Ibin] = logSumExp(c(v, bins[Ibin]));
+	}
+	return(sort(bins, na.last = T, decreasing = T));
+}
+
+logSumExpIter_raw = function(x, Nbins = 30) {
+	if (length(x) < Nbins) return(x);
+	lse = x[1:Nbins];
+	for (e in x[-(1:Nbins)]) lse = logSumExp_add(e, lse);
+	return(logSumExp(lse));
+}
+logSumExpIter = function(x, Nbins = 30) {
+	return(logSumExp(logSumExpIter_raw(x)));
+}
+
 # rejFrac = function(x, alpha = 0.05) {
 # 	x = na.omit(x);
 # 	f = count(x <= alpha) / length(x);
@@ -1003,7 +1026,7 @@ coefficientsOR = function(s, level = .95) {
 	r = cbind(cfs, cis[, -1], as.matrix(cisOR));
 	r
 }
-coefficientsORmodel = function(model, level = .95)coefficientsORsModel(summary(model), level)
+coefficientsORmodel = function(model, level = .95)coefficientsOR(summary(model), level)
 
 #
 #	meta analysis
@@ -1203,7 +1226,12 @@ seq.transf = function(from = 0, to = 1, length.out = 1e1, ..., transf = log, tra
 #
 
 completeRows = function(data)!apply(data, 1, function(r)any(is.na(r)))
-completeData = function(f, data)data[completeRows(data[, all.vars(f), drop = F]), , drop = F]
+completeData = function(f = ~ ., data, collapse = F, varExclude = c()) {
+	vsRaw = all.vars(f);
+	if (any(vsRaw == '.')) vsRaw = names(data);
+	vs = setdiff(vsRaw, varExclude);
+	data[completeRows(data[, vs, drop = F]), if (collapse) vs else 1:ncol(data), drop = F]
+}
 
 model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F,
 	returnComplete = F, formulaAsIs = F) {
@@ -1242,20 +1270,30 @@ complete_from_vars = function(vars, data, offset = NULL, ignore.case = F, remove
 	model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept)$indeces
 }
 
-glmnet_re = function(f, data, ..., offset = NULL, ignore.case = F, remove.intercept = F,
-	lambdas = NULL, cv = T) {
-	d = model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept);
+# <!><t> tb tested refactoring as of 19.2.2019
+
+glmnet_re_mm = function(y, mm, ..., offset = NULL, ignore.case = F, remove.intercept = F,
+	lambdas = NULL, cv = T, returnGlmnet = F) {
 	# <p> fit model
 	r = if (cv) {
-		r0 = cv.glmnet(x = d$mm, y = d$response, lambda = lambdas, ..., offset = d$offset);
+		r0 = cv.glmnet(x = mm, y = y, lambda = lambdas, ..., offset = offset);
 		args = c(List(..., min_ = c('foldid', 'nfolds', 'grouped')),
-			list(x = d$mm, y = d$response, lambda = r0$lambda.min, offset = d$offset));
-# 			list(x = d$mm, y = d$response, lambda = (3*r0$lambda.min + r0$lambda.1se)/4, offset = d$offset));
-#			list(x = d$mm, y = d$response, lambda = (r0$lambda.min), offset = d$offset));
+			list(x = mm, y = y, lambda = r0$lambda.min, offset = offset));
+# 			list(x = mm, y = y, lambda = (3*r0$lambda.min + r0$lambda.1se)/4, offset = offset));
+#			list(x = mm, y = y, lambda = (r0$lambda.min), offset = offset));
 		do.call('glmnet', args);
-	} else glmnet(x = d$mm, y = d$response, lambda = lambdas, ..., offset = d$offset);
-	r = c(r, list(formula = f));
-	r
+	} else glmnet(x = mm, y = y, lambda = lambdas, ..., offset = offset);
+	if (returnGlmnet) r = list(glmnet = r);
+	return(r);
+}
+
+glmnet_re = function(f, data, ..., offset = NULL, ignore.case = F, remove.intercept = F,
+	lambdas = NULL, cv = T, returnGlmnet = F) {
+	d = model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept);
+	r = glmnet_re_mm(d$response, d$mm, ..., offset = d$offset,
+		ignore.case = ignore.case, remove.intercept = remove.intercept, lambdas = lambdas,
+		cv = cv, returnGlmnet = returnGlmnet);
+	return(c(r, list(formula = f)));
 }
 glmnet_re_refit = function(model, data, ..., var_cutoff =  1e-6, intercept = '1', impute = NULL) {
 	response = formula.response(model$formula);
@@ -1428,18 +1466,50 @@ cv_test_glm = function(model, formula, data, ...) {
 	ll
 }
 
+cv_train_glmnet = function(f1, data, ...) {
+	glmnet_re(f1, data, ..., returnGlmnet = T);
+}
+cv_test_glmnet = function(model, f1, data, ...) {
+	preds = predict(model$glmnet, model_matrix_from_formula(f1, data)$mm, type = 'response');
+	# detect logistic model, constrain probabilities
+	if (notE(model$glmnet$classnames) && length(model$glmnet$classnames) == 2) preds = minimax(preds, 0, 1);
+	return(preds);
+}
+
+cv_train_glmnet_mm = function(data, ...) {
+	i = FirstDef(which(dimnames(data)[[2]] == 'y'), 1);
+	glmnet_re_mm(data[, i], data[, -i], ..., returnGlmnet = T);
+}
+cv_test_glmnet_mm = function(model, data, ...) {
+	i = FirstDef(which(dimnames(data)[[2]] == 'y'), 1);
+	preds = predict(model$glmnet, data[, -i], type = 'response');
+	# detect logistic model, constrain probabilities
+	if (notE(model$glmnet$classnames) && length(model$glmnet$classnames) == 2) preds = minimax(preds, 0, 1);
+	return(preds);
+}
+
+
+cv_train_glm = function(f1, data, ..., family = binomial()) {
+	glm(f1, data = data, family = family)
+}
+cv_test_glm_predict = function(model, f1, data, ..., type = 'response') {
+	predict(model, data, type = type)
+}
+
+
 # cv_prepare = function(data, argsFrom...)
 # cv_train = function(data, argsFrom...)
 # cv_test = function(model, data, argsFrom...)
 # @arg cv_fold number of crossvalidation folds, denotes leave -cv_fold out if negative
+# <!> 19.2.2019: removed cv_prepare for lack of functionality
+# <i> argument routing to train/test
 
-crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list(),
+crossvalidate = function(cv_train, cv_test,
 	data, cv_fold = 20, cv_repeats = 1, ..., parallel = F, align_order = TRUE) {
 	if (cv_fold == 0) stop('crossvalidate: cv_fold must be an integer != 0');
 	if (!parallel) Lapply = lapply;
 	N = nrow(data);
-	r = with(cv_prepare(data = data, ...), {
-		Lapply(1:cv_repeats, function(i, ...) {
+	r = Lapply(1:cv_repeats, function(i, ...) {
 			perm = Sample(1:N, N);
 			# compute partitions
 			fold = if (cv_fold > 0) cv_fold else as.integer(N/-cv_fold);
@@ -1469,7 +1539,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			} else if (align_order) stop("Crossvalidate: didn't know how to align order.") else r;
 			gc();
 			r
-	}, ...)});
+	}, ...);
 	r
 }
 
@@ -1591,8 +1661,10 @@ pairs_std.panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
 }
 
 unique_fraction = function(x) (length(unique(x))/length(x))
-guess_is_factor = function(x, na.rm = T) {
-	all(as.integer(x) == x, na.rm = na.rm) && unique_fraction(x) < .1
+guess_is_factor = function(x, na.rm = T, uniqueFraction = .1, Nlevels = 10) {
+	all(as.integer(x) == x, na.rm = na.rm) &&
+		unique_fraction(x) < uniqueFraction &&
+		length(unique(x)) <= Nlevels
 }
 
 
@@ -1627,6 +1699,13 @@ pairs_std = function(...,
 	pairs(...,
 		lower.panel = lower.panel, diag.panel = diag.panel, upper.panel = upper.panel)
 }
+
+pairs_std_save = function(data, ..., path = NULL) {
+	if (is.null(path)) path = tempfile(fileext = '.png');
+		plot_save_eval(pairs_std(data), ..., plot_path = path);
+	return(path);
+}
+
 
 #
 #	<p> omics data
@@ -1768,7 +1847,7 @@ table.entropy = function(d) {
 #
 
 Qvalue = function(P.value, ...) {
-	require('qvalue');
+	Require('qvalue');
 	P.valuesNotNA = na.omit(P.value);
 	qv = qvalue(P.valuesNotNA, ...);
 	r = qv;
@@ -1891,6 +1970,20 @@ lmer2p = function(object, method = 'profile') {
 	apply(cis, 1, function(ci)ciToP(ci[1], ci[2]))
 }
 
+# confint plus P-value
+confintP = function(m, level = .95) {
+	ci = confint(m, level = level);
+	P = apply(ci, 1, function(ci)ciToP(ci[1], ci[2], level = level));
+	cbind(ci, P)
+}
+
+# alternative check for convergence of glmer models
+#https://stackoverflow.com/questions/21344555/convergence-error-for-development-version-of-lme4
+glmerFit = function(m) {
+	relgrad = with(m@optinfo$derivs, solve(Hessian, gradient));
+	return(max(abs(relgrad)));
+}
+
 #
 #	<p> simulation studies
 #
@@ -1902,5 +1995,197 @@ dataSimulation = function(Niteration, fSim, fStat = function(data, ...)summary(d
 		data = do.call(fSim, c(parSim, parShared));
 		r = do.call(fStat, c(list(data = data), parStat, parShared));
 	});
+}
+
+#
+#	<p> delta rule
+#
+
+#
+#	Numeric delta rule
+#
+
+gradient = function(f, x, ..., eps = 1e-5) {
+	sapply(seq_along(x), function(i) {
+		epsI = vector.assign(0, i, eps, N = length(x));
+		(f(x + epsI, ...) - f(x - epsI, ...)) / (2 * eps)
+	});
+}
+
+totalDeriv = function(f, x, ..., eps = 1e-5) {
+	y = f(x, ...);
+	t(sapply(seq_along(y), function(i)gradient(function(x)f(x, ...)[i], x, eps = eps)));
+}
+
+# delta rule for functions of binomial data
+#N: list of pairs Nevents, Ntotal, or nx2 matrix of these numbers
+#f: function to computed on the frequencies
+deltaFreqs = function(N, f, logScale = T, ..., eps = 1e-5, alpha = .95) {
+	if (is.list(N)) N = sapply(N, identity);
+	freqs = N[1, ] / N[2, ];
+	var = freqs * (1 - freqs) / N[2, ];
+
+	fDeriv = if (logScale) function(x, ...)log(f(x, ...)) else f;
+	fGradient = gradient(fDeriv, freqs, ..., eps = eps);
+
+	varf = (t(fGradient) %*% diag(var) %*% fGradient)[1, 1];
+	limit = qnorm(1 - (1 - alpha)/2, 0, sqrt(varf));
+
+	y = fDeriv(freqs);
+	yCi = y + c(-limit, limit);
+
+	r = if (logScale) list(y = exp(y), ci = exp(yCi), var = varf) else list(y = y, ci = yCi, var = varf);
+	r
+}
+
+#
+#	<p> sensitvity/specificity/ROC/AUC
+#
+
+
+# assume TRUE/FALSE
+binaryMeasure = function(tab, strict = TRUE) {
+	if (strict && !all(names(dimnames(tab)) == c('pred', 'truth'))) stop('dimnames != pred, truth');
+	if (strict && !all(unique(unlist(dimnames(tab))) == c('FALSE', 'TRUE'))) stop('values != FALSE, TRUE');
+	r = list(
+		tp = sum(tab[, 'TRUE']) / sum(tab),
+		tn = sum(tab[, 'FALSE']) / sum(tab),
+		sensitivity = tab['TRUE', 'TRUE'] / sum(tab[, 'TRUE']),
+		specificity = tab['FALSE', 'FALSE'] / sum(tab[, 'FALSE']),
+		ppv = tab['TRUE', 'TRUE'] / sum(tab['TRUE', ]),
+		npv = tab['FALSE', 'FALSE'] / sum(tab['FALSE', ])
+	);
+	return(r);
+}
+
+binaryMeasures = function(prob, labels) {
+	cutoffs = sort(unique(prob));
+	measures = lapply(cutoffs, function(co) {
+		tab = Table(list(pred = prob >= co, truth = labels), cats = list(pred = c(F, T), truth = c(F, T)));
+		bm = c(list(cutoff = co), binaryMeasure(tab));
+		bm
+	});
+	r = apply(do.call(rbind, measures), 2, unlist);
+	r
+}
+
+cvROC = function(f1, data,
+	cv_fold = 10, cv_repeats = 1, cv_train = cv_train_glmnet, cv_test = cv_test_glmnet) {
+	Library('pROC');
+	Library('AUC');
+
+	# <p> data preparation
+	mm = model_matrix_from_formula(f1, data);
+	d0 = data[mm$indeces, ];
+	d0resp = d0[[formula.response(f1)]];
+
+	# <p> crossvalidation
+	pred = crossvalidate(cv_train, cv_test, data = d0, cv_fold = cv_fold, cv_repeats = cv_repeats, f1 = f1);
+
+	# <p> results
+	# <i><N> only first repeat headed at the moment
+	roc = AUC::roc(pred[[1]], as.factor(d0resp));
+	auc = AUC::auc(roc);
+	rocProc = pROC::roc(as.factor(d0resp), pred[[1]]);
+	aucProc = pROC::auc(rocProc);
+	P = cor.test(d0resp, pred[[1]])
+
+	r = list(roc = roc, auc = auc, rocProc = rocProc, aucProc = aucProc, aucCi = ci(rocProc), P = P,
+		data = Df(response = d0resp, prediction = pred[[1]]));
+	return(r);
+}
+
+plotRocs = function(data, interval = 0.2, breaks = seq(0, 1, interval)) {
+	d0 = do.call(rbind, nlapply(data, function(n) {
+		d = if (all( c('tpr', 'fpr') %in% names(data[[n]]))) data[[n]] else	# roc already computed
+			with(data[[n]], AUC::roc(prediction, as.factor(response)));
+		Df(fpr = 1 - d$fpr, tpr = d$tpr, type = n)
+	}));
+	p = ggplot(data = d0) +
+		#geom_line(aes(x = fpr, y = tpr)) +
+		geom_step(aes(x = fpr, y = tpr, col = type), lwd = 1) +
+		geom_segment(aes(x = 0, y = 1, xend = 1, yend = 0)) +	#diagonal
+		scale_x_reverse(name = "Specificity", limits = c(1,0), breaks = breaks,  expand = c(0.001,0.001)) + 
+		scale_y_continuous(name = "Sensitivity", limits = c(0,1), breaks = breaks, expand = c(0.001, 0.001))+
+		labs(color = 'ROC type') +
+		coord_equal() + theme_bw();
+	p
+}
+
+
+#
+#	<p> multiple testing
+#
+tailStrength = function(ps, M = length(ps)) {
+	N = length(ps);
+	# standardize p-values to 0
+	psS = 1 - sort(ps) * (N + 1)/(1:N);
+	r = - sum(psS[1:M])/M;	# return negative as small values are deemed relevant
+	r
+}
+
+#
+#	<p> power calculations
+#
+
+findBinomN = function(pTrue, pLower, level = 0.95, Nmax = 1e3, lower = T) {
+	Require('binom');
+	fBinom = if (lower)
+		function(N)binom.logit(N*pTrue, N, conf.level = level)$lower else
+		function(N)binom.logit(N*pTrue, N, conf.level = level)$upper
+	inverse(fBinom, c(1, Nmax))(pLower);
+}
+
+#
+#	<p> pseudo counts
+#
+
+# implement pseudo-count, needed as observations c(0, 0, X) cause diverging estimates
+mulitnomCoeff = function(x, log = TRUE) {
+	N = sum(x);
+	muco = lgamma(N + 1) - sum(sapply(x + 1, lgamma));
+	if (!log) muco = exp(muco);
+	return(muco);
+}
+
+dmultinomPseudo = function(x, prob, log = FALSE, pseudo = .1, factors = 1:1e2, F = NULL) {
+	# find multiplication factor
+	if (is.null(F)) {
+		pseudoF = t(t_(pseudo) %*% factors);
+		pseudoR = abs(pseudoF - round(pseudoF));
+		F = factors[apply(pseudoR, 2, which.min)];
+	}
+	# standardize probabilities
+	logP = log(v2freq(prob));
+	# raw likelihood contributions
+	pRaw = sum(round((x + pseudo) * F) * logP / F);
+	# add multinomial coefficient
+	pCooked = pRaw + mulitnomCoeff(x);
+	if (!log) pCooked = exp(pCooked);
+	return(pCooked);
+}
+
+#
+#	<p> random numbers
+#
+
+generateSeed = function(preSeed = Sys.time()) {
+	ints = hex2ints(md5sumString(as.integer(preSeed)));
+	r = 0
+	for (i in 1:length(ints)) r = bitwXor(r, ints[i]);
+	return(r);
+}
+
+# run expression with fixed seed but leave the RNG stream unchanged
+#	(bracket expression with save/restore of seed)
+#	as.integer(Sys.time())
+fixSeedForExpr = function(seed, expr, envir = parent.frame()) {
+	if (!exists('.Random.seed')) runif(1);	# vivify RNG
+	currentSeed = .Random.seed;
+	on.exit(.Random.seed <<- currentSeed);
+	set.seed(seed);
+	r = eval(expr, envir = envir);
+	#.Random.seed <<- currentSeed;
+	return(r);
 }
 

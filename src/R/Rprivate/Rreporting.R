@@ -18,6 +18,12 @@
 #	<p> generic reporting functions
 #
 
+formatNumber = function(e, digits) {
+	ifelse(-floor(log10(abs(e))) >= digits,
+		sprintf("%.*e", digits, e),
+		sprintf("%.*f", digits, e))
+}
+
 row.standardFormatter = function(e, digits = NA) {
 	f = if (is.na(digits) || substring(digits, 1, 1) == 'p') {
 		e

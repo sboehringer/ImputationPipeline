@@ -2,7 +2,8 @@
 #	Rgraphics.R
 #Mon 27 Jun 2005 10:52:17 AM CEST
 
-require('grid');
+#Require('grid');	# -> Rlibraries.R
+
 #
 #	<p> unit model
 #
@@ -313,12 +314,12 @@ plot_grid_base = function(plots, coords, envirPlotVar = 'plot', verbose = F, err
 	sapply(1:length(plots), function(i) {
 		if (verbose) LogS(2, 'plot_grid#: %{i}d');
 		this = try({
-			switch(class(plots[[i]]),
-				environment = eval(get(envirPlotVar, plots[[i]])),
-				`function` = do.call(plots[[i]], list()),
-				eval(plots[[i]]))
+		cl = class(plots[[i]]);
+			if ('environment' %in% cl) eval(get(envirPlotVar, plots[[i]])) else
+			if ('function' %in% cl) do.call(plots[[i]], list()) else
+			eval(plots[[i]])
 		});
-		if (class(this) == 'try-error') plot_error(this)
+		if ('try-error' %in% class(this)) plot_error(this)
 	});
 # 			if (is.environment(plots[[i]])) eval(get(envirPlotVar, plots[[i]])) else print(plots[[i]]);
 }
@@ -347,10 +348,9 @@ plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar =
 		merge.multi(1:nrow, 1:ncol, .first.constant = byrow) else
 		mapper(1:length(plots));
 
-	switch(class(plots[[1]]),
-		viewport = plot_grid_grid(plots, coords),
-		plot_grid_base(plots, coords, envirPlotVar, verbose = verbose)
-	);
+	cl = class(plots[[1]]);
+	if ('viewport' %in% cl) plot_grid_grid(plots, coords) else
+	plot_grid_base(plots, coords, envirPlotVar, verbose = verbose)
 }
 
 plot_grid_to_path =  function(plots, ..., path,
@@ -462,7 +462,13 @@ createSurvivalFrame <- function(f.survfit){
 }
 
 # deﬁne custom function to draw kaplan-meier curve with ggplot
-qplot_survival = function(f.frame, f.CI = "default", f.shape = 3, ..., title = NULL, layers = NULL){
+qplot_survival = function(f.frame, f.CI = "default", f.shape = 3, ..., title = NULL, layers = NULL,
+	axes = NULL, legendTitle = T){
+
+	strata = avu(Regexpr('=(.*)', levels(f.frame$strata), captures = T));
+	factorNm = avu(Regexpr('(.*)=', levels(f.frame$strata)[1], captures = T));
+	levels(f.frame$strata) = strata;
+
 	# use different plotting commands dependig whether or not strata's are given
 	p = if("strata" %in% names(f.frame) == FALSE) {
 		# conﬁdence intervals are drawn if not speciﬁed otherwise
@@ -496,7 +502,12 @@ qplot_survival = function(f.frame, f.CI = "default", f.shape = 3, ..., title = N
 		}
 	}
 	if (!is.null(title)) p = p + labs(title = title);
+	if (Nif(axes) && Nif(axes$x)) p = p + xlab(axes$x);
+	if (Nif(axes) && Nif(axes$y)) p = p + ylab(axes$y);
 	if (!is.null(layers)) p = p + layers;
+	#p = p + theme(legend.title = if (legendTitle) factorNm else element_blank());
+	legendNm = if (legendTitle) factorNm else NULL;
+	p = p + scale_colour_discrete(name = legendNm, breaks = strata, labels = strata)
 	p
 }
 
@@ -504,29 +515,29 @@ quantileBinning = function(x, Nbins) {
 	cut(x, quantile(x, seq(0, 1, length = Nbins + 1)), labels = seq_len(Nbins), include.lowest = TRUE)
 }
 
-kaplanMeierStrat = function(d1, f1, levels = NULL, title = NULL) {
+kaplanMeierStrat = function(d1, f1, levels = NULL,
+	title = '%{formula}s, [P = %{p}.2e]', axes = NULL, legendTitle = T) {
 	# <i> only allow one covariate
-	stratVar = all.vars(formula.rhs(f1))[1];
+	titlePre = stratVar = all.vars(formula.rhs(f1))[1];
+	titleFormula = Sprintf('%{O}s ~ %{titlePre}s', O = all.vars(as.formula(f1))[1])
 	if (!is.null(levels)) {
 		d1[[stratVar]] = as.factor(quantileBinning(d1[[stratVar]], levels));
 	}
-	stratValue = levels(drop.levels(d1[[stratVar]]));
+	stratValue = levels(droplevels(d1[[stratVar]]));
 	# <p> log-rank test
 	lr = survdiff(as.formula(f1), data = d1);
 	p.lr = pchisq(lr$chisq, df = dim(lr$n) - 1, lower.tail = F)
 	# <p> kaplan-meyer
 	fit = survfit(as.formula(f1), data = d1);
 	fit.frame = createSurvivalFrame(fit);
-	titleCooked = if (is.null(title))
-		sprintf('%s, [P = %.2e]', stratVar, p.lr) else
-		Sprintf('%{title}s, [P = %{p}.2e]', p = p.lr)
-	p = qplot_survival(fit.frame, F, 20, title = titleCooked,
+	titleCooked = Sprintf(title, strata = titlePre, p = p.lr, formula = titleFormula)
+	p = qplot_survival(fit.frame, F, 20, title = titleCooked, axes = axes, legendTitle = legendTitle,
 		layers = theme_bw());
 	list(plot = p, level = stratValue)
 }
 
 kaplanMeierNested = function(d, f1, strata, combine = FALSE) {
-	require('gdata');
+	Require('gdata');
 	# <!><b> fix special case of length(strata) == 1
 	d = Df(d, dummy_comb__kaplanMeierNested = 1);
 	dStrat = d[, c(strata, 'dummy_comb__kaplanMeierNested'), drop = F];
@@ -549,6 +560,19 @@ kaplanMeierNested = function(d, f1, strata, combine = FALSE) {
 	});
 	plots
 }
+
+# groups levels by group argument
+kaplanMeierCovariate = function(covariate, outcome, groups = NA, data,
+	title = '%{strata}s, [P = %{p}.2e]', axes = NULL, legendTitle = T) {
+	pred = if (!nif(groups)) data[[covariate]] else recodeLevels(data[[covariate]], group = groups);
+	LogS(5, 'Number of levels: %{N}d', N = length(levels(droplevels(pred))));
+	#if (length(levels(droplevels(pred))) < 2) browser();
+	d = Df(pred, data[, avu(outcome), drop = F], names = covariate);
+	f1 = with(outcome, Sprintf('Surv(%{time}s, %{status}s) ~ %{covariate}s'))
+	p = kaplanMeierStrat(d, f1, title = title, axes = axes, legendTitle = legendTitle);
+	return(p);
+}
+
 
 #
 #	<p> histograms
@@ -666,9 +690,15 @@ Device = function(type, plot_path, width, height, ..., units = 'cm', dpi = NA, a
 		width = width * o$autoScale;
 		height = height * o$autoScale;
 	}
-	if (nif(o$hasDpi))
-		device(plot_path, width = width, height = height, units = units, res = dpi, ...) else
-		device(plot_path, width = width, height = height, ...);
+	args = c(list(plot_path, width = width, height = height), list(...));
+	if (nif(o$hasDpi)) do.call(device, c(args, list(units = units, res = dpi))) else do.call(device, args);
+		#device(plot_path, width = width, height = height, units = units, res = dpi, ...) else
+		#device(plot_path, width = width, height = height, ...);
+}
+
+# prepare plotting expression for later plotting
+quotePlot = function(e, envir = parent.frame()) {
+	list(plot = substitute(e), envir = envir)
 }
 
 # use 'cm' as output unit
@@ -680,6 +710,10 @@ plot_draw = function(object, envir) {
 		grid.draw(object)
 	} else if (any(class(object) %in% c('ggplot', 'plot'))) {
 		print(object)
+	} else if (any(class(object) %in% c('histogram'))) {
+		plot(object)
+	} else if (any(class(object) %in% 'list') && notE(plot$envir)) {
+		eval(object$plot, envir = plot$envir);
 	} else {
 		eval(object, envir = envir);
 	}
@@ -709,6 +743,26 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 		ret = plot_draw(object, envir = envir);
 	dev.off();
 }
+# <i> refactor with plot_save_raw
+plot_save_eval = function(object, ..., width = 20, height = 20, plot_path = NULL,
+	type = NULL, options = list(), unit = 'cm', unit_out = 'dpi150', autoScale = FALSE, envir = parent.frame()) {
+
+	if (is.null(type)) type = splitPath(plot_path)$ext;
+	if (is.null(unit_out)) unit_out = units_default[[type]];
+	if (class(width) == 'numeric') width = valueU(width, 'cm');
+	if (class(height) == 'numeric') height = valueU(height, 'cm');
+	width = toUnit(width, 'cm');
+	height = toUnit(height, 'cm');
+	dpi = Nina(as.integer(FetchRegexpr('dpi(\\d+)', unit_out, captures = T)));
+ 	Logs('Saving %{type}s to "%{plot_path}s"  [width: %{w}f %{h}f dpi: %{dpi}d]',
+		w = width@value, h = height@value, logLevel = 5);
+	Device(type, plot_path, width = width, height = height, units = 'cm', dpi = dpi, ...,
+		autoScale = autoScale);
+		ret = eval(object, envir = envir);
+	dev.off();
+	return(ret);
+}
+
 
 plotSizes = list(
 	a4 = list(width = valueU(21, 'cm'), height = valueU(21 * sqrt(2), 'cm')),
@@ -720,10 +774,19 @@ plotSizes = list(
 #
 #	Examples:
 #	plot_save(object, c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
+#	plot_save(quote(plot(res)), unit_out = 'cm', plot_path = 'resources/Q3-residuals.png',
+#		width = 15, height = 15, options = list(png = list(unit_out = 'dpi150')));
+#	plot_save(quote(plot(res)), plot_path = 'resources/Q3-residuals.png', width = 15, height = 15);
 plot_typeMap = list(jpg = 'jpeg');
+plot_optionsDefault = list(
+	png = list(unit_out = 'dpi150'),
+	jpeg = list(unit_out = 'dpi150')
+);
 plot_save = function(object, ..., size, width, height, plot_path = NULL,
+	#type = firstDef(plot_typeMap[[splitPath(plot_path)$ext]], splitPath(plot_path)$ext),
 	type = NULL,
-	envir = parent.frame(), options = list(), simplify = T, unit_out = NULL, createDir = TRUE) {
+	envir = parent.frame(), options = plot_optionsDefault,
+	simplify = T, unit_out = NULL, createDir = TRUE) {
 
 	# <p> plot size
 	# default size
@@ -792,7 +855,7 @@ ebimageGrob = function (pic, x = 0.5, y = 0.5, scale = 1, raster = FALSE, angle 
     }
     else {
         colours <- colours[rev(seq_len(nrow(colours))), ]
-        require(RGraphics)
+        Require('RGraphics')
         child <- imageGrob(dims[2], dims[1], cols = colours, 
             gp = gpar(col = colours), byrow = FALSE, vp = vp, 
             ...)
@@ -943,3 +1006,145 @@ binPlot_0 = function(data, formula = NULL, bins = c(1e2, 1e2), Nrep = 3, eps = 1
 	dataS = do.call(rbind, dataSL);
 	dataS
 }
+
+#
+#	<p> label annotation
+#
+
+# patch[XY]: multiply by constants to add a shift
+labelAlignmentsStd = list(
+	std = list(x = 0.5, y = 0, patchX = 0, patchY = 1, hjust = 0.5, vjust = 0, penalty = 0),
+	leftL = list(x = 0, y = -1, patchX = -1, patchY = 0, hjust = 1, vjust = 1, penalty = 5),
+	rightL = list(x = 1, y = -1, patchX = 1, patchY = 0, hjust = 0, vjust = 1, penalty = 5),
+	left = list(x = 0, y = 0, patchX = 0, patchY = 1, hjust = 1, vjust = 0, penalty = 5),
+	right = list(x = 1, y = 0, patchX = 0, patchY = 1, hjust = 0, vjust = 0, penalty = 5),
+	high = list(x = 0.5, y = 1, patchX = 0, patchY = 1, hjust = 0.5, vjust = 0, penalty = 15)
+);
+layoutStd = list(extend = list(x = 20, y = 2, patchX = .1, patchY = .1, size = 1));
+
+layoutForExtend = function(x = 50, y = 50, labelSzX = x/10, labelSzY = y/25) {
+	Mx = max(x, y);
+	return(list(extend = list(x = labelSzX, y = labelSzY, patchX = x/100, patchY = y/100, size = Mx / 15)));
+}
+
+labelBoundingBox = function(l, layout = layoutStd, alignments = labelAlignmentsStd) {
+	a = FirstDef(alignments[[l$align]], alignments$std);
+	e = FirstDef(l$extend, layout$extend);
+	p = l$pos;
+	s = layout$extend;
+
+	x1 = p$x + (a$x - 1) * e$x + a$patchX * s$patchX;
+	y1 = p$y + a$y * e$y + a$patchY * s$patchY;
+	coords = matrix(c(x1, y1, x1 + e$x, y1, x1 + e$x, y1 + e$y, x1, y1+e$y), byrow = T, ncol = 2);
+	return(coords);
+}
+labelsDf = function(labels, layout = layoutStd, alignments = labelAlignmentsStd) {
+	rows = lapply(labels, function(l) {
+		e = FirstDef(l$extend, layout$extend);
+		a = FirstDef(alignments[[l$align]], alignments$std);
+		with(l$pos, Df(x = x + a$patchX * e$patchX, y = y + a$patchY * e$patchY,
+			annotation = l$annotation, hjust = a$hjust, vjust = a$vjust));
+	});
+	d = do.call(rbind, rows);
+	return(d);
+}
+
+# close polygon, convert to SpatialPolygon, cartesian coordinates
+labelBB2Spatial = function(coords) {
+	poly = rbind(coords, coords[1, , drop = F]);
+	return(SpatialPolygons(list(Polygons(list(Polygon(poly)), 'BB')), proj4string = CRS('+proj=cart')));
+}
+
+labelIntersections = function(bb, bbList) {
+	lSpat = labelBB2Spatial(bb);
+	diffs = sapply(bbList, function(e)area(intersect(lSpat, labelBB2Spatial(e))));
+	return(diffs);
+}
+
+Area = function(p)if (is.null(p)) return(0) else area(p);
+Intersect = function(p1, p2)suppressWarnings(intersect(p1, p2));
+labelIntersectionsWeighted = function(bb, bbListW) {
+	weights = list.kpu(bbListW, 'weight');
+	lSpat = labelBB2Spatial(bb);
+	diffs = sapply(bbListW, function(e)Area(Intersect(lSpat, labelBB2Spatial(e$coords))));
+	return(diffs * weights);
+}
+
+# minmize overlap with labels in lList
+labelFindBestAlignment = function(l, lList, alignments = labelAlignmentsStd, layout = layoutStd) {
+	bbList = lapply(lList, labelBoundingBox, layout = layout);
+	bbListL = list.embed(bbList, 'coords');
+	weights = list.embed(list.kpu(lList, 'weight'), 'weight');
+	bbListW = list.combine(list(bbListL, weights), doMerge = T);
+
+	overlap = sapply(names(alignments), function(a) {
+		bb = labelBoundingBox(merge.lists(l, list(align = a)), layout = layout);
+		inter = labelIntersectionsWeighted(bb, bbListW);
+		sum(inter);
+	});
+	o = overlap[which.min(overlap)];
+	return(list(align = names(o), overlap = o));
+}
+
+labelsRearrangeSingle = function(labels, layout = layoutStd, alignments = labelAlignmentsStd) {
+	overlap = 0;
+	penalty = 0;
+	for (i in 1:length(labels)) {
+		a = labelFindBestAlignment(labels[[i]], labels[-i], layout = layout);
+		labels[[i]]$align = a$align;
+		overlap = overlap + a$overlap;
+		penalty = penalty + alignments[[a$align]]$penalty;
+	}
+	return(list(labels = labels, overlap = overlap, penalty = penalty));
+}
+
+labelsRearrangeRaw = function(labels, layout = layoutStd, NiterMax = 2e2) {
+	overlap = Inf;
+	for (i in 1:NiterMax) {
+		lsRearr = labelsRearrangeSingle(labels, layout = layout);
+		if (lsRearr$overlap == overlap) break;
+		overlap = lsRearr$overlap;
+		labels = lsRearr$labels;
+	}
+	return(lsRearr);
+}
+
+labelsRearrange = function(labels, layout = layoutStd, Nperm = 3) {
+	arrangements = lapply(1:Nperm, function(i) {
+		labelsRearrangeRaw(if (i > 1) labels[Sample(1:length(labels))] else labels, layout = layout);
+	});
+	Iperm = which.min(list.kpu(arrangements, 'overlap'));
+	LogS(3, "labelsRearrange: permuation with minimal overlap: %{Iperm}d");
+	return(arrangements[[Iperm]]);
+}
+
+plotLabels = function(labels, layout = layoutStd) {
+	dPts = Df_(do.call(rbind, list.kp(labels, 'pos')), deep_simplify = T);
+	p = ggplot(data = dPts, aes(x = x, y = y)) + geom_point(size = 1) + theme_bw();
+	dL = labelsDf(labels, layout = layout);
+	print(dL);
+	p = p + annotate('text', x = dL$x, y = dL$y, label = dL$annotation,
+		hjust = dL$hjust, vjust = dL$vjust, size = lo$extend$size
+	);
+
+}
+
+#
+#	<p> longitudinal data
+#
+
+Aes = function(...)structure(list(...),  class = "uneval")
+plotSpaghetti = function(f1, data, fSpaghetti = ~ time + StudyNumber) {
+	dPairs = completeData(f1, data, collapse = T);
+	data = droplevels(completeData(f1, data, collapse = T));
+
+	time = all.vars(fSpaghetti)[1];
+	group = all.vars(fSpaghetti)[2];
+
+	response = formula.response(f1);
+	pSp = ggplot(data, Aes(x = data[[time]], y = data[[response]], group = data[[group]])) +
+		geom_line(aes(color = data[[group]])) +
+		xlab(time) + ylab(response) + theme(legend.position = "none");
+	return(pSp);
+}
+

@@ -5,6 +5,8 @@
 source('gwas_qc.R');
 source('gwas_analysis.R');
 source('gwas_downstream.R');
+source('gwas_prs.R');
+source('gwas_meta.R');
 
 gwasParameterDefaults = list(
 	# flags controlling execution of the pipeline
@@ -71,6 +73,7 @@ gwasParameterDefaults = list(
 	assParTopN = 100,
 	assParMafTest = 0.00,	# maf for complete data to be tested (0 for compatibility as default)
 							# reasonably 0.01 or 0.05 depending on sample size
+	assParMafTestImp = 0.02,# maf at which to filter imputation results
 	assParGtfsTest = 0.005,	# if two genotypes have frequency less than assParGtfsTest,
 							# exclude SNP; relevant when only heterozygotes are observed
 							# should be filtered by earlier steps

@@ -137,9 +137,9 @@ gwasFormula2tag = function(f1) {
 		# less obfuscated version
 		#`C(\\d+)(.C(\\d+))*` = sprintf('MDS%s', join(mds, ':')),
 		# first component
-		`C(\\d+)((.C(\\d+))*)` = 'MDS\\1:\\2',
+		`C(\\d+)(?:(?:.C(?:\\d+))*)(?:.C(\\d+))` = 'MDS\\1:\\2',
 		# other components
-		`\\+C` = ''
+		`(?<=[+]|^)C(\\d+)` = 'MDS\\1'
 		#`C([0-9]+)` = ":\\1"
 	), f1, re = T, doApplyValueMap = F, doOrderKeys = F);
 	tag
@@ -773,7 +773,7 @@ summarizeResults = function(chunks, input, outputDir, d, o,
 	names(ps) = dfNames;
 
 	# afD for data allele frequency
-	ps = data.frame(marker = snps, allele = list.key(r, 'allele'), afD = list.key(r, 'af'), ps);
+	ps = data.frame(marker = snps, allele = list.kpu(r, 'allele', null2na = T), afD = list.kpu(r, 'af'), ps);
 	REP.tex('ASS:Nnas', sum(is.na(ps)));
 
 	# <p>> report results

@@ -201,14 +201,15 @@ gwasManhattanPlotMatrix = function(formula, data, chromosomes = 1:23, yaxisCutof
 
 # convert positions relative to chromosome start to absolute values across all chromosomes
 chrPos2abs = function(dPos, chrPositions) {
-	dPos$position = dPos$position + chrPositions['start', dPos$chr];
+	dPos$position = dPos$position + chrPositions['start', as.character(dPos$chr)];
 	dPos
 }
 absDistPairs = function(v)matrix(abs(kronecker(v, v, '-')), nrow = length(v));
 # <!> choose moveY slightly larger than threshY to avoid endless loopc
-pos2nonOverlapping = function(dPos, oderByP = TRUE, threshX = 1e7, threshY = 0.15, moveX = 0, moveY = 0.151) {
+pos2nonOverlapping = function(dPos, oderByP = TRUE, threshX = 1e7, threshY = 0.15, moveX = 0, moveY = 0.151,
+	NmoveMax = 2e2) {
 	if (oderByP) dPos = dPos[rev(order(dPos$p)), , drop = F];
-	repeat {
+	for (i in 1:NmoveMax) {
 		dX = absDistPairs(dPos$position);
 		dY = absDistPairs(dPos$p);
 		toMove = (dY > 0 & dY < threshY & dX > 0 & dX < threshX);
@@ -231,14 +232,16 @@ pos2nonOverlapping = function(dPos, oderByP = TRUE, threshX = 1e7, threshY = 0.1
 #colorRampPalette(brewer.pal(9, "Set1"))(12)
 gwas_manhattenPlotDefaults = list(
 	title = 'Manhattan Plot',
-	colors = c('gray10', 'gray50'),
+	colors = c('gray10', 'gray30'),
 	size = 1,
 	#colorsCats = c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"),
 	colorsCats = c("#E41A1C", "#66628D", "#419486", "#5A9D5A", "#91569A", "#D96D3B", "#FFAD12",
 		"#F6EF32", "#B6742A", "#D26D7A", "#DD87B4", "#999999"),
-	textColor = 'grey50',
+	textColor = 'black', #'grey50',
 	extendYmin = mlog10(1e-8),
+	extendYmax = mlog10(1e-30),
 	extendY = 'data',
+	extendYmargin = 2,
 	yaxisCutoff = mlog10(1e-15),
 	colorByCutoff = mlog10(1e-3),	# cutoff for choosing colors when using by argument
 	size.x.labels = 10,
@@ -250,15 +253,15 @@ gwas_manhattenPlotDefaults = list(
 	xaxisPhysical = FALSE
 );
 gwas_annotationOptionsDefaults = list(
-	offX = 1e7, offY = 0.03
+	offX = 5e4, offY = .5,
+	annHjust = 0.5, annVjust = 0.5, annSize = 3.2, annHeight = .8
 );
 
 gwasManhattanPlotRaw = function(data, chromosomes, chrPositions, options = list(), annotation = NULL)
 	with(merge.lists(gwas_manhattenPlotDefaults, options), {
-
 	# <p> prepare parameters
-	if (extendY == 'data') extendY = ceiling(max(data$p));
-	if (extendY < extendYmin) extendY = extendYmin;
+	if (extendY == 'data') extendY = minimax(ceiling(max(data$p) + extendYmargin), extendYmin, extendYmax);
+	LogS(4, 'Manhattan Y-limit: %{extendY}f');
 
 	# <p> base plot
 	p = ggplot(data, aes(x = position, y = p, colour = color)) +
@@ -292,10 +295,11 @@ gwasManhattanPlotRaw = function(data, chromosomes, chrPositions, options = list(
 		dAnn$p = mlog10(dAnn$p);	# <A> unify with general log10 transformation
 		dAnnAbs = chrPos2abs(dAnn, chrPositions);
 		dAnnNO = pos2nonOverlapping(dAnnAbs);
+		#dAnnNO = dAnnAbs;
 		p = p + annotate('text',
 			x = dAnnNO$position + offX, y = dAnnNO$p + offY,
 			label = dAnnNO[[all.vars(value)]],
-			hjust = 0, vjust = 0.5
+			hjust = annHjust, vjust = annVjust, size = annSize, lineheight = annHeight
 		);
 	}) else p;
 	p
@@ -335,7 +339,8 @@ gwasManhattanPlot2file = function(formula, data, output, chromosomes = 1:23,
 	pp = list(width = valueU(29.7, 'cm'), height = valueU(21, 'cm'),
 		options = list(jpeg = list(unit_out = 'dpi300'), png = list(unit_out = 'dpi150')))) {
 
-	p = gwasManhattanPlot(formula, data, chromosomes = chromosomes, bins = bins, Nrep = Nrep);
+	p = gwasManhattanPlot(formula, data, chromosomes = chromosomes, bins = bins, Nrep = Nrep,
+		options = options);
 	r = plot_save(p,
 		plot_path = paste(output, extensions, sep = '.'),
 		width = pp$width, height = pp$height, options = pp$options

@@ -59,7 +59,15 @@ Log.level = function()get('GlobalLogLevel', envir = Log_env__);
 Log.setLevel = function(level = get('GlobalLogLevel', envir = Log_env__)) {
 	assign("GlobalLogLevel", level, envir = Log_env__);
 }
+Log.expr = function(level, expr, envir = parent.frame()) {
+	oldLevel = Log.level();
+	on.exit(Log.setLevel(oldLevel));
+	Log.setLevel(level);
+	return(eval(expr, envir = envir));
+}
+
 Log.setLevel(4);	# default
+
 
 Stop = function(..., call. = TRUE, domain = NULL, envir = parent.frame()) {
 	stop(Sprintf(list(...)[[1]], envir = envir), call., domain)
@@ -269,11 +277,45 @@ FreezeThawControlDefaults = list(
 	freeze_relative = F, freeze_ssh = T, logLevel = Log.level()
 );
 
+freezeObjectsCooked = function(objects, envir = parent.frame(), defaultEnv = 0) {
+	if (is.null(objects)) return(NULL);
+	ns = names(objects);
+	o = lapply(seq_along(objects), function(i) {
+		if (ns[i] != '') {
+			lapply(objects[[i]], function(n)setNames(list(get(n, envir = get(ns[i], envir))), n));
+		} else setNames(list(get(objects[[i]], envir = envir)), objects[[i]])
+	});
+	return(setNames(o, ns));
+}
+thawObjectsCooked = function(objects, envir = parent.frame(), assignPos = 1) {
+	if (is.null(objects)) return(NULL);
+	ns = names(objects);
+	freeze = lapply(seq_along(objects), function(i) {
+		if (ns[i] != '') {
+			os = sapply(objects[[i]], function(o) {
+				this = mget(ns[i], envir, ifnotfound = NA)[[1]];
+				if (!is.environment(this)) {
+					this = new.env();
+					assign(ns[i], this, pos = assignPos);
+				}
+				assign(names(o[1]), o[[1]], envir = this);
+				return(names(o[1]));
+			});
+			return(os);
+		} else {
+			assign(names(objects[[i]]), objects[[i]][[1]], pos = assignPos);
+			return(names(objects[[i]]));
+		}
+	});
+	return(setNames(freeze, ns));
+}
+
 thawCall = function(
 	freeze_control = FreezeThawControlDefaults,
-	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag)) {
+	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
+	envir = .GlobalEnv) {
 
-	load(freeze_file, envir = .GlobalEnv);
+	load(freeze_file, envir = envir);
 	r = with(callSpecification, {
 		for (library in freeze_control$libraries) {
 			eval(parse(text = sprintf('library(%s)', library)));
@@ -281,6 +323,7 @@ thawCall = function(
 		for (s in freeze_control$sourceFiles) source(s, chdir = T);
 		Log.setLevel(freeze_control$logLevel);
 		if (!is.null(freeze_control$rng)) RNGuniqueSeed(freeze_control$rng);
+		thawObjectsCooked(freeze_objects, envir);
 
 		if (is.null(callSpecification$freeze_envir)) freeze_envir = .GlobalEnv;
 		# <!> freeze_transformation must be defined by the previous source/library calls
@@ -313,7 +356,8 @@ frozenCallResults = function(file) {
 freezeCallEncapsulated = function(call_,
 	freeze_control = FreezeThawControlDefaults,
 	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
-	freeze_save_output = F, freeze_objects = NULL, thaw_transformation = identity)
+	freeze_save_output = F, freeze_objects = NULL, freeze_objects_envir = parent.frame(),
+	thaw_transformation = identity)
 	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
 
 	sp = splitPath(freeze_file, ssh = freeze_ssh);
@@ -341,7 +385,8 @@ freezeCallEncapsulated = function(call_,
 	#Save(c('callWrapper', 'callSpecification', 'thawCall', objects),
 	#	file = freeze_file, symbolsAsVectors = T);
 	#Save(c(c('callWrapper', 'callSpecification', 'thawCall'), objects),
-	Save(c('callWrapper', 'callSpecification', 'thawCall', freeze_objects),
+	freeze_objects = freezeObjectsCooked(freeze_objects, freeze_objects_envir);
+	Save(c('callWrapper', 'callSpecification', 'thawCall', 'freeze_objects'),
 		file = freeze_file, symbolsAsVectors = T);
 	freeze_file
 })
@@ -393,7 +438,8 @@ freezeCall = function(freeze_f, ...,
 
 	freezeCallEncapsulated(call_,
 		freeze_control = freeze_control, freeze_tag = freeze_tag,
-		freeze_file = freeze_file, freeze_save_output = freeze_save_output, freeze_objects = freeze_objects,
+		freeze_file = freeze_file, freeze_save_output = freeze_save_output,
+		freeze_objects = freeze_objects, freeze_objects_envir = freeze_envir,
 		thaw_transformation = thaw_transformation
 	);
 }
@@ -616,6 +662,9 @@ loadLibraries = function() {
 	Require('geepack');
 	Require('glmnet');
 	Require('ggplot2'); if (exists('theme_set')) theme_set(theme_bw());
+	Require('grid');
+	Require('magrittr');
+	Require('set');
 }
 #
 #	Rdata.R
@@ -640,11 +689,17 @@ rget = function(name, default = NULL, ..., pos = -1, envir = as.environment(pos)
 	r = if (exists(name, envir = envir)) get(name, ..., envir = envir) else default;
 	r
 }
-firstDef = function(..., .fdInterpolate = F, .fdIgnoreErrors = F) {
+# .fdE: use notE
+firstDef = function(..., .fdInterpolate = F, .fdIgnoreErrors = F, .fdE = F) {
 	l = if (.fdInterpolate) c(...) else list(...);
-	for (i in l) { if (!is.null(i) && (!.fdIgnoreErrors || class(i) != 'try-error')) return(i)};
+	for (i in l) {
+		if ((!is.null(i) && (!.fdE || notE(i))) && (!.fdIgnoreErrors || class(i) != 'try-error'))
+			return(i)
+	};
 	NULL
 }
+FirstDef = function(..., .fdInterpolate = F, .fdIgnoreErrors = F, .fdE = T)
+	firstDef(..., .fdInterpolate = .fdInterpolate, .fdIgnoreErrors = .fdIgnoreErrors, .fdE = .fdE)
 firstDefNA = function(..., .fdInterpolate = F){
 	l = if (.fdInterpolate) c(...) else list(...);
 	for (i in l) { if (!is.na(i)) return(i)};
@@ -741,6 +796,7 @@ mat.sel = function(m, v, dir = 1) {
 
 # rbind on list
 simplify = sapplyId = function(l)sapply(l, identity);
+Simplify = function(l)unlist(simplify(l));
 
 listFind = function(lsed, lsee) {
 	values = sapply(names(lsee), function(n)list.key(lsed, n), simplify = F, USE.NAMES = F);
@@ -750,7 +806,21 @@ listFind = function(lsed, lsee) {
 	r
 }
 
+#same.vector = function(v)(unique(v) == 1)
 same.vector = function(v)all(v == v[1])
+
+# in vector v, find index min j \in 1, ..., N so that v[1:j] contains at least U unique elements
+uniqueIndex = function(v, U) {
+	#Nu = sapply(seq_along(v), function(i)length(unique(data$chr[1:i])));
+	# more efficient version
+	u = c();
+	for (i in seq_along(v)) {
+		u = unique(c(u, v[i]));
+		if (length(u) == U) return(i);
+	}
+	return(NA);
+}
+
 
 #
 #	<§> string manipulation
@@ -979,10 +1049,17 @@ MatchRegex = function(re, str, mode = 'return') {
 	r
 }
 # handle attributes
+# As.list assumes attributes and vector elements to be paired
+#	corresponding values/attributes will be put into the list
 As.list = function(v) {
 	as = Recycle(attributes(v));
 	l = lapply(seq_along(v), function(i) {
-		Attr(v[i], list.kp(as, Sprintf('[[%{i}d]]')))
+		# does not preserve matrices
+		#attrs = list.kp(as, Sprintf('[[%{i}d]]'));
+		# should become <i>
+		#attrs = list.kp(as, Sprintf('[[%{i}d]]', accessor = function(e)accessIdx(e, i)));
+		attrs = lapply(seq_along(as), function(j)accessIdx(as[[j]], i));
+		Attr(v[i], SetNames(attrs, names(as)))
 	});
 	l
 }
@@ -993,6 +1070,11 @@ As.list = function(v) {
 # by default, return matches
 RegexprSingle = function(re, s, captures = F, global = T, simplify = T, concatMatches = T, drop = T) {
 	matches = if (global) gregexpr(re, s, perl = T) else As.list(regexpr(re, s, perl = T));
+	#print(gregexpr(re, s, perl = T));
+	#print(regexpr(re, s, perl = T));
+	#print(matches);
+
+	#matches = if (global) gregexpr(re, s, perl = T) else list(regexpr(re, s, perl = T));
 	r = pairslapply(matches, s, function(m, s) {	# iterate strings
 		if (captures) {
 			r = matchRegexCapture(m, s);
@@ -1004,8 +1086,9 @@ RegexprSingle = function(re, s, captures = F, global = T, simplify = T, concatMa
 		r
 	});
 	if (simplify && (
-		(length(s) == 1 && captures && concatMatches) || !global
+		(length(s) == 1 && captures && concatMatches)
 	)) r = r[[1]];
+	if (simplify && !global) r = Simplify(r);
 	return(r);
 }
 
@@ -1109,6 +1192,16 @@ qssSingle = function(s, force = F) {
 	s
 }
 qss = function(s, ...)sapply(s, qssSingle, ...)
+# include special case for home folder expansion: do not quote initial '~'
+qsSinglePath = function(s, ...) {
+	if (s == '~')
+		s else
+	if (nchar(s) >= 2 && substring(s, 1, 2) == '~/')
+		con('~/', qsSingle(substring(s, 3), ...)) else
+		qsSingle(s, ...)
+}
+# include special case for home folder expansion"
+qsPath = function(s, ...)sapply(s, qsSinglePath, ...)
 
 #' Return sub-strings indicated by positions or produce a string by substituting those strings with
 #'	replacements
@@ -1199,7 +1292,7 @@ Sprintfl = function(fmt, values, sprintf_cartesian = FALSE, envir = parent.frame
 	# <p> handle %D: current day
 	keys[typesRaw == 'D'] = '..Sprintf.date..';
 	dateValue = if (sum(typesRaw == 'D'))
-		list(`..Sprintf.date..` = format(Sys.time(), '%Y%d%m')) else
+		list(`..Sprintf.date..` = format(Sys.time(), '%Y%m%d')) else
 		list();
 	allValues = c(allValues, dateValue, List_(interpolation, rm.null = T));
 
@@ -1218,7 +1311,7 @@ Sprintfl = function(fmt, values, sprintf_cartesian = FALSE, envir = parent.frame
 	#colsQ = keys[typesRaw == 'Q'];
 	# <!> switch to index based transformation on account of duplicate keys
 	colsQ = which(typesRaw == 'Q');
-	dictDf[, colsQ] = apply(dictDf[, colsQ, drop = F], 2, qs, force = T);
+	dictDf[, colsQ] = apply(dictDf[, colsQ, drop = F], 2, qsPath, force = T);
 	#colsq = keys[typesRaw == 'q'];
 	colsq = which(typesRaw == 'q');;
 	dictDf[, colsq] = apply(dictDf[, colsq, drop = F], 2, qss);
@@ -1372,7 +1465,7 @@ expandBlocks = function(blks) {
 	apply(matrix(blks, ncol = 2, byrow = T), 1, function(r) { r[1]:r[2] } )
 }
 
-
+# split 1:M into N partitions, return row-wise range
 splitListIndcs = function(M, N = 1, .compact = F, .truncate = T) {
 	if (.truncate & M < N) N = M;
 	if (.compact) {
@@ -1414,19 +1507,26 @@ index2listPosition = function(l) {
 # splitting based on fractions
 # voting percentages to seats
 #	simple algorithm based on size of residuals
-splitSeatsForFractions = function(Nseats, fractions) {
+# tiePreferHigh: for tied residuals add/subtract seats to high indeces (T) or low ones (F)
+splitSeatsForFractions = function(Nseats, fractions = vn(rep(1, Nfractions)), Nfractions,
+	tiePreferHigh = T) {
 	# number of parties
 	Nparties = length(fractions);
 	# fractional seats
 	Nseats0 = fractions * Nseats;
 	# garuantee one seat, otherwise round to nearest
 	Nseats1 = ifelse (Nseats0 < 1, 1, round(Nseats0));
-	# mismatch
+	# individual mismatch
+	Nresid = Nseats0 - Nseats1;
+	# mismatch total
 	diff = sum(Nseats1) - Nseats;
 	# redistribute deficit/overshoot
 	if (diff != 0) {
-		Nresid = sapply(Nseats0 - Nseats1, function(i)ifelse(i < 0, 1, i));
-		subtr = order(Nresid, decreasing = diff < 0)[1:abs(diff)];
+		Nresid1 = ifelse(Nresid < 0, 1, Nresid);	# too few vs too many, too few -> maximal value of 1
+		# take seats from whom? We need abs(diff) seats.
+		#subtr = order(Nresid1, decreasing = diff < 0)[1:abs(diff)];
+		prio = if (tiePreferHigh) 1:Nparties else rev(1:Nparties);
+		subtr = Order(Df(Nresid1, prio))[1:abs(diff)];
 		# assume one round of correction is always sufficient <!>
 		Nseats1[subtr] = Nseats1[subtr] - sign(diff);
 	}
@@ -1574,6 +1674,22 @@ Merge.lists = function(..., ignore.nulls = TRUE, listOfLists = F, recursive = F,
 	l
 }
 
+# l: list of lists
+# take parallel elements from l (1, ...) after recycling
+list.combine = function(l, byRow = T, names = NULL, doMerge = F) {
+	lR = Recycle(l, byRow = byRow);
+	# <p> number of final elements
+	N =	length(lR[[1]]);
+	lC = lapply(1:N, function(i) {
+		lol = list.kp(lR, Sprintf('[[%{i}d]]'));
+		if (notE(names)) names(lol) = names;
+		return(if (doMerge) merge.lists(lol, listOfLists = T) else lol);
+	});
+	return(lC);
+}
+# inverse of unlist.n(, 1)
+list.embed = function(l, key = 'key')lapply(l, function(e)SetNames(list(e), key));
+
 compare_print = function(r, e) {
 	require('compare');
 	cmp = compare(model = r, comparison = e);
@@ -1699,14 +1815,15 @@ list.kprw = function(l, keys, unlist.pats, template, null2na, carryNames, test) 
 		index = fetchRegexpr("\\A\\[\\[(\\d+)\\]\\]\\Z", key, captures = T);
 		if (length(index) > 0) key = as.integer(index[[1]]);
 		if (is.list(l)) {
-			r = if (is.null(l[[key]])) {
+			# <N> logical(0) seen as NULL by second condition
+			r = if (is.null(l[[key]]) || length(l[[key]]) == 0) {
 					if (null2na) { NA } else firstDef(template, NULL)
 				} else l[[key]];
 			if (length(keys) > 1)
 				list.kprw(r, keys[-1], unlist.pats[-1], template, null2na, carryNames, test) else
 				if (test) !(is.null(r) || all(is.na(r))) else r;
 		} else if (class(l) %in% c('character')) {
-			l[names(l) %in% key];
+			if (notE(names(l))) l[names(l) %in% key] else l[key]
 		} else if (class(l) %in% c('data.frame', 'matrix')) {
 			l[, key]
 		} else if (class(l) %in% c('numeric', 'integer')) {
@@ -1725,7 +1842,7 @@ list.kprw = function(l, keys, unlist.pats, template, null2na, carryNames, test) 
 			) else l;
 	}
 	# <p> unlisting
-	if (!is.null(unlist.pats)) if (unlist.pats[1]) r = unlist.n(r, 1, reset = carryNames);
+	if (notE(unlist.pats)) if (unlist.pats[1]) r = unlist.n(r, 1, reset = carryNames);
 	r
 }
 
@@ -1759,7 +1876,7 @@ list.kp.keys = function(keyPath) fetchRegexpr("[^$]+", keyPath);
 list.kpr = function(l, keyPath, do.unlist = F, template = NULL,
 	null2na = F, unlist.pat = NULL, carryNames = T, as.matrix = F, test = F) {
 	keys = list.kp.keys(keyPath);
-	unlist.pats = if (!is.null(unlist.pat)) as.logical(fetchRegexpr("[^$]+", unlist.pat)) else NULL;
+	unlist.pats = if (notE(unlist.pat)) as.logical(fetchRegexpr("[^$]+", unlist.pat)) else NULL;
 
 	# parallel keys
 	#r = list.kprwkp(l, keyPath, unlist.pats, template, null2na, carryNames, test = test);
@@ -1771,9 +1888,10 @@ list.kpr = function(l, keyPath, do.unlist = F, template = NULL,
 # extract key path from list
 # <!> interface change: unlist -> do.unlist (Wed Sep 29 18:16:05 2010)
 # test: test existance instead of returning value
-list.kp = function(l, keyPath, do.unlist = F, template = NULL, null2na = F, test = F) {
+list.kp = function(l, keyPath, do.unlist = F, template = NULL, null2na = F, test = F, n) {
 	r = list.kpr(l, sprintf("*$%s", keyPath), do.unlist = do.unlist,
 		template = template, null2na = null2na, test = test);
+	if (!missing(n)) r = unlist.n(r, n);
 	r
 }
 
@@ -1783,6 +1901,12 @@ list.keys = function(l, keys, default = NA) {
 	l = as.list(l);
 	r = lapply(unlist(keys), function(key) if (is.null(l[[key]])) default else l[[key]]);
 	r
+}
+
+null2na = function(l) {
+	if (!length(l)) return(l);
+	l[sapply(l, is.null)] = NA;
+	return(l);
 }
 
 
@@ -1798,7 +1922,12 @@ list.min  = function(l, keys) {
 # get apply
 gapply = function(l, key, unlist = F)list.key(l, key, unlist)
 # construct list as a dictionary for given keys and values
-listKV = listKeyValue = function(keys, values) {
+listKV = listKeyValue = function(keys, values, doRecycle = T) {
+	if (length(keys) != length(values) && doRecycle) {
+		r = recycle(keys, values);
+		keys = r[[1]];
+		values = r[[2]];
+	}
 	if (length(keys) != length(values))
 		stop("listKeyValue: number of provided keys does not match that of values");
 
@@ -1881,6 +2010,26 @@ pairslapply = function(l1, l2, f, ...) {
 	names(r) = names(l1);
 	r
 }
+
+sapplyWoI = function(v, f, ...)sapply(v, function(i, ...)f(...), ...)
+lapplyWoI = function(v, f, ...)lapply(v, function(i, ...)f(...), ...)
+
+dfapply = function(Df__, f__) {
+	r = lapply(1:nrow(Df__), function(i) {
+		r = Df__[i, ];
+		return(Df_(f__(as.list(r))));
+	});
+	Dfr = do.call(rbind, r);
+	return(Dfr);
+}
+
+filterList = function(o, f, ...) {
+	l = sapply(o, f, ...);
+	if (length(l) == 0) l = NULL;	#list corner case
+	r = o[l];
+	return(r);
+}
+
 
 # <i> copy MARGIN handling from apply (aperm)
 lapplyDir = function(m, MARGIN, f_, ..., drop = F) {
@@ -2325,6 +2474,8 @@ subsetTop = function(obj, sel, N = 1) {
 
 # transpose to create column vector for vector
 t_ = function(m)(if (is.vector(m)) t(t(m)) else t(m))
+# double transpose aka transpose to row -> vector to 1 x N matrix, otherwise identity
+t2r = function(m)t(t_(m))
 
 # convert strings to data frame names
 #	<i> create a data frame and extract names
@@ -2401,6 +2552,19 @@ matrix.intercalate = function(..., direction = 1, listOfMatrices = FALSE) {
 	r
 }
 
+matrixSearch = function(mSearch, mSearched, cols = 1:ncol(mSearch)) {
+	df1 = Df_(mSearch, names = paste0('c', cols));
+	df2 = Df_(mSearched[, cols, drop = F], names = paste0('c', cols));
+	return(DfSearch(df1, df2, returnIdcs = T));
+}
+
+arrayFromRowPairs = function(m, halves = F) {
+	if (halves)
+		aperm(array(t(m), dim = c(2, dim(m)[1]/2, dim(m)[2])), c(2, 1, 3)) else
+		# adjecent pairs
+		aperm(array(t(m), dim = c(2, dim(m)[2], dim(m)[1]/2)), c(3, 1, 2))
+}
+
 data.frame.expandWeigths = function(data, weights = 'weights') {
 	w = data[[weights]];
 	weightsCol = which(names(data) == weights);
@@ -2437,7 +2601,8 @@ vector.embed = function(v, idcs, e, idcsResult = T) {
 	r
 }
 # set values at idcs
-vector.assign = function(v, idcs, e, na.rm = 0) {
+vector.assign = function(v, idcs, e, na.rm = 0, N) {
+	if (!missing(N)) v = rep(v, N);
 	v[idcs] = e;
 	if (!is.na(na.rm)) v[is.na(v)] = na.rm;
 	v
@@ -2467,11 +2632,14 @@ vectorIdcs = function(v, f, ..., not = F) {
 	which(if (not) !r else r)
 }
 
+is.seq = function(v, offset = 1)all( (v - offset + 1) == seq_along(v))
 
 # produce indeces for indeces positioned into blocks of blocksize of which count units exists
 # example: expand.block(2, 10, 1:2) == c(1, 2, 11, 12)
 expand.block = function(count, blocksize, indeces) {
-	as.vector(apply(to.col(1:count), 1,
+	blks = Seq(1,count);
+	if (is.null(blks)) return(NULL);
+	as.vector(apply(to.col(blks), 1,
 		function(i){ (i - 1) * blocksize + t(to.col(indeces)) }
 	));
 }
@@ -2608,11 +2776,17 @@ table.n.freq = function(...) {
 	r = t0 / sum(t0);
 	r
 }
-Table = function(v, min, max, ...) {
-	if (missing(min) && missing(max)) return(table(v, ...));
-	if (missing(min)) min = min(v);
-	if (missing(max)) max = max(v);
-	table.n(v, n = max, min = min)
+Table = function(v, min, max, ..., cats) {
+	if (missing(min) && missing(max) && missing(cats)) return(table(v, ...));
+	if (!missing(cats)) {
+		d = Df_(lapply(v, Avu));
+		catsV = Df_(merge.multi.list(cats));
+		return(table(rbind(d, catsV)) - 1);
+	} else {
+		if (missing(min)) min = min(v);
+		if (missing(max)) max = max(v);
+		return(table.n(v, n = max, min = min));
+	}
 }
 
 #
@@ -2697,6 +2871,8 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	# sanitize row.names
 	dn = dimnames(df0);
 	if (Nif(dn) && any(duplicated(dn[[1]]))) dimnames(df0)[[1]] = NULL;
+	# <!> commented out on 4.4.2019, test implemented to fix this behavior
+	#if (length(row.names) == 0 || !all(is.na(row.names))) base::row.names(df0) = row.names;
 
 	if (apply_) df0 = as.data.frame(apply(df0, 2, identity));
 	#if (!Nif(Apply_)) df0 = as.data.frame(apply(df0, 2, Apply_));
@@ -2762,8 +2938,7 @@ Df_ = function(df0, headerMap = NULL, names = NULL, min_ = NULL,
 	#
 	if (notE(transf_log)) r[, transf_log] = log(r[, transf_log, drop = F]);
 	if (notE(transf_m1)) r[, transf_m1] = r[, transf_m1, drop = F] - 1;
-
-	if (!all(is.na(row.names))) row.names(r) = row.names;
+	if (length(row.names) == 0 || !all(is.na(row.names))) base::row.names(r) = row.names;
 	if (unlist_cols) for (n in names(r)) r[[n]] = avu(r[[n]]);
 	r
 }
@@ -2789,6 +2964,21 @@ Dfselect = function(data, l, na.rm = nif) {
 	r = data[na.rm(sel), ];
 	r
 }
+DfSearch = function(dfSearch, dfSearched,
+	colNamesReset = 'col', colNameIdx = '.dfSearchIdx', returnIdcs = F) {
+
+	nms = if (notE(colNamesReset)) {
+		nms = paste(colNamesReset, 1:ncol(dfSearched), sep = '');
+		names(dfSearch) = names(dfSearched) = nms;
+	} else names(dfSearched);
+	dfm = merge(
+		Df(1:nrow(dfSearched), dfSearched, names = colNameIdx),
+		Df(1:nrow(dfSearch), dfSearch, names = colNameIdx), by = nms);
+	if (returnIdcs)
+		return(dfm[, paste0(colNameIdx, c('.x', '.y')), drop = F]) else
+		return(dfm[[paste0(colNameIdx, '.x')]]);
+}
+
 DfDiff = function(d1, d2) {
 	dC = rbind(d2, d1);
 	row.names(dC) = NULL;
@@ -2798,10 +2988,20 @@ DfDiff = function(d1, d2) {
 	r
 }
 
-DfNames2std = function(d, nmsFormula, nmsStandard) {
-	d1 = Df_(d, headerMap = listKeyValue(all.vars(nmsFormula), nmsStandard));
-	d1
+# standardize df names using formulas
+dfNmsStd = function(f, nmsStd, d) {
+	nmsUsed = all.vars(f);
+	if (length(nmsUsed) != length(nmsStd))
+		stop(Sprintf('Formula names [%{f}s] do not match standard names [%{nm}s]',
+			f = formula.to.character(f), nm = join(nmsStd, ', ')));
+	d1 = Df_(d, headerMap = listKeyValue(nmsUsed, nmsStd));
+	return(d1);
 }
+# DfNames2std = function(d, nmsFormula, nmsStandard) {
+# 	d1 = Df_(d, headerMap = listKeyValue(all.vars(nmsFormula), nmsStandard));
+# 	d1
+# }
+DfNames2std = function(d, nmsFormula, nmsStandard)dfNmsStd(nmsFormula, nmsStandard, d)
 
 List_ = .List = function(l, min_ = NULL, sel_ = NULL,
 	rm.null = F, names_ = NULL, null2na = F, simplify_ = F, rm.na = F) {
@@ -2979,9 +3179,21 @@ data.frame.union = function(l) {
 # levels: take levels in that order, unmentioned levels are appended
 # setLevels: restrict to these levels, else set to NA
 # setLevelsTo: set names of levels to argument, set excess levels to NA
+# group: group levels, set names to concatenations
+#	recodeLevels(as.factor(c('AA', 'AG', 'GG')), group = list(1:2, 3))
 recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevels = NULL,
-	setLevelsTo = NULL) {
+	setLevelsTo = NULL, sortLevelsByMap = T, group = NULL) {
 	r = f;
+	# <!> overwrites map
+	# <!><i> does not implement grouping by level spec
+	if (notE(group)) {
+		lvls = levels(f);
+		map = unlist.n(lapply(group, function(e) {
+			newLevel = join(lvls[e], ' ');
+			mapEl = recycle(lvls[e], newLevel);
+			listKeyValue(mapEl[[1]], mapEl[[2]])
+		}), 1);
+	}
 	if (!is.null(map)) {
 		# map others to NA
 		if (others2na) {
@@ -2989,9 +3201,15 @@ recodeLevels = function(f, map = NULL, others2na = TRUE, levels = NULL, setLevel
 			map = c(map, listKeyValue(nonmentioned, rep(NA, length(nonmentioned))));
 		}
 		v = vector.replace(as.character(f), map);
-		if (is.integer(f)) v = as.integer(v);
-		if (is.factor(f)) v = factor(v, levels = unique(as.character(map)));
-		r = v;
+		# test for integer before and after
+		# special case eliminated as of 14.9.2018
+		#if (is.integer(f)) v = as.integer(v);
+		#if (is.factor(f)) v = factor(v, levels = unique(as.character(map)));
+		#v = factor(v, levels = unique(as.character(map)));
+		r = if (sortLevelsByMap)
+			factor(v, levels = union(unique(map), setdiff(unique(v), unique(map)))) else
+			as.factor(v);
+		# <!> r = v, r <- v do not work here, remain local
 	}
 	if (!is.null(levels) || !is.null(setLevels)) {
 		# <p> preparation
@@ -3675,8 +3893,11 @@ DfUniqueByCols = uniqueByCols = function(d, cols, drop = FALSE) {
 }
 
 # robustly access columns: if column name is NA, add column of NAs
+# changed as of 28.11.2018 <!> rely on only use by Reshape.long.raw
 DfSelectCols = function(d, vars) {
-	d0 = do.call(cbind, lapply(vars, function(v)if (is.na(v)) NA else d[, v]));
+	# changed as of 28.11.2018
+	#d0 = do.call(cbind, lapply(vars, function(v)if (is.na(v)) NA else d[, v]));
+	d0 = do.call(cbind, lapply(vars, function(v)if (is.na(v)) NA else d[, v, drop = F]));
 	d0
 }
 
@@ -3693,8 +3914,11 @@ Reshape.long.raw = function(d, vars, lvMap, factorColumn = 'repeat',
 	# create list of data frames
 	dfs = lapply(1:nrow(d), function(i) {
 		dR = d[i, rvars, drop = F];	# fixed, repeated part of the data set
-		d0 = t_(sapply(lvls, function(l)DfSelectCols(d[i, ], lvMap[[l]])));
-		d1 = Df(index = lvls, d0, dR, names = c(factorColumn, varsLong));
+		d0L = lapply(lvls, function(l)DfSelectCols(d[i, , drop = F], lvMap[[l]]));
+		d0 = do.call(rbind, lapply(d0L, setNames, varsLong));
+		d1 = Df(index = lvls,
+			Df_(d0, row.names = NULL), Df_(dR, row.names = NULL), names = c(factorColumn, varsLong));
+		#d1 = Df(index = lvls, d0, dR, names = c(factorColumn, varsLong));
 		d1
 	});
 	r = do.call(rbind, dfs);
@@ -3707,19 +3931,29 @@ Reshape.levelMap_re = function(ns, vars, factorsRe) {
 	# perform RE search
 	lvlsRaw = Regex(Res, ns);
 	lvlsRawL = sapply(lvlsRaw, length);
-	if (!all(lvlsRawL == lvlsRawL[1])) {
-		print(lvlsRaw);
-		stop('Different number of levels per factor');
-	}
+
 	# levels of index/reshape column
 	cols = Df_(lvlsRaw, names = vars);
 	# level belonging to column (non-simplifying Regex)
-	lvCol = RegexL(Res, ns, captures = T);
+	lvCol_old = RegexL(Res, ns, captures = T);
+	# allow to concat matches (several captures per Re)
+	lvCap = lapply(lapply(Regexpr(Res, ns, captures = T, reSimplify = F), setNames, ns), unlist);
+	lvCol = lapply(lvCap, filterList, f = function(e)e != '');
 	# prepare level -> column mapping
 	names(lvCol) = vars;
 	lvls = unique(Avu(lvCol));
+	if (any(sapply(lvCol, length) < sapply(lvlsRaw, length))) {
+		print(list(lvlsRaw = lvlsRaw, lvls = lvCol));
+		stop('Could not extract values for levels for all variables');
+	}
+	# 	# 28.11.2018: allow levels to be embedded
+	# 	if (!all(lvlsRawL == lvlsRawL[1])) {
+	# 		print(lvlsRaw);
+	# 		stop('Different number of levels per factor');
+	# 	}
 	# map from level to columns
 	lvMap = nlapply(lvls, function(l)Avu(nina(lapply(lvCol, function(c)names(c)[which(c == l)]))));
+	return(lvMap);
 }
 
 Reshape.levelMap_list = function(ns, vars, factorsRe) {
@@ -3790,6 +4024,8 @@ deduplicateLabels = function(v, labels = v[duplicated(v)], sep = '-', firstUntou
 	}
 	v
 }
+
+Trimws = function(s)join(sub('^\t', '', splitString("\n", s)), '\n');
 
 #
 #	<p> factor transformations for data frames
@@ -4101,8 +4337,22 @@ minimax = function(v, min = -Inf, max = Inf) {
 #	<p> recycling
 #
 
-# different types not correctly handles <!>
-Recycle = function(l)lapply(apply(do.call(cbind, l), 2, as.list), unlist)
+accessIdx = function(e, i, byRow = T) {
+	if (class(e) != 'matrix' || is.na(byRow)) e[i] else
+		(if (byRow) e[i, , drop = F] else e[, i, drop = F])
+}
+
+# fixed as of 10.8.2018: different types not correctly handles <f>
+Recycle = function(l, byRow = T) {
+	# determine recyling pattern
+	# old version would not preserve type
+	# Recycle = function(l)lapply(apply(do.call(cbind, l), 2, as.list), unlist)
+	lTmp = lapply(l, function(e)1:length(e));
+	rTmp = 	lapply(apply(do.call(cbind, lTmp), 2, as.list), unlist)
+	# extract values per component
+	r = lapply(seq_along(l), function(i)accessIdx(l[[i]], rTmp[[i]], byRow = byRow));
+	return(setNames(r, names(l)));
+}
 recycle = function(...)Recycle(list(...));
 recycleTo = function(..., to, simplify = T) {
 	r = recycle(to, ...)[-1];
@@ -4267,13 +4517,14 @@ File.copy_raw = function(from, to, ..., recursive = F, agent = 'scp', logLevel =
 		} else file.copy(spF$path, spT$path, recursive = recursive, ...);
 	} else {
 		# <A> assume 'to' to be atomic
-		System(sprintf('%s %s %s %s %s',
+		cmd = sprintf('%s %s %s %s %s',
 			agent,
 			ifelse(recursive, '-r', ''),
 			paste(sapply(from, qs), collapse = ' '),
 			qs(to),
 			ifelse(ignore.shell, '>/dev/null', '')
-		), logLevel);
+		);
+		System(cmd, logLevel);
 	}
 	r
 }
@@ -4429,6 +4680,43 @@ GlobalOutput_env__ = new.env();
 }
 
 #
+#	create consecutive files
+#
+# findNextFile = function(path, N = 1e2) {
+# 	sp = splitPath(path);
+# 	for (i in 0:N) {
+# 		path = if (i > 0) with(sp, Sprintf('%{fullbase}s-%{i}d.%{ext}')) else path;
+# 		if (!file.exists(path)) return(path);
+# 	}
+# 	stop(Sprintf('No path could be crated from base path: %{path}s'));
+# }
+
+findLastVersion = function(path, retAll = F) {
+	sp = splitPath(path);
+	E = if (is.null(sp$ext)) '' else with(sp, Sprintf('.%{ext}s'));
+	re = with(sp, Sprintf('^%{base}s-(\\d+)%{E}s$'));
+	files = list.files(sp$dir, pattern = re);
+	i = max(c(0, as.integer(Regexpr(re, files, captures = T))));
+	highest = if (i == 0) path else with(sp, Sprintf('%{fullbase}s-%{i}d%{E}s'));
+	return(if (retAll) list(path = highest, version = i, ext = E) else highest);
+}
+
+findNextFile = function(path, Nmax = 1e2) {
+# 	sp = splitPath(path);
+# 	re = with(sp, Sprintf('^%{base}s-(\\d+).%{ext}s$'));
+# 	files = list.files(sp$dir, pattern = re);
+	lv = findLastVersion(path, retAll = T);
+	v = lv$version;
+	if (v == 0 && !file.exists(path)) return(path);
+	if (v >= Nmax)
+		stop(Sprintf('No path could be crated from base path: %{path}s [Maximum versions exhausted: %{Nmax}d]'));
+	r = with(splitPath(path), Sprintf('%{fullbase}s-%{i}d%{ext}s', i = v + 1, ext = lv$ext));
+	LogS(6, 'findNextFile: %{r}s');
+	return(r);
+}
+
+
+#
 #	command argument handling
 #
 
@@ -4544,7 +4832,7 @@ assign(".system.doLogOnly", FALSE, envir = System_env__);
 
 System = function(cmd, logLevel = get('DefaultLogLevel', envir = Log_env__),
 	doLog = TRUE, printOnly = NULL, return.output = F,
-	pattern = NULL, patterns = NULL, ..., return.cmd = F) {
+	pattern = NULL, patterns = NULL, ..., return.cmd = F, return.error = F) {
 	# prepare
 	if (!exists(".system.doLogOnly", envir = System_env__))
 		assign(".system.doLogOnly", F, envir = System_env__);
@@ -4575,6 +4863,10 @@ System = function(cmd, logLevel = get('DefaultLogLevel', envir = Log_env__),
 		tmpOutput = tempfile();
 		cmd = sprintf("%s > %s", cmd, tmpOutput);
 	}
+	if (return.error & !doLogOnly) {
+		tmpError = tempfile();
+		cmd = sprintf("%s 2> %s", cmd, tmpError);
+	}
 	# logging
 	if (doLog){ Log(sprintf("system: %s", cmd), logLevel); }
 	# system call
@@ -4583,7 +4875,10 @@ System = function(cmd, logLevel = get('DefaultLogLevel', envir = Log_env__),
 	# return value
 	r = list(error = ret);
 	if (return.output & !doLogOnly) {
-		r = merge.lists(r, list(error = ret, output = readFile(tmpOutput)));
+		r = merge.lists(r, list(output = readFile(tmpOutput)));
+	}
+	if (return.error & !doLogOnly) {
+		r = merge.lists(r, list(output.err = readFile(tmpError)));
 	}
 	# postprocess
 	if (!doLogOnly) if (!is.null(patterns)) {
@@ -4595,8 +4890,14 @@ System = function(cmd, logLevel = get('DefaultLogLevel', envir = Log_env__),
 	}
 	if (return.cmd) r$command = cmd;
 	# simplified output
-	if (!return.output && !return.cmd && is.null(pattern)) r = r$error;
+	if (!return.output && !return.cmd && !return.error && is.null(pattern)) r = r$error;
 	r
+}
+SystemS = function(cmd, logLevel = get('DefaultLogLevel', envir = Log_env__),
+	doLog = TRUE, printOnly = NULL, return.output = F, return.cmd = F, ..., envir = parent.frame()) {
+
+	cmd = Sprintf(cmd, ..., envir = envir);
+	System(cmd, logLevel, doLog, printOnly, return.output, return.cmd = return.cmd);
 }
 
 # wait on job submitted by system
@@ -4629,7 +4930,7 @@ ipAddress = function(interface = "eth0") {
 
 # Capture.ouput(..., type = c('input', 'output', 'merged', 'all', 'none', 'discard'), split = c('input', 'output', 'all', 'none'), append = c('input', 'output', 'all', 'none'), return = T)
 silence = function(expr, verbose = F) {
-	if (verbose) eval(expr) else {
+	if (verbose || Sys.info()['sysname'] == 'Windows') eval(expr) else {
 		sink('/dev/null', type = 'output');
 		sink(stdout(), type = 'message');
 		r = eval(expr);
@@ -4722,7 +5023,9 @@ clapply_cluster = function(l, .f, ..., clCfg = NULL) {
 			if (!is.null(env$setwd)) setwd(env$setwd);
 			if (!is.null(cfg$source)) for (s in cfg$source) source(s, chdir = TRUE);
 			if (!is.null(cfg$libraries))
-				for (package in cfg$libraries) library(package, character.only = TRUE);
+				#for (package in cfg$libraries) library(package, character.only = TRUE);
+				# <N> shiny hack
+				for (package in cfg$libraries) do.call('library', list(package, character.only = TRUE));
 			# <!> as of 3.4.2013: stop support of exporting global variables to enable CRAN submission
 			#if (!is.null(env$globalVars))
 			#	for (n in names(env$globalVars)) assign(n, env$globalVars[[n]], pos = .GlobalEnv);
@@ -4895,11 +5198,12 @@ Source_url = function(url, ...) {
 
 # <!> local = T does not work
 Source = function(file, ...,
-	locations = c('', '.', sprintf('%s/src/Rscripts', Sys.getenv('HOME')))) {
+	locations = c('', '.', sprintf('%s/src/Rscripts', Sys.getenv('HOME'))),
+	envir = NULL) {
 	sapply(file, function(file) {
 		if (isURL(file)) Source_url(file, ...) else {
 		file0 = file.locate(file, prefixes = locations);
-			source(file = file0, ...)
+			if (notE(envir)) sys.source(file = file0, envir = envir, ...) else source(file = file0, ...)
 		}
 	})
 }
@@ -5046,7 +5350,10 @@ readTable.SAV = readTable.sav = function(path, options = NULL, headerMap = NULL,
 	#Require('foreign');
 	#r0 = suppressWarnings(read.spss(path));
 	Require('haven');
-	r0 = haven2earth(suppressWarnings(read_spss(path)));
+	rRaw = if (nif(options) && nif(options$VERBOSE))
+		read_spss(path) else
+		suppressWarnings(read_spss(path));
+	r0 = haven2earth(rRaw);
 	r1 = as.data.frame(r0, stringsAsFactors = stringsAsFactors);
 # 	if (notE(options[['DATE']]))
 # 		r1[, options[['DATE']]] = do.call(data.frame,
@@ -5118,10 +5425,10 @@ readTable.defaultOptions = list(HEADER = TRUE);
 # <i> use tableFunctionForPath
 readTable = function(path, autodetect = T, headerMap = NULL, extendedPath = T, colnamesFile = NULL, ...,
 	as_factor = NULL, stringsAsFactors = F, defaultReader = readTable.csv, doRemoveTempFile = TRUE,
-	forceReader = NULL, ssh = F) {
+	forceReader = NULL, ssh = F, options = list()) {
 	# <p> preparation
 	pathOrig = path = join(path, '');
-	o = readTable.defaultOptions;
+	o = merge.lists(readTable.defaultOptions, options);
 	if (extendedPath) {
 		r = splitExtendedPath(path);
 		path = r$path;
@@ -5515,24 +5822,28 @@ activateModule = function(path) {
 #
 #	<p> sqlite
 #
-
-sqlCreateTable = function(columns, types = list, index = NULL, createAt = NULL, unique = list()) {
+sqlCreateTable = function(columns, types = list, index = NULL, createAt = NULL, unique = list(),
+	tableName = 'data') {
 	# <p> types
 	types = merge.lists(listKeyValue(columns, rep('text', length(columns))), types);
 	# <p> cols
-	cols = join(sep = ', ', sapply(columns, function(e)sprintf('%s %s', e, types[e])));
+	cols = join(sep = ', ', sapply(columns, function(e)sprintf('%s %s', qs(e, force = T), types[e])));
 	# <p> unique constraints
 	#UNIQUE (col_name1, col_name2) ON CONFLICT REPLACE)
 	unique = circumfix(join(sapply(unique, function(u) {
-		Sprintf('UNIQUE (%{cols}s) ON CONFLICT FAIL', cols = join(u, ', '))
+		Sprintf('UNIQUE (%{cols}s) ON CONFLICT FAIL', cols = join(qs(u, force = T), ', '))
 	}), ', '), pre = ' , ');
 	createDbSql = join(sep = "\n", c(
-		Sprintf('CREATE TABLE data (%{cols}s%{unique}s);'),
+		Sprintf('CREATE TABLE %{tableName}s (%{cols}s%{unique}s);'),
 		if (is.null(index)) c() else sapply(1:length(index), function(i)
-			sprintf('CREATE INDEX index_%d ON data (%s);', i, join(index[[i]], sep = ', '))),
+			Sprintf('CREATE INDEX index_%{tableName}s_%{i}d ON %{tableName}s (%{cols}s);',
+				cols = join(qs(index[[i]], force = T), sep = ', '))),
 		'.quit', ''
 	));
-	if (!is.null(createAt)) System(sprintf('echo \'%s\' | sqlite3 %s', createDbSql, qs(createAt)), 1);
+	if (!is.null(createAt)) {
+		Dir.create(createAt, treatPathAsFile = T);
+		System(sprintf('echo \'%s\' | sqlite3 %s', createDbSql, qs(createAt)), 5);
+	}
 	createDbSql
 }
 
@@ -5540,40 +5851,53 @@ sqlCreateTable = function(columns, types = list, index = NULL, createAt = NULL, 
 # @par index: list of columns to index
 # @par type: sqlite types: integer, real, text, blob, not specified assumes text
 
+sqlTypeMap = list(integer = 'integer', numeric = 'real', character = 'text');
 csv2sqlitSepMap = readTableSepMap;
-sepMap = list(T = '\\t', S = ' ', C = ',', `;` = ';', `S+` = '');
-sepMapCut = list(T = '\\t', S = '" "', C = ',', `;` = ';', `S+` = '');
+sepMap = list(T = '\\t', S = ' ', C = ',', `;` = ';', `S+` = ' ');
+sepMapCut = list(T = '\\t', S = '" "', C = ',', `;` = ';', `S+` = '" "');
 csv2sqlite = function(path, output = tempfile(),
 	columnsNames = NULL, columnsSelect = NULL,
 	index = NULL,
-	inputSep = 'T', inputHeader = T, inputSkip = NULL,
-	NULLs = NULL, types = list(), newDb = T, unique = list()) {
-	if (is.null(output)) stop(Sprintf('No ouput path given for sqlite DB [NULL]@csv2sqlite'));
-	if (newDb) file.remove(output);
-
+	inputSep = 'T', inputHeader = T, inputSkip = 0,
+	NULLs = NULL, types = list(), newDb = T, unique = list(),
+	tableName = 'data', removeLeadingWS = T, headerMap = NULL) {
+	if (is.null(output)) stop(Sprintf('No output path given for sqlite DB [NULL]@csv2sqlite'));
+	if (newDb && file.exists(output)) file.remove(output);
 	# <!> cave: does not heed skip
-	if (!inputHeader && is.null(columnsNames)) {
+	if (inputHeader && is.null(columnsNames)) {
 		columnsNames = read.table(path, header = F, nrows = 1, sep = csv2sqlitSepMap[[inputSep]]);
 	}
 	# <p> select columns
-	cut = if (!is.null(columnsSelect)) {
-		skipColumnsIds = which.indeces(columnsSelect, columnsNames);
-		sprintf('| cut %s -f %s ',
-			if (inputSep == 'T') '' else sprintf('-d %s', sepMapCut[[inputSep]]),
-			join(skipColumnsIds, ',')
+	#	<!> cave cut sorts provided indeces
+	prefix = if (removeLeadingWS) "sed 's/^\\s\\s*//' |" else '';
+	cut = if (notE(columnsSelect)) {
+		Isel = which.indeces(columnsSelect, avu(columnsNames));
+		columnsSelect = columnsSelect[order(Isel)];	# align ordering
+		# <i> S+
+		#  cat | sed 's/\s\s*/ /g' | cut -d' ' -f5
+		cut = if (inputSep == 'S+')
+			Sprintf("%{prefix}s sed 's/\\s\\s*/ /g' | cut") else Sprintf('%{prefix}s cut');
+		Sprintf('| %{cut}s %{sep}s -f %{columns}s ',
+			sep = if (inputSep == 'T') '' else sprintf('-d %s', sepMapCut[[inputSep]]),
+			columns = join(sort(Isel), ',')
 		)
 	} else '';
-	columns = if (is.null(columnsSelect)) columnsNames else columnsSelect;
+	columns = if (notE(columnsSelect)) columnsSelect else columnsNames;
 	types = merge.lists(listKeyValue(columns, rep('text', length(columns))), types);
-	sqlCreateTable(columns, types, index, createAt = output, unique = unique);
+	columnsDb = if (notE(headerMap)) avu(headerMap[columns]) else columns;
+	sqlCreateTable(columnsDb, types, index, createAt = output, unique = unique, tableName = tableName);
 
 	# <p> import data
-	skipCommand = if (is.null(inputSkip)) '' else sprintf('| tail -n +%d ', inputSkip + 1);
-	reader = if (splitPath(path)$ext == 'gz') 'zcat' else 'cat';
-	importSql = writeFile(tempfile(), join(sep = "\n", c(
-		sprintf(".separator %s\n", sepMap[[inputSep]]),
-		sprintf(".import \"/dev/stdin\" data")
-	)));
+	#skipCommand = if (is.null(inputSkip)) '' else sprintf('| tail -n +%d ', inputSkip + 1);
+	# <N> always skip header as column re-mapping might have occured
+	skipCommand = sprintf('| tail -n +%d ', inputSkip + 2);
+	sp = splitPath(path);
+	reader = if (notE(sp$ext) && sp$ext == 'gz') 'zcat' else 'cat';
+	sqlStatements = c(
+		Sprintf(".separator %{sep}Q", sep = sepMap[[inputSep]]),
+		Sprintf(".import \"/dev/stdin\" %{tableName}s")
+	);
+	importSql = writeFile(tempfile(), join(sep = "\n", sqlStatements));
 
 	sepText = sepMap[[inputSep]];
 	filter = if (is.null(NULLs)) '' else
@@ -5582,7 +5906,7 @@ csv2sqlite = function(path, output = tempfile(),
 	cmd = Sprintf(con(
 		"%{reader}s %{path}Q %{skipCommand}s %{cut}s %{filter}s",
 		" | sqlite3 -init %{importSql}Q %{output}Q"));
-	System(cmd, 2);
+	System(cmd, 5);
 	output
 }
 # <!> unfinished, siphones code from old csv2sqlite function
@@ -5611,7 +5935,7 @@ sqlite2sqlite = function(dbS, dbD, query, cols, types = list(), index = NULL) {
 		qs(writeFile(tempfile(), ".separator ,\n.import \"/dev/stdin\" data")),
 		qs(dbD)
 	);
-	System(cmd, 1);
+	System(cmd, 5);
 	dbD
 }
 
@@ -5621,20 +5945,30 @@ sqliteOpen = function(path) {
 }
 
 sqliteQueryParticle = function(q) {
-	opRaw = if(length(q) > 2) q[[2]] else 'equal';
+	Nq = length(q);
+	opRaw = if(Nq > 2) q[[2]] else if (q[[1]] == 'Statement') q[[1]] else 'equal';
 	op = switch(opRaw,
 		equal = '=',
 		`<` = '<',
 		`>` = '>',
 		`< Int` = '<',
-		`> Int` = '>'
+		`> Int` = '>',
+		`< Num` = '<',
+		`> Num` = '>',
+		`< Char` = '<',
+		`> Char` = '>',
+		'like' = 'LIKE',
+		Statement = NA
 	);
-	add = if (opRaw %in% c('< Int', '> Int')) ' + 0' else '';
-	value = if(length(q) > 2) q[[3]] else q[[2]];
-	value = if (opRaw %in% c('< Int', '> Int')) value else Sprintf('%{value}Q');
-	with(q, Sprintf('%{name}Q%{add}s %{op}s %{value}s'));
+	suff = if (opRaw %in% c('< Int', '> Int', '< Num', '> Num')) ' + 0' else '';
+	value = if (Nq > 2) q[[3]] else q[[2]];
+	if (!(opRaw %in% c('< Int', '> Int', '< Num', '> Num', 'Statement'))) value = Sprintf('%{value}Q');
+	if (opRaw %in% c('Statement'))
+		with(q, Sprintf('%{value}s')) else
+		with(q, Sprintf('%{name}Q%{suff}s %{op}s %{value}s'))
 }
-sqliteBuildQuery = function(table, query, distinct = TRUE) {
+sqliteBuildQuery = function(table, query = NULL, distinct = TRUE) {
+	if (is.null(query)) return(Sprintf('SELECT * FROM %{table}Q'));
 	ns = names(query);
 	qs = ilapply(query, function(q, i)sqliteQueryParticle(c(list(name = ns[i]), q)));
 	condition = join(unlist(qs), sep = ' AND ');
@@ -5643,13 +5977,16 @@ sqliteBuildQuery = function(table, query, distinct = TRUE) {
 	query
 }
 
-sqliteQuery = function(db, query, table = NULL) {
+# query: list(chr = info$chr, mapPhy = list('> Int', pos - range), mapPhy = list('< Int', pos + range));
+#	list(id = list(like = 'rs%'))
+
+sqliteQuery = function(db, query = list(Statement = '1'), table = NULL, N = -1) {
 	if (is.null(table)) table = dbListTables(db)[1];
 # 	query = con(sapply(names(query), function(n)Sprintf('%{n}Q = %{v}s', v = qs(query[[n]], force = T))));
 # 	query1 = Sprintf('SELECT * FROM %{table}Q WHERE %{query}s');
 	query1 = sqliteBuildQuery(table, query);
 	Log(query1, 5);
-	dbGetQuery(db, query1);
+	dbGetQuery(db, query1, n = N);
 }
 
 #
@@ -5665,11 +6002,14 @@ sqliteQuery = function(db, query, table = NULL) {
 # publishDir('results/BAP1IHCgekoppeldaanWelofGeenMonosomie3', asSubdir = T);
 
 Publishing_env__ <- new.env();
-initPublishing = function(project, currentIteration, publicationPath = '/home/Library/ProjectPublishing') {
+initPublishing = function(project, currentIteration, publicationPath = '/home/Library/ProjectPublishing',
+	logLevel = 5) {
+	md5 = md5sumString(project);
 	assign('project', project, Publishing_env__);
-	assign('projectMd5', md5sumString(project), Publishing_env__);
+	assign('projectMd5', md5, Publishing_env__);
 	assign('currentIteration', currentIteration, Publishing_env__);
 	assign('publicationPath', publicationPath, Publishing_env__);
+	LogS(logLevel, "Project tag: %{project}s Md5: %{md5}s");
 }
 publishFctEnv = function(path, into = NULL, as = NULL) with(as.list(Publishing_env__), {
 	if (!exists('project')) stop('Publishing system not yet initialized.');
@@ -5794,7 +6134,9 @@ LibraryRaw = function(name, ..., repos, repoNoInteraction, repoDefault, quietly,
 			biocLite(name, suppressUpdates = TRUE, suppressAutoUpdate = TRUE, dependencies = dependencies)
 		}
 		#Eval(Sprintf('library(%{name}s)'));
-		library(name, character.only = TRUE, quietly = quietly);
+		#library(name, character.only = TRUE, quietly = quietly);
+		# <N> hack to get shiny running
+		do.call('library', list(name, character.only = TRUE, quietly = quietly));
 	}
 }
 
@@ -5823,7 +6165,9 @@ Library = function(name, ...,
 }
 Require = function(..., quietly = TRUE) {
 	wrapper = if (quietly) function(call_)suppressWarnings(suppressPackageStartupMessages(call_)) else eval
-	wrapper(require(..., quietly = quietly))
+	#wrapper(require(..., quietly = quietly))
+	# hack to get shiny running
+	wrapper(do.call('require', c(list(...), list(quietly = quietly))))
 }
 
 DumpPackageNames = function(path = '~/Documents/AdminComputer/R/packages-%{version}s.csv',
@@ -5893,11 +6237,31 @@ Knit = function(input, output = NULL, ..., format = 'html') {
 	setwd(owd);
 }
 
+
+#
+#	<p> stop
+#
+
+stopS = function(str, ...)stop(Sprintf(str, ...));
+
+#
+#	<p> debugging
+#
+
+# r__: return printed values as list
+dprint = function(..., r__ = TRUE) {
+	vs = as.character(as.list(substitute(list(...)))[-1]);
+	l = listKeyValue(vs, c(...));
+	print(list2df(l));
+	if (r__) return(l);
+}
+
 #
 #	Rgraphics.R
 #Mon 27 Jun 2005 10:52:17 AM CEST
 
-require('grid');
+#Require('grid');	# -> Rlibraries.R
+
 #
 #	<p> unit model
 #
@@ -6208,12 +6572,12 @@ plot_grid_base = function(plots, coords, envirPlotVar = 'plot', verbose = F, err
 	sapply(1:length(plots), function(i) {
 		if (verbose) LogS(2, 'plot_grid#: %{i}d');
 		this = try({
-			switch(class(plots[[i]]),
-				environment = eval(get(envirPlotVar, plots[[i]])),
-				`function` = do.call(plots[[i]], list()),
-				eval(plots[[i]]))
+		cl = class(plots[[i]]);
+			if ('environment' %in% cl) eval(get(envirPlotVar, plots[[i]])) else
+			if ('function' %in% cl) do.call(plots[[i]], list()) else
+			eval(plots[[i]])
 		});
-		if (class(this) == 'try-error') plot_error(this)
+		if ('try-error' %in% class(this)) plot_error(this)
 	});
 # 			if (is.environment(plots[[i]])) eval(get(envirPlotVar, plots[[i]])) else print(plots[[i]]);
 }
@@ -6242,10 +6606,9 @@ plot_grid = function(plots, nrow, ncol, byrow = T, mapper = NULL, envirPlotVar =
 		merge.multi(1:nrow, 1:ncol, .first.constant = byrow) else
 		mapper(1:length(plots));
 
-	switch(class(plots[[1]]),
-		viewport = plot_grid_grid(plots, coords),
-		plot_grid_base(plots, coords, envirPlotVar, verbose = verbose)
-	);
+	cl = class(plots[[1]]);
+	if ('viewport' %in% cl) plot_grid_grid(plots, coords) else
+	plot_grid_base(plots, coords, envirPlotVar, verbose = verbose)
 }
 
 plot_grid_to_path =  function(plots, ..., path,
@@ -6357,7 +6720,13 @@ createSurvivalFrame <- function(f.survfit){
 }
 
 # deﬁne custom function to draw kaplan-meier curve with ggplot
-qplot_survival = function(f.frame, f.CI = "default", f.shape = 3, ..., title = NULL, layers = NULL){
+qplot_survival = function(f.frame, f.CI = "default", f.shape = 3, ..., title = NULL, layers = NULL,
+	axes = NULL, legendTitle = T){
+
+	strata = avu(Regexpr('=(.*)', levels(f.frame$strata), captures = T));
+	factorNm = avu(Regexpr('(.*)=', levels(f.frame$strata)[1], captures = T));
+	levels(f.frame$strata) = strata;
+
 	# use different plotting commands dependig whether or not strata's are given
 	p = if("strata" %in% names(f.frame) == FALSE) {
 		# conﬁdence intervals are drawn if not speciﬁed otherwise
@@ -6391,7 +6760,12 @@ qplot_survival = function(f.frame, f.CI = "default", f.shape = 3, ..., title = N
 		}
 	}
 	if (!is.null(title)) p = p + labs(title = title);
+	if (Nif(axes) && Nif(axes$x)) p = p + xlab(axes$x);
+	if (Nif(axes) && Nif(axes$y)) p = p + ylab(axes$y);
 	if (!is.null(layers)) p = p + layers;
+	#p = p + theme(legend.title = if (legendTitle) factorNm else element_blank());
+	legendNm = if (legendTitle) factorNm else NULL;
+	p = p + scale_colour_discrete(name = legendNm, breaks = strata, labels = strata)
 	p
 }
 
@@ -6399,29 +6773,29 @@ quantileBinning = function(x, Nbins) {
 	cut(x, quantile(x, seq(0, 1, length = Nbins + 1)), labels = seq_len(Nbins), include.lowest = TRUE)
 }
 
-kaplanMeierStrat = function(d1, f1, levels = NULL, title = NULL) {
+kaplanMeierStrat = function(d1, f1, levels = NULL,
+	title = '%{formula}s, [P = %{p}.2e]', axes = NULL, legendTitle = T) {
 	# <i> only allow one covariate
-	stratVar = all.vars(formula.rhs(f1))[1];
+	titlePre = stratVar = all.vars(formula.rhs(f1))[1];
+	titleFormula = Sprintf('%{O}s ~ %{titlePre}s', O = all.vars(as.formula(f1))[1])
 	if (!is.null(levels)) {
 		d1[[stratVar]] = as.factor(quantileBinning(d1[[stratVar]], levels));
 	}
-	stratValue = levels(drop.levels(d1[[stratVar]]));
+	stratValue = levels(droplevels(d1[[stratVar]]));
 	# <p> log-rank test
 	lr = survdiff(as.formula(f1), data = d1);
 	p.lr = pchisq(lr$chisq, df = dim(lr$n) - 1, lower.tail = F)
 	# <p> kaplan-meyer
 	fit = survfit(as.formula(f1), data = d1);
 	fit.frame = createSurvivalFrame(fit);
-	titleCooked = if (is.null(title))
-		sprintf('%s, [P = %.2e]', stratVar, p.lr) else
-		Sprintf('%{title}s, [P = %{p}.2e]', p = p.lr)
-	p = qplot_survival(fit.frame, F, 20, title = titleCooked,
+	titleCooked = Sprintf(title, strata = titlePre, p = p.lr, formula = titleFormula)
+	p = qplot_survival(fit.frame, F, 20, title = titleCooked, axes = axes, legendTitle = legendTitle,
 		layers = theme_bw());
 	list(plot = p, level = stratValue)
 }
 
 kaplanMeierNested = function(d, f1, strata, combine = FALSE) {
-	require('gdata');
+	Require('gdata');
 	# <!><b> fix special case of length(strata) == 1
 	d = Df(d, dummy_comb__kaplanMeierNested = 1);
 	dStrat = d[, c(strata, 'dummy_comb__kaplanMeierNested'), drop = F];
@@ -6444,6 +6818,19 @@ kaplanMeierNested = function(d, f1, strata, combine = FALSE) {
 	});
 	plots
 }
+
+# groups levels by group argument
+kaplanMeierCovariate = function(covariate, outcome, groups = NA, data,
+	title = '%{strata}s, [P = %{p}.2e]', axes = NULL, legendTitle = T) {
+	pred = if (!nif(groups)) data[[covariate]] else recodeLevels(data[[covariate]], group = groups);
+	LogS(5, 'Number of levels: %{N}d', N = length(levels(droplevels(pred))));
+	#if (length(levels(droplevels(pred))) < 2) browser();
+	d = Df(pred, data[, avu(outcome), drop = F], names = covariate);
+	f1 = with(outcome, Sprintf('Surv(%{time}s, %{status}s) ~ %{covariate}s'))
+	p = kaplanMeierStrat(d, f1, title = title, axes = axes, legendTitle = legendTitle);
+	return(p);
+}
+
 
 #
 #	<p> histograms
@@ -6561,9 +6948,15 @@ Device = function(type, plot_path, width, height, ..., units = 'cm', dpi = NA, a
 		width = width * o$autoScale;
 		height = height * o$autoScale;
 	}
-	if (nif(o$hasDpi))
-		device(plot_path, width = width, height = height, units = units, res = dpi, ...) else
-		device(plot_path, width = width, height = height, ...);
+	args = c(list(plot_path, width = width, height = height), list(...));
+	if (nif(o$hasDpi)) do.call(device, c(args, list(units = units, res = dpi))) else do.call(device, args);
+		#device(plot_path, width = width, height = height, units = units, res = dpi, ...) else
+		#device(plot_path, width = width, height = height, ...);
+}
+
+# prepare plotting expression for later plotting
+quotePlot = function(e, envir = parent.frame()) {
+	list(plot = substitute(e), envir = envir)
 }
 
 # use 'cm' as output unit
@@ -6575,6 +6968,10 @@ plot_draw = function(object, envir) {
 		grid.draw(object)
 	} else if (any(class(object) %in% c('ggplot', 'plot'))) {
 		print(object)
+	} else if (any(class(object) %in% c('histogram'))) {
+		plot(object)
+	} else if (any(class(object) %in% 'list') && notE(plot$envir)) {
+		eval(object$plot, envir = plot$envir);
 	} else {
 		eval(object, envir = envir);
 	}
@@ -6604,6 +7001,26 @@ plot_save_raw = function(object, ..., width = 20, height = 20, plot_path = NULL,
 		ret = plot_draw(object, envir = envir);
 	dev.off();
 }
+# <i> refactor with plot_save_raw
+plot_save_eval = function(object, ..., width = 20, height = 20, plot_path = NULL,
+	type = NULL, options = list(), unit = 'cm', unit_out = 'dpi150', autoScale = FALSE, envir = parent.frame()) {
+
+	if (is.null(type)) type = splitPath(plot_path)$ext;
+	if (is.null(unit_out)) unit_out = units_default[[type]];
+	if (class(width) == 'numeric') width = valueU(width, 'cm');
+	if (class(height) == 'numeric') height = valueU(height, 'cm');
+	width = toUnit(width, 'cm');
+	height = toUnit(height, 'cm');
+	dpi = Nina(as.integer(FetchRegexpr('dpi(\\d+)', unit_out, captures = T)));
+ 	Logs('Saving %{type}s to "%{plot_path}s"  [width: %{w}f %{h}f dpi: %{dpi}d]',
+		w = width@value, h = height@value, logLevel = 5);
+	Device(type, plot_path, width = width, height = height, units = 'cm', dpi = dpi, ...,
+		autoScale = autoScale);
+		ret = eval(object, envir = envir);
+	dev.off();
+	return(ret);
+}
+
 
 plotSizes = list(
 	a4 = list(width = valueU(21, 'cm'), height = valueU(21 * sqrt(2), 'cm')),
@@ -6615,10 +7032,19 @@ plotSizes = list(
 #
 #	Examples:
 #	plot_save(object, c('a.jpeg', 'a.png'), options = list(jpeg = list(unit_out = 'dpi300')));
+#	plot_save(quote(plot(res)), unit_out = 'cm', plot_path = 'resources/Q3-residuals.png',
+#		width = 15, height = 15, options = list(png = list(unit_out = 'dpi150')));
+#	plot_save(quote(plot(res)), plot_path = 'resources/Q3-residuals.png', width = 15, height = 15);
 plot_typeMap = list(jpg = 'jpeg');
+plot_optionsDefault = list(
+	png = list(unit_out = 'dpi150'),
+	jpeg = list(unit_out = 'dpi150')
+);
 plot_save = function(object, ..., size, width, height, plot_path = NULL,
+	#type = firstDef(plot_typeMap[[splitPath(plot_path)$ext]], splitPath(plot_path)$ext),
 	type = NULL,
-	envir = parent.frame(), options = list(), simplify = T, unit_out = NULL, createDir = TRUE) {
+	envir = parent.frame(), options = plot_optionsDefault,
+	simplify = T, unit_out = NULL, createDir = TRUE) {
 
 	# <p> plot size
 	# default size
@@ -6687,7 +7113,7 @@ ebimageGrob = function (pic, x = 0.5, y = 0.5, scale = 1, raster = FALSE, angle 
     }
     else {
         colours <- colours[rev(seq_len(nrow(colours))), ]
-        require(RGraphics)
+        Require('RGraphics')
         child <- imageGrob(dims[2], dims[1], cols = colours, 
             gp = gpar(col = colours), byrow = FALSE, vp = vp, 
             ...)
@@ -6838,6 +7264,148 @@ binPlot_0 = function(data, formula = NULL, bins = c(1e2, 1e2), Nrep = 3, eps = 1
 	dataS = do.call(rbind, dataSL);
 	dataS
 }
+
+#
+#	<p> label annotation
+#
+
+# patch[XY]: multiply by constants to add a shift
+labelAlignmentsStd = list(
+	std = list(x = 0.5, y = 0, patchX = 0, patchY = 1, hjust = 0.5, vjust = 0, penalty = 0),
+	leftL = list(x = 0, y = -1, patchX = -1, patchY = 0, hjust = 1, vjust = 1, penalty = 5),
+	rightL = list(x = 1, y = -1, patchX = 1, patchY = 0, hjust = 0, vjust = 1, penalty = 5),
+	left = list(x = 0, y = 0, patchX = 0, patchY = 1, hjust = 1, vjust = 0, penalty = 5),
+	right = list(x = 1, y = 0, patchX = 0, patchY = 1, hjust = 0, vjust = 0, penalty = 5),
+	high = list(x = 0.5, y = 1, patchX = 0, patchY = 1, hjust = 0.5, vjust = 0, penalty = 15)
+);
+layoutStd = list(extend = list(x = 20, y = 2, patchX = .1, patchY = .1, size = 1));
+
+layoutForExtend = function(x = 50, y = 50, labelSzX = x/10, labelSzY = y/25) {
+	Mx = max(x, y);
+	return(list(extend = list(x = labelSzX, y = labelSzY, patchX = x/100, patchY = y/100, size = Mx / 15)));
+}
+
+labelBoundingBox = function(l, layout = layoutStd, alignments = labelAlignmentsStd) {
+	a = FirstDef(alignments[[l$align]], alignments$std);
+	e = FirstDef(l$extend, layout$extend);
+	p = l$pos;
+	s = layout$extend;
+
+	x1 = p$x + (a$x - 1) * e$x + a$patchX * s$patchX;
+	y1 = p$y + a$y * e$y + a$patchY * s$patchY;
+	coords = matrix(c(x1, y1, x1 + e$x, y1, x1 + e$x, y1 + e$y, x1, y1+e$y), byrow = T, ncol = 2);
+	return(coords);
+}
+labelsDf = function(labels, layout = layoutStd, alignments = labelAlignmentsStd) {
+	rows = lapply(labels, function(l) {
+		e = FirstDef(l$extend, layout$extend);
+		a = FirstDef(alignments[[l$align]], alignments$std);
+		with(l$pos, Df(x = x + a$patchX * e$patchX, y = y + a$patchY * e$patchY,
+			annotation = l$annotation, hjust = a$hjust, vjust = a$vjust));
+	});
+	d = do.call(rbind, rows);
+	return(d);
+}
+
+# close polygon, convert to SpatialPolygon, cartesian coordinates
+labelBB2Spatial = function(coords) {
+	poly = rbind(coords, coords[1, , drop = F]);
+	return(SpatialPolygons(list(Polygons(list(Polygon(poly)), 'BB')), proj4string = CRS('+proj=cart')));
+}
+
+labelIntersections = function(bb, bbList) {
+	lSpat = labelBB2Spatial(bb);
+	diffs = sapply(bbList, function(e)area(intersect(lSpat, labelBB2Spatial(e))));
+	return(diffs);
+}
+
+Area = function(p)if (is.null(p)) return(0) else area(p);
+Intersect = function(p1, p2)suppressWarnings(intersect(p1, p2));
+labelIntersectionsWeighted = function(bb, bbListW) {
+	weights = list.kpu(bbListW, 'weight');
+	lSpat = labelBB2Spatial(bb);
+	diffs = sapply(bbListW, function(e)Area(Intersect(lSpat, labelBB2Spatial(e$coords))));
+	return(diffs * weights);
+}
+
+# minmize overlap with labels in lList
+labelFindBestAlignment = function(l, lList, alignments = labelAlignmentsStd, layout = layoutStd) {
+	bbList = lapply(lList, labelBoundingBox, layout = layout);
+	bbListL = list.embed(bbList, 'coords');
+	weights = list.embed(list.kpu(lList, 'weight'), 'weight');
+	bbListW = list.combine(list(bbListL, weights), doMerge = T);
+
+	overlap = sapply(names(alignments), function(a) {
+		bb = labelBoundingBox(merge.lists(l, list(align = a)), layout = layout);
+		inter = labelIntersectionsWeighted(bb, bbListW);
+		sum(inter);
+	});
+	o = overlap[which.min(overlap)];
+	return(list(align = names(o), overlap = o));
+}
+
+labelsRearrangeSingle = function(labels, layout = layoutStd, alignments = labelAlignmentsStd) {
+	overlap = 0;
+	penalty = 0;
+	for (i in 1:length(labels)) {
+		a = labelFindBestAlignment(labels[[i]], labels[-i], layout = layout);
+		labels[[i]]$align = a$align;
+		overlap = overlap + a$overlap;
+		penalty = penalty + alignments[[a$align]]$penalty;
+	}
+	return(list(labels = labels, overlap = overlap, penalty = penalty));
+}
+
+labelsRearrangeRaw = function(labels, layout = layoutStd, NiterMax = 2e2) {
+	overlap = Inf;
+	for (i in 1:NiterMax) {
+		lsRearr = labelsRearrangeSingle(labels, layout = layout);
+		if (lsRearr$overlap == overlap) break;
+		overlap = lsRearr$overlap;
+		labels = lsRearr$labels;
+	}
+	return(lsRearr);
+}
+
+labelsRearrange = function(labels, layout = layoutStd, Nperm = 3) {
+	arrangements = lapply(1:Nperm, function(i) {
+		labelsRearrangeRaw(if (i > 1) labels[Sample(1:length(labels))] else labels, layout = layout);
+	});
+	Iperm = which.min(list.kpu(arrangements, 'overlap'));
+	LogS(3, "labelsRearrange: permuation with minimal overlap: %{Iperm}d");
+	return(arrangements[[Iperm]]);
+}
+
+plotLabels = function(labels, layout = layoutStd) {
+	dPts = Df_(do.call(rbind, list.kp(labels, 'pos')), deep_simplify = T);
+	p = ggplot(data = dPts, aes(x = x, y = y)) + geom_point(size = 1) + theme_bw();
+	dL = labelsDf(labels, layout = layout);
+	print(dL);
+	p = p + annotate('text', x = dL$x, y = dL$y, label = dL$annotation,
+		hjust = dL$hjust, vjust = dL$vjust, size = lo$extend$size
+	);
+
+}
+
+#
+#	<p> longitudinal data
+#
+
+Aes = function(...)structure(list(...),  class = "uneval")
+plotSpaghetti = function(f1, data, fSpaghetti = ~ time + StudyNumber) {
+	dPairs = completeData(f1, data, collapse = T);
+	data = droplevels(completeData(f1, data, collapse = T));
+
+	time = all.vars(fSpaghetti)[1];
+	group = all.vars(fSpaghetti)[2];
+
+	response = formula.response(f1);
+	pSp = ggplot(data, Aes(x = data[[time]], y = data[[response]], group = data[[group]])) +
+		geom_line(aes(color = data[[group]])) +
+		xlab(time) + ylab(response) + theme(legend.position = "none");
+	return(pSp);
+}
+
 #
 #	Rreporting.R
 #Mon 06 Feb 2006 11:41:43 AM EST
@@ -6857,6 +7425,12 @@ binPlot_0 = function(data, formula = NULL, bins = c(1e2, 1e2), Nrep = 3, eps = 1
 #
 #	<p> generic reporting functions
 #
+
+formatNumber = function(e, digits) {
+	ifelse(-floor(log10(abs(e))) >= digits,
+		sprintf("%.*e", digits, e),
+		sprintf("%.*f", digits, e))
+}
 
 row.standardFormatter = function(e, digits = NA) {
 	f = if (is.na(digits) || substring(digits, 1, 1) == 'p') {
@@ -7684,6 +8258,8 @@ REP.reportFigureTable = function(nameTag, namesPlots, cols = 2, captions = NULL)
 #	Rfunctions.R
 #Tue 14 Aug 2007 01:39:42 PM CEST 
 
+#Require('magrittr');
+
 #
 #	<§> abstract data functions
 #
@@ -7735,6 +8311,12 @@ CallDelegate = function(functionBase, delegation, ..., restrictArgs = T) {
 	callDelegate(functionBase, delegation, args = list(...), restrictArgs = T)
 }
 
+# call function with seperate arguments extracted from vector
+V2A = function(f)function(x, ...)do.call(f, c(as.list(x), list(...)));
+# call function with vector constructed from seperate arguments
+A2V = function(f)function(...)f(c(...));
+
+
 #
 #	<p> generic functions
 #
@@ -7745,7 +8327,7 @@ Identity = function(...)list(...)
 #	<p> benchmarking
 #
 
-benchmark.timed = function(.f, ..., N__ = 1e1) {
+benchmark.timed = function(.f, ..., N__ = 1) {
 	t0 = Sys.time();
 	for (i in 1:N__) {
 		r = .f(...);
@@ -7795,6 +8377,149 @@ Benchmark = function(expr, N__ = 1, verbose = T, returnTiming = F, Nabbr = 20, l
 	})
 	r = if (returnTiming) timing else r0;
 	r
+}
+
+#
+#	<p> optimization
+#
+
+# Ngrid should be uneven
+# not used at the moment
+gridFactor = function(Ngrid = 5, Step = .5, Factor = 1.5) {
+	genF = function(center, min, max) {
+		gridMarginal = lapply(center, function(p) {
+			gridRaw = (Step * Factor ^ (0: (Ngrid - 1)));
+			c(p - gridRaw, p, p + gridRaw)
+		});
+		grid = as.matrix(Rbind(merge.multi.list(gridMarginal)));
+		return(grid);
+	};
+	genF
+}
+
+gridBounding = function(Ngrid = 5) {
+	genF = function(center, min, max) {
+		gridMarginal = lapply(seq_along(min), function(i) {
+			seq(min[i], max[i], length.out = Ngrid)
+		});
+		grid = as.matrix(Rbind(merge.multi.list(gridMarginal)));
+		return(grid);
+	};
+	genF
+}
+
+searchContourGridRaw = function(f, grid, v, ...,
+	contour = 0.05, gridGen, eps = 1e-3, lower = T, verbose = F) {
+	if (verbose) print(cbind(grid, v));
+	# assume regular grid
+	Ndim = ncol(grid);
+	pts = apply(grid, 2, function(v)sort(unique(v)));
+	Ns = apply(pts, 2, function(pts)pop(seq_along(pts)));
+	# list of canonical points of sub-hypercubes
+	cubes = as.matrix(Rbind(merge.multi.list(Df_(Ns))));
+	# calculate offsets to get all vertices of hypercube, coords per column
+	hyper = t2r(sapply(1:(2^Ndim) - 1, ord2bin, digits = Ndim));
+	# iterate hypercubes to decide value, nd defines canonical vertex of hypercube
+	sel = apply(cubes, 1, function(nd) {
+		NdsCube = t(nd + hyper);
+		#print(NdsCube - (nd + t_(hyper)));
+		# search funcion values on vertices of hypercube
+		#coords = cbind(pts[NdsCube[, 1], 1], pts[NdsCube[, 2], 2]);
+		coords = sapply(1:ncol(NdsCube), function(i)pts[NdsCube[, i], i]);
+		idcs = DfSearch(Df_(coords), Df_(grid));
+		vs = v[idcs];
+		if (any(vs <= contour) & any(vs >= contour)) { # tb persued
+			mn = apply(coords, 2, min);
+			mx = apply(coords, 2, max);
+			center = (mn + mx) / 2;
+			searchContourGrid(f, gridGen(center, mn, mx), ...,
+				contour = contour, gridGen = gridGen, eps = eps, lower = lower,
+				gridCache = cbind(grid, v));
+		} else list()
+		# } else list(matrix(rep(NA, ncol(grid), ncol = ncol(grid))))
+	});
+	return(unlist.n(sel, 1));
+}
+
+# <!><i> multivariate functions
+applyCached = function(grid, f, gridCache, ...) {
+	# <p> no cache
+	if (missing(gridCache) || !notE(gridCache)) return(apply(grid, 1, f, ...));
+	s = matrixSearch(grid, gridCache);
+	idcs = setdiff(1:nrow(grid), s[, 2]);
+	vI = apply(grid[idcs, , drop = F], 1, f, ...);
+	v = vector.assign(NA, c(idcs, s[, 2]), c(vI, gridCache[s[, 1], ncol(gridCache)]), N = nrow(grid));
+	return(v);
+}
+
+# gridCache: matrix/df with cbind(grid, v) from previous computations to avoid double evaluations
+searchContourGrid = function(f, grid, ..., contour = 0.05, gridGen, eps = 1e-3, lower = T, gridCache) {
+	# compute values of function on grid vertices
+	#v = apply(grid, 1, f, ...);
+	v = applyCached(grid, f, gridCache, ...);
+	#print(cbind(grid, v));
+	# determine recursion end
+	mn = apply(grid, 2, min);
+	mx = apply(grid, 2, max);
+	# found contour elevation to desired accuracy
+	#print(max(mx - mn));
+	if (max(mx - mn) < eps) {
+		i = if (lower) which.min(v) else which.max(v);
+		return(list(grid[i, ]));
+	}
+	# continue searching
+	r = searchContourGridRaw(f, grid, v, ...,
+		contour = contour, gridGen = gridGen, eps = eps, lower = lower);
+	return(r);
+}
+
+searchContourGridList = function(f, gridList, ..., contour = 0.05, gridGen, eps = 1e-2, lower = T) {
+	gL = lapply(gridList, searchContourGrid, ..., f = f, contour = contour, gridGen = gridGen);
+	return(unlist.n(gL, 1));
+}
+
+
+searchContour = function(f, start, ..., contour = 0.05, delta = 3,
+	gridGen = gridBounding(Ngrid = 3), eps = 1e-2, lower = T) {
+	grid = gridGen(start, start - delta, start + delta);
+	r = searchContourGrid(f, grid, ..., contour = contour, gridGen = gridGen, eps = eps);
+	return(do.call(rbind, r));
+}
+
+#
+#	<p> optimization
+#
+
+searchOptimumGrid = function(f, grid, ..., delta, gridGen, eps = 1e-3, scale = 1, returnOpt = F) {
+	# compute values of function on grid vertices
+	#print(grid);
+	v = apply(grid, 1, f, ...) * scale;
+	# vertex with optimum
+	Iopt = which.max(v);
+	# determine recursion end
+	mn = apply(grid, 2, min);
+	mx = apply(grid, 2, max);
+	Ns = apply(grid, 2, function(v)length(unique(v)));
+	#Ns = apply(grid, 2, length %.% unique);	# ought to be
+	# magrittr
+	#Ns = apply(grid, 2, . %>% unique %>% length);
+	# found contour elevation to desired accuracy
+	#print(max(mx - mn));
+	if (max(mx - mn) < eps) {
+		return(if (returnOpt) list(par = grid[Iopt, ], value = v[Iopt]) else grid[Iopt, ]);
+	}
+	# continue searching
+	r = searchOptimum(f, grid[Iopt, ], ..., delta = delta / Ns, gridGen = gridGen, eps = eps, scale = scale,
+		returnOpt = returnOpt);
+	return(r);
+}
+
+searchOptimum = function(f, start, ..., delta = 3, gridGen = gridBounding(Ngrid = 7), eps = 1e-2, scale = 1,
+	returnOpt = F) {
+	grid = gridGen(start, start - delta, start + delta);
+	r = searchOptimumGrid(f, grid, ..., delta = delta, gridGen = gridGen, eps = eps, scale = scale,
+		returnOpt = returnOpt);
+	return(r);
 }
 #
 #	Rstatistic.R
@@ -7855,7 +8580,30 @@ logSumExp = function(x) {
 	Imx = which.max(x);
 	log1p(sum(exp(x[-Imx] - x[Imx]))) + x[Imx]
 }
-   
+logSumExp_add = function(v, bins) {
+	diff = abs(bins - v);
+	diffB = pop(bins) - shift(bins);
+	if (max(diff) > max(diffB)) {	# bin-reshuffeling
+		Ibin = which.min(diffB);
+		bins[Ibin] = logSumExp(bins[c(Ibin, Ibin + 1)]);
+		bins[Ibin + 1] = v;
+	} else {
+		Ibin = which.min(abs(diff));
+		bins[Ibin] = logSumExp(c(v, bins[Ibin]));
+	}
+	return(sort(bins, na.last = T, decreasing = T));
+}
+
+logSumExpIter_raw = function(x, Nbins = 30) {
+	if (length(x) < Nbins) return(x);
+	lse = x[1:Nbins];
+	for (e in x[-(1:Nbins)]) lse = logSumExp_add(e, lse);
+	return(logSumExp(lse));
+}
+logSumExpIter = function(x, Nbins = 30) {
+	return(logSumExp(logSumExpIter_raw(x)));
+}
+
 # rejFrac = function(x, alpha = 0.05) {
 # 	x = na.omit(x);
 # 	f = count(x <= alpha) / length(x);
@@ -8801,7 +9549,7 @@ coefficientsOR = function(s, level = .95) {
 	r = cbind(cfs, cis[, -1], as.matrix(cisOR));
 	r
 }
-coefficientsORmodel = function(model, level = .95)coefficientsORsModel(summary(model), level)
+coefficientsORmodel = function(model, level = .95)coefficientsOR(summary(model), level)
 
 #
 #	meta analysis
@@ -9001,7 +9749,12 @@ seq.transf = function(from = 0, to = 1, length.out = 1e1, ..., transf = log, tra
 #
 
 completeRows = function(data)!apply(data, 1, function(r)any(is.na(r)))
-completeData = function(f, data)data[completeRows(data[, all.vars(f), drop = F]), , drop = F]
+completeData = function(f = ~ ., data, collapse = F, varExclude = c()) {
+	vsRaw = all.vars(f);
+	if (any(vsRaw == '.')) vsRaw = names(data);
+	vs = setdiff(vsRaw, varExclude);
+	data[completeRows(data[, vs, drop = F]), if (collapse) vs else 1:ncol(data), drop = F]
+}
 
 model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F,
 	returnComplete = F, formulaAsIs = F) {
@@ -9040,20 +9793,30 @@ complete_from_vars = function(vars, data, offset = NULL, ignore.case = F, remove
 	model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept)$indeces
 }
 
-glmnet_re = function(f, data, ..., offset = NULL, ignore.case = F, remove.intercept = F,
-	lambdas = NULL, cv = T) {
-	d = model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept);
+# <!><t> tb tested refactoring as of 19.2.2019
+
+glmnet_re_mm = function(y, mm, ..., offset = NULL, ignore.case = F, remove.intercept = F,
+	lambdas = NULL, cv = T, returnGlmnet = F) {
 	# <p> fit model
 	r = if (cv) {
-		r0 = cv.glmnet(x = d$mm, y = d$response, lambda = lambdas, ..., offset = d$offset);
+		r0 = cv.glmnet(x = mm, y = y, lambda = lambdas, ..., offset = offset);
 		args = c(List(..., min_ = c('foldid', 'nfolds', 'grouped')),
-			list(x = d$mm, y = d$response, lambda = r0$lambda.min, offset = d$offset));
-# 			list(x = d$mm, y = d$response, lambda = (3*r0$lambda.min + r0$lambda.1se)/4, offset = d$offset));
-#			list(x = d$mm, y = d$response, lambda = (r0$lambda.min), offset = d$offset));
+			list(x = mm, y = y, lambda = r0$lambda.min, offset = offset));
+# 			list(x = mm, y = y, lambda = (3*r0$lambda.min + r0$lambda.1se)/4, offset = offset));
+#			list(x = mm, y = y, lambda = (r0$lambda.min), offset = offset));
 		do.call('glmnet', args);
-	} else glmnet(x = d$mm, y = d$response, lambda = lambdas, ..., offset = d$offset);
-	r = c(r, list(formula = f));
-	r
+	} else glmnet(x = mm, y = y, lambda = lambdas, ..., offset = offset);
+	if (returnGlmnet) r = list(glmnet = r);
+	return(r);
+}
+
+glmnet_re = function(f, data, ..., offset = NULL, ignore.case = F, remove.intercept = F,
+	lambdas = NULL, cv = T, returnGlmnet = F) {
+	d = model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept);
+	r = glmnet_re_mm(d$response, d$mm, ..., offset = d$offset,
+		ignore.case = ignore.case, remove.intercept = remove.intercept, lambdas = lambdas,
+		cv = cv, returnGlmnet = returnGlmnet);
+	return(c(r, list(formula = f)));
 }
 glmnet_re_refit = function(model, data, ..., var_cutoff =  1e-6, intercept = '1', impute = NULL) {
 	response = formula.response(model$formula);
@@ -9226,18 +9989,50 @@ cv_test_glm = function(model, formula, data, ...) {
 	ll
 }
 
+cv_train_glmnet = function(f1, data, ...) {
+	glmnet_re(f1, data, ..., returnGlmnet = T);
+}
+cv_test_glmnet = function(model, f1, data, ...) {
+	preds = predict(model$glmnet, model_matrix_from_formula(f1, data)$mm, type = 'response');
+	# detect logistic model, constrain probabilities
+	if (notE(model$glmnet$classnames) && length(model$glmnet$classnames) == 2) preds = minimax(preds, 0, 1);
+	return(preds);
+}
+
+cv_train_glmnet_mm = function(data, ...) {
+	i = FirstDef(which(dimnames(data)[[2]] == 'y'), 1);
+	glmnet_re_mm(data[, i], data[, -i], ..., returnGlmnet = T);
+}
+cv_test_glmnet_mm = function(model, data, ...) {
+	i = FirstDef(which(dimnames(data)[[2]] == 'y'), 1);
+	preds = predict(model$glmnet, data[, -i], type = 'response');
+	# detect logistic model, constrain probabilities
+	if (notE(model$glmnet$classnames) && length(model$glmnet$classnames) == 2) preds = minimax(preds, 0, 1);
+	return(preds);
+}
+
+
+cv_train_glm = function(f1, data, ..., family = binomial()) {
+	glm(f1, data = data, family = family)
+}
+cv_test_glm_predict = function(model, f1, data, ..., type = 'response') {
+	predict(model, data, type = type)
+}
+
+
 # cv_prepare = function(data, argsFrom...)
 # cv_train = function(data, argsFrom...)
 # cv_test = function(model, data, argsFrom...)
 # @arg cv_fold number of crossvalidation folds, denotes leave -cv_fold out if negative
+# <!> 19.2.2019: removed cv_prepare for lack of functionality
+# <i> argument routing to train/test
 
-crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list(),
+crossvalidate = function(cv_train, cv_test,
 	data, cv_fold = 20, cv_repeats = 1, ..., parallel = F, align_order = TRUE) {
 	if (cv_fold == 0) stop('crossvalidate: cv_fold must be an integer != 0');
 	if (!parallel) Lapply = lapply;
 	N = nrow(data);
-	r = with(cv_prepare(data = data, ...), {
-		Lapply(1:cv_repeats, function(i, ...) {
+	r = Lapply(1:cv_repeats, function(i, ...) {
 			perm = Sample(1:N, N);
 			# compute partitions
 			fold = if (cv_fold > 0) cv_fold else as.integer(N/-cv_fold);
@@ -9267,7 +10062,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			} else if (align_order) stop("Crossvalidate: didn't know how to align order.") else r;
 			gc();
 			r
-	}, ...)});
+	}, ...);
 	r
 }
 
@@ -9389,8 +10184,10 @@ pairs_std.panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
 }
 
 unique_fraction = function(x) (length(unique(x))/length(x))
-guess_is_factor = function(x, na.rm = T) {
-	all(as.integer(x) == x, na.rm = na.rm) && unique_fraction(x) < .1
+guess_is_factor = function(x, na.rm = T, uniqueFraction = .1, Nlevels = 10) {
+	all(as.integer(x) == x, na.rm = na.rm) &&
+		unique_fraction(x) < uniqueFraction &&
+		length(unique(x)) <= Nlevels
 }
 
 
@@ -9425,6 +10222,13 @@ pairs_std = function(...,
 	pairs(...,
 		lower.panel = lower.panel, diag.panel = diag.panel, upper.panel = upper.panel)
 }
+
+pairs_std_save = function(data, ..., path = NULL) {
+	if (is.null(path)) path = tempfile(fileext = '.png');
+		plot_save_eval(pairs_std(data), ..., plot_path = path);
+	return(path);
+}
+
 
 #
 #	<p> omics data
@@ -9566,7 +10370,7 @@ table.entropy = function(d) {
 #
 
 Qvalue = function(P.value, ...) {
-	require('qvalue');
+	Require('qvalue');
 	P.valuesNotNA = na.omit(P.value);
 	qv = qvalue(P.valuesNotNA, ...);
 	r = qv;
@@ -9689,6 +10493,20 @@ lmer2p = function(object, method = 'profile') {
 	apply(cis, 1, function(ci)ciToP(ci[1], ci[2]))
 }
 
+# confint plus P-value
+confintP = function(m, level = .95) {
+	ci = confint(m, level = level);
+	P = apply(ci, 1, function(ci)ciToP(ci[1], ci[2], level = level));
+	cbind(ci, P)
+}
+
+# alternative check for convergence of glmer models
+#https://stackoverflow.com/questions/21344555/convergence-error-for-development-version-of-lme4
+glmerFit = function(m) {
+	relgrad = with(m@optinfo$derivs, solve(Hessian, gradient));
+	return(max(abs(relgrad)));
+}
+
 #
 #	<p> simulation studies
 #
@@ -9700,6 +10518,198 @@ dataSimulation = function(Niteration, fSim, fStat = function(data, ...)summary(d
 		data = do.call(fSim, c(parSim, parShared));
 		r = do.call(fStat, c(list(data = data), parStat, parShared));
 	});
+}
+
+#
+#	<p> delta rule
+#
+
+#
+#	Numeric delta rule
+#
+
+gradient = function(f, x, ..., eps = 1e-5) {
+	sapply(seq_along(x), function(i) {
+		epsI = vector.assign(0, i, eps, N = length(x));
+		(f(x + epsI, ...) - f(x - epsI, ...)) / (2 * eps)
+	});
+}
+
+totalDeriv = function(f, x, ..., eps = 1e-5) {
+	y = f(x, ...);
+	t(sapply(seq_along(y), function(i)gradient(function(x)f(x, ...)[i], x, eps = eps)));
+}
+
+# delta rule for functions of binomial data
+#N: list of pairs Nevents, Ntotal, or nx2 matrix of these numbers
+#f: function to computed on the frequencies
+deltaFreqs = function(N, f, logScale = T, ..., eps = 1e-5, alpha = .95) {
+	if (is.list(N)) N = sapply(N, identity);
+	freqs = N[1, ] / N[2, ];
+	var = freqs * (1 - freqs) / N[2, ];
+
+	fDeriv = if (logScale) function(x, ...)log(f(x, ...)) else f;
+	fGradient = gradient(fDeriv, freqs, ..., eps = eps);
+
+	varf = (t(fGradient) %*% diag(var) %*% fGradient)[1, 1];
+	limit = qnorm(1 - (1 - alpha)/2, 0, sqrt(varf));
+
+	y = fDeriv(freqs);
+	yCi = y + c(-limit, limit);
+
+	r = if (logScale) list(y = exp(y), ci = exp(yCi), var = varf) else list(y = y, ci = yCi, var = varf);
+	r
+}
+
+#
+#	<p> sensitvity/specificity/ROC/AUC
+#
+
+
+# assume TRUE/FALSE
+binaryMeasure = function(tab, strict = TRUE) {
+	if (strict && !all(names(dimnames(tab)) == c('pred', 'truth'))) stop('dimnames != pred, truth');
+	if (strict && !all(unique(unlist(dimnames(tab))) == c('FALSE', 'TRUE'))) stop('values != FALSE, TRUE');
+	r = list(
+		tp = sum(tab[, 'TRUE']) / sum(tab),
+		tn = sum(tab[, 'FALSE']) / sum(tab),
+		sensitivity = tab['TRUE', 'TRUE'] / sum(tab[, 'TRUE']),
+		specificity = tab['FALSE', 'FALSE'] / sum(tab[, 'FALSE']),
+		ppv = tab['TRUE', 'TRUE'] / sum(tab['TRUE', ]),
+		npv = tab['FALSE', 'FALSE'] / sum(tab['FALSE', ])
+	);
+	return(r);
+}
+
+binaryMeasures = function(prob, labels) {
+	cutoffs = sort(unique(prob));
+	measures = lapply(cutoffs, function(co) {
+		tab = Table(list(pred = prob >= co, truth = labels), cats = list(pred = c(F, T), truth = c(F, T)));
+		bm = c(list(cutoff = co), binaryMeasure(tab));
+		bm
+	});
+	r = apply(do.call(rbind, measures), 2, unlist);
+	r
+}
+
+cvROC = function(f1, data,
+	cv_fold = 10, cv_repeats = 1, cv_train = cv_train_glmnet, cv_test = cv_test_glmnet) {
+	Library('pROC');
+	Library('AUC');
+
+	# <p> data preparation
+	mm = model_matrix_from_formula(f1, data);
+	d0 = data[mm$indeces, ];
+	d0resp = d0[[formula.response(f1)]];
+
+	# <p> crossvalidation
+	pred = crossvalidate(cv_train, cv_test, data = d0, cv_fold = cv_fold, cv_repeats = cv_repeats, f1 = f1);
+
+	# <p> results
+	# <i><N> only first repeat headed at the moment
+	roc = AUC::roc(pred[[1]], as.factor(d0resp));
+	auc = AUC::auc(roc);
+	rocProc = pROC::roc(as.factor(d0resp), pred[[1]]);
+	aucProc = pROC::auc(rocProc);
+	P = cor.test(d0resp, pred[[1]])
+
+	r = list(roc = roc, auc = auc, rocProc = rocProc, aucProc = aucProc, aucCi = ci(rocProc), P = P,
+		data = Df(response = d0resp, prediction = pred[[1]]));
+	return(r);
+}
+
+plotRocs = function(data, interval = 0.2, breaks = seq(0, 1, interval)) {
+	d0 = do.call(rbind, nlapply(data, function(n) {
+		d = if (all( c('tpr', 'fpr') %in% names(data[[n]]))) data[[n]] else	# roc already computed
+			with(data[[n]], AUC::roc(prediction, as.factor(response)));
+		Df(fpr = 1 - d$fpr, tpr = d$tpr, type = n)
+	}));
+	p = ggplot(data = d0) +
+		#geom_line(aes(x = fpr, y = tpr)) +
+		geom_step(aes(x = fpr, y = tpr, col = type), lwd = 1) +
+		geom_segment(aes(x = 0, y = 1, xend = 1, yend = 0)) +	#diagonal
+		scale_x_reverse(name = "Specificity", limits = c(1,0), breaks = breaks,  expand = c(0.001,0.001)) + 
+		scale_y_continuous(name = "Sensitivity", limits = c(0,1), breaks = breaks, expand = c(0.001, 0.001))+
+		labs(color = 'ROC type') +
+		coord_equal() + theme_bw();
+	p
+}
+
+
+#
+#	<p> multiple testing
+#
+tailStrength = function(ps, M = length(ps)) {
+	N = length(ps);
+	# standardize p-values to 0
+	psS = 1 - sort(ps) * (N + 1)/(1:N);
+	r = - sum(psS[1:M])/M;	# return negative as small values are deemed relevant
+	r
+}
+
+#
+#	<p> power calculations
+#
+
+findBinomN = function(pTrue, pLower, level = 0.95, Nmax = 1e3, lower = T) {
+	Require('binom');
+	fBinom = if (lower)
+		function(N)binom.logit(N*pTrue, N, conf.level = level)$lower else
+		function(N)binom.logit(N*pTrue, N, conf.level = level)$upper
+	inverse(fBinom, c(1, Nmax))(pLower);
+}
+
+#
+#	<p> pseudo counts
+#
+
+# implement pseudo-count, needed as observations c(0, 0, X) cause diverging estimates
+mulitnomCoeff = function(x, log = TRUE) {
+	N = sum(x);
+	muco = lgamma(N + 1) - sum(sapply(x + 1, lgamma));
+	if (!log) muco = exp(muco);
+	return(muco);
+}
+
+dmultinomPseudo = function(x, prob, log = FALSE, pseudo = .1, factors = 1:1e2, F = NULL) {
+	# find multiplication factor
+	if (is.null(F)) {
+		pseudoF = t(t_(pseudo) %*% factors);
+		pseudoR = abs(pseudoF - round(pseudoF));
+		F = factors[apply(pseudoR, 2, which.min)];
+	}
+	# standardize probabilities
+	logP = log(v2freq(prob));
+	# raw likelihood contributions
+	pRaw = sum(round((x + pseudo) * F) * logP / F);
+	# add multinomial coefficient
+	pCooked = pRaw + mulitnomCoeff(x);
+	if (!log) pCooked = exp(pCooked);
+	return(pCooked);
+}
+
+#
+#	<p> random numbers
+#
+
+generateSeed = function(preSeed = Sys.time()) {
+	ints = hex2ints(md5sumString(as.integer(preSeed)));
+	r = 0
+	for (i in 1:length(ints)) r = bitwXor(r, ints[i]);
+	return(r);
+}
+
+# run expression with fixed seed but leave the RNG stream unchanged
+#	(bracket expression with save/restore of seed)
+#	as.integer(Sys.time())
+fixSeedForExpr = function(seed, expr, envir = parent.frame()) {
+	if (!exists('.Random.seed')) runif(1);	# vivify RNG
+	currentSeed = .Random.seed;
+	on.exit(.Random.seed <<- currentSeed);
+	set.seed(seed);
+	r = eval(expr, envir = envir);
+	#.Random.seed <<- currentSeed;
+	return(r);
 }
 
 #
@@ -10799,6 +11809,92 @@ ReapFromDisk = function(path, sow_field = 'default', fields = NULL, auto_unlist 
 	
 }
 #
+#	RknitrExt.R
+#
+
+KableRaw = function(df, ...) {
+  join(kable(df, ...), "\n");
+}
+
+Kable = function(o, ..., Names = names(o)) {
+  KableRaw(Df_(o, names = Names), ...);
+}
+
+KableTable = function(o, ..., freqs = T) {
+	name = if (class(o) == 'data.frame') names(o) else join(as.character(substitute(o)));
+	tCounts = Kable(table(o, ...), Names = c(name, 'Count'));
+	r = if (freqs) Con(
+		tCounts, Kable(table.freq(o, ...), Names = c(name, 'Freq'))
+	, Sep_ = "\n\n") else tCounts;
+  r
+}
+
+KableList = function(l, freqs = F) {
+	d = Df_(t(list2df(l)));
+	d1 = Df(name = names(l), d, names = c('name', 'value'));
+	row.names(d1) = NULL
+	Kable(d1, Names = names(d1));
+}
+
+#
+#	<p> ad-hoc reporting
+#
+
+knit_element_verbatim = function(e)e$verbatim
+knit_element_table = function(e) {
+	Sprintf("```{r echo = FALSE}\n  df = %{df}s;\n```\n```{r results = 'asis'}\n  cat(Kable(df))\n```\n",
+		df = Deparse(e$table))
+}
+knit_element_listtable = function(e) {
+	Sprintf("```{r echo = FALSE}\n  l = %{list}s;\n```\n```{r results = 'asis'}\n  cat(KableList(l))\n```\n",
+		list = Deparse(e$listtable))
+}
+knit_element_header = function(e)with(e, Sprintf('# %{header}s\n'))
+knit_element_subheader = function(e)with(e, Sprintf('## %{subheader}s\n'))
+knitPlot = function(e, ..., envir = parent.frame()) {
+	pp = tempfile(fileext = '.png');
+	plot_save(e, ..., envir = envir, plot_path = pp);
+	return(list(path = pp));
+}
+knit_element_plot = function(e) {
+	if (is.list(e$plot) && notE(e$plot$path)) return(Sprintf("![](%{pp}s)\n\n", pp = e$plot$path));
+	if (is.character(e$plot) && exists(e$plot))
+		return(with(e, Sprintf("```{r echo = FALSE}\n  plot(%{plot}s);\n```\n")));
+	return(Sprintf("```{r echo = FALSE}\n  %{plot}s\n```\n",
+		plot = ifelse(is.character(e$plot), e$plot, Deparse(e$plot))));
+}
+knit_element = function(e) {
+	if (!length(e)) return('');
+	n = names(e);
+	fcandidates = paste('knit_element_', n, sep = '');
+	f = fcandidates[which(sapply(fcandidates, exists))][1];
+	if (!exists(f)) stopS('Knit element "%{n}s" not known [${f}s].');
+	LogS(4, 'Knitting element %{n}s [%{f}s]');
+	return(get(f)(e));
+}
+Knit_raw = function(l, output, output_type = 'html_document') {
+	Library('knitr');
+
+	md = join(sapply(l, knit_element), '\n\n');
+	Log(md, 4);
+	writeFile(Sprintf('%{output}s.Rmd'), md);
+	o = knit(text = Trimws(md), output = Sprintf('%{output}s.md'));
+	rmarkdown::render(Sprintf('%{output}s.Rmd'), output_type)
+}
+Knit = Vectorize(Knit_raw, 'output_type', SIMPLIFY = FALSE);
+
+# if (1) {
+# 	Knit(list(
+# 		list(header = 'Polygenic risk score (PRS) analysis'),
+# 		list(verbatim = 'SNPs were selected according to P-value up to a maximal P-value. Minimum distance between SNPs was respected.'),
+# 		list(listtable = list(`Max P-value` = 0.01, `Min SNP distance` = 1e5, Nsnps = length(snps), covariates = join(covs, ', '))),
+# 		list(subheader = 'PRS on training data'),
+# 		list(verbatim = 'ROC curve'),
+# 		list(plot = quote(plot(rocToxPrimData, main = 'ROC curve training data')))
+# 	)
+# 	, output = 'results/prs/prs-toxPrim');
+# }
+#
 #	RparallelTools.R
 #Fri Jul 26 09:13:16 2013
 
@@ -10832,3 +11928,74 @@ Apply = apply;
 parallelize = function(.f, ..., Lapply_config = NULL, envir__ = NULL).f(...);
 parallelize_call = function(.call, Lapply_config = NULL, envir__ = parent.frame(n = 2)) 
 	base:::eval(.call, envir = envir__);
+#
+#	Rrepl.R
+#Mon Sep 24 12:41:57 2018
+
+Require('rjson');
+replMagick = "REPL_PERL5_OVER";
+
+ReplExternalClass = setRefClass('ReplExternal',
+	fields = list(
+		command = 'character',
+		expectJSON = 'logical',
+		magicIn = 'character',
+		magicOut = 'character',
+		connectionIn = 'ANY',
+		connectionOut = 'ANY'
+	),
+	methods = list(
+	#
+	#	<p> methods
+	#
+	initialize = function(command = 'repl_perl5 --json --no-echo', expectJSON = TRUE,
+		magicIn = replMagick, magicOut = replMagick, ...) {
+		# initialize super class
+		callSuper(.self,
+			command = command, expectJSON = expectJSON, magicIn = magicIn, magicOut = magicOut, ...);
+		.self
+	},
+	close = function() {
+		gclose = get('close', envir = .GlobalEnv);
+		gclose(connectionIn);
+		gclose(connectionOut);
+	},
+
+	#
+	#	functional methods
+	#
+
+	start = function() {
+		# <p> input, named pipe
+		connectionInPath = tempfile('fifo');
+		System(Sprintf('mkfifo %{connectionInPath}q'), 4);
+		connectionIn <<- fifo(fifoIn, 'r', blocking = T);
+		# <p> output, start expternal REPLer
+		commandPipe = Sprintf('%{command}s > %{connectionInPath}q');
+		Log(commandPipe, 4);
+		connectionOut <<- pipe(cmdPipe, 'w');
+		.self
+	},
+
+	repl = function(code) {
+		# <p> write code + magick
+		writeLines(c(code, replMagick), connectionOut);
+		flush(connectionOut);
+
+		# <p> read, wait for expectation
+		ls = c();
+		repeat {
+			l = readLines(connectionIn, n = 1);
+			if (l == replMagick) break;
+			ls = c(ls, l);
+		}
+		r = con(ls);
+		return(if (expectJSON) fromJSON(r) else r);
+	}
+
+	#
+	#	</p> methods
+	#
+	)
+);
+ReplExternalClass$accessors(names(ReplExternalClass$fields()));

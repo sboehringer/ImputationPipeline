@@ -64,6 +64,10 @@ $helpText = <<HELP_TEXT;
 	# filter rows by expression
 	csv.pl -t --useTestData --selectRowsByExpression 'c > 1.2'
 	csv.pl -t --useTestData --selectRowsByExpression 'c > 1.2 && d eq "Y"'
+	# deduplicate column
+	csv.pl -t --deduplicate=0 --useTestData
+	csv.pl -t --deduplicate=0,1 --useTestData
+	csv.pl -t --deduplicate=0,1 --useTestData --noheader --joinwith '-'
 
 	# order of operator precedence
 	selectRowsFor, select, delete, reshuffle, constant, setHeader, filter
@@ -210,6 +214,16 @@ sub processor { my ($o, $header) = @_;
 			splice(@_, $colTo, 0, sprintf("%06d", $o));
 			return @_;
 		});
+	}
+	if ($o->{deduplicate} ne '') {
+		my @cols = colsFromColSpec($o->{deduplicate}, $header);	#split(/,/, $o->{delete});
+		my $valueDict = {};
+		push(@prcs, sub {
+			for my $i (@cols) {
+				$_[$i] .= $o->{joinWith}. $valueDict->{$_[$i]} if ($valueDict->{$_[$i]}++);
+			}
+			return @_;
+		} );
 	}
 
 	if ($o->{filter} ne '') {
@@ -487,16 +501,19 @@ sub probeColumns { my ($o, $files) = @_;
 	initLog(2);
 	$o = { output => 'STDOUT',
 		separator => ',', quoteChar => '"', header => 1, mapHeader => 1, mapSeparator => "\t",
-		magic => '<!>magic-placeholder<!>'
+		magic => '<!>magic-placeholder<!>', joinWith => ':'
 	};
 	$result = GetOptionsStandard($o, 'separator=s', 'outputSeparator|os=s', 'quoteChar=s', 'magic=s',
 		'header!', 'outputHeader!', 'setHeader=s',
+
+		# filters
 		'map=s', 'mapHeader!', 'mapFile=s', 'mapSeparator=s',
 		'select=s', 'constant=s', 'delete=s', 'reshuffle=s', 'filter=s@', 'insertOrderByFile=s',
 		'selectRowsBy=s', 'selectRowsIds=s', 'selectRowsByFile=s', 'selectRowsByRowNumbers=s',
 			'selectRowsByExpression=s',
 		'logRowNumbers=s',
 		'deleteBeforeSelect',
+		'deduplicate=s',
 
 		# short hands
 		't', 's',	#initialize separators to tab, space resp.
@@ -512,6 +529,9 @@ sub probeColumns { my ($o, $files) = @_;
 
 		# testing
 		'useTestData',
+
+		# parameters
+		'joinWith=s',
 		
 		# output
 		'output|o=s'

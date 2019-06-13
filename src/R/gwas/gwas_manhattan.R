@@ -244,7 +244,7 @@ gwas_manhattenPlotDefaults = list(
 	size.x.labels = 10,
 	size.y.labels = 11,
 	thresholds = list(
-		geom_hline(yintercept = mlog10(1e-7), colour = 'red', alpha = I(1/3)),
+		geom_hline(yintercept = mlog10(5e-6), colour = 'red', alpha = I(1/3)),
 		geom_hline(yintercept = mlog10(5e-8), colour = 'red')
 	),
 	xaxisPhysical = FALSE

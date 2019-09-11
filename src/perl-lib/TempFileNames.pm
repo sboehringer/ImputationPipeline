@@ -799,6 +799,7 @@ sub mergeDictToString { my ($hash, $str, $flags)=@_;
 	my @keys = grep { defined($hash->{$_}) } keys(%{$hash});
 	my $doIterate = uc($flags->{iterate}) eq 'YES';
 	my $keysRe = uc($flags->{keysAreREs}) eq 'YES';
+	my $ws = uc($flags->{keysWs}) eq 'YES';
 	if (uc($flags->{sortKeys}) eq 'YES' || $doIterate)
 	{	@keys = sort { length($b) <=> length($a) } @keys;
 	}
@@ -810,6 +811,7 @@ sub mergeDictToString { my ($hash, $str, $flags)=@_;
 		$str0 = $str;
 		foreach $key (@keys)
 		{	if ($keysRe) {	$str =~ s/$key/$hash->{$key}/sg; }
+			elsif ($ws) {	$str =~ s/(?:(?<=\s)|^)\Q$key\E(?=\s|$)/$hash->{$key}/sg; }
 			else {			$str =~ s/\Q$key\E/$hash->{$key}/sg; }
 			# need to start from beginning to retain length order
 			last if ($doIterate && $str ne $str0);

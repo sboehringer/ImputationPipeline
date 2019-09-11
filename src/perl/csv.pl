@@ -9,14 +9,14 @@ use DBI;
 use FileHandle;
 
 $TEST_CSV = <<TEST_CSV_TEXT;
-a	b	c	d
-a	c	1	X
-b	d	2	X
-aa	g	3	X
-a	a	3	X
-b	a	3	Y
-c	d	4	Y
-b	a	1.5	Z
+a	b	c	d	c1
+a	c	1	X	3
+b	d	2	X	4
+aa	g	3	X	1
+a	a	3	X	2
+b	a	3	Y	3
+c	d	4	Y	4
+b	a	1.5	Z	5
 TEST_CSV_TEXT
 
 $helpText = <<HELP_TEXT;
@@ -64,6 +64,9 @@ $helpText = <<HELP_TEXT;
 	# filter rows by expression
 	csv.pl -t --useTestData --selectRowsByExpression 'c > 1.2'
 	csv.pl -t --useTestData --selectRowsByExpression 'c > 1.2 && d eq "Y"'
+	csv.pl -t --useTestData --selectRowsByExpression 'map { \$r{\$_} > 1 } \$colsBy->("[abc]" || a == "a")'
+	csv.pl -t --useTestData --selectRowsByExpression 'all(map { abs(\$r{\$_}) > 2 } \$colsBy->("[c]")) && d eq "X"'
+
 	# deduplicate column
 	csv.pl -t --deduplicate=0 --useTestData
 	csv.pl -t --deduplicate=0,1 --useTestData
@@ -113,10 +116,16 @@ sub processor { my ($o, $header) = @_;
 		my $cols = makeHash($header, [map { "\$_[$_]" } 0 .. $#$header]);
 		$cols->{''} = undef;
 		Log("Columns: ". join(', ', keys %$cols), 5);
-		my $code = 'sub { $_ = $_[0]; '. mergeDictToString($cols, $o->{selectRowsByExpression}). ' }';
+		my $colsBy = sub { return (grep { m{$_[0]}s } @$header) };
+		#my $code = 'sub { $_ = $_[0]; my %r = %{makeHash($header, [@_])}; print(Dumper(\%r));'
+		#my $code = 'sub { $_ = $_[0]; my %r = %{makeHash($header, [@_])}; print(Dumper([map { abs($r{$_}) > 2 } $colsBy->("[c]")]));'
+		my $code = 'sub { $_ = $_[0]; my %r = %{makeHash($header, [@_])}; '
+		. mergeDictToString($cols, $o->{selectRowsByExpression}, { sortKeys => 'yes', keysWs => 'yes' })
+		. ' }';
 		Log("row filter: '$code'", 5);
 		my $sub = eval($code);
 		push(@prcs, sub {
+			#Log('Row evaluation: '. $sub->(@_), 7);
 			return undef if (!$sub->(@_));
 			return @_;
 		});

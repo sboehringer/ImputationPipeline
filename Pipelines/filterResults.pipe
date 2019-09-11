@@ -21,7 +21,9 @@ filterResults:p_value	1
 filterResults:r2		0.4
 filterResults:maf		0.02
 filterResults:betaThreshold	1e4
-filterResults:filterBeta	&& all(map { abs($r{$_}) < filterResults:betaThreshold } $colsBy->("^beta1*"))
+filterResults:betaMarkerThreshold	1e4
+filterResults:filterBeta	&& all(map { abs($r{$_}) < filterResults:betaThreshold } $colsBy->("^beta1*")) \
+							&& beta1.MARKER_dosage < filterResults:betaMarkerThreshold
 
 # options to be passed to the script
 filterResults:options	

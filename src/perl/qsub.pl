@@ -19,6 +19,10 @@ my $helpText = <<HELP_TEXT;
 	--priority number	set priority to number
 				(-1000 to 1000 for SGE) [0]
 	--memory size	set memory limit (e.g. 8G)
+	--type schduler	cluster management software: slurm(default)|ogs
+	--workingDir	set workding directory before command execution
+	--logFiles		prefix of logfiles in outputdir
+	--temp			write to temporary logfile dir
 	# Options to qsub.pl have to be terminated by --
 
 	# Environment variables
@@ -64,8 +68,10 @@ my $helpText = <<HELP_TEXT;
 $TempFileNames::GeneralHelp
 HELP_TEXT
 
-#$TEMP_DIR = '/tmp/qsub_pl_'.$ENV{USER};
-my $HEADER = '#!/bin/bash
+my %templates = (
+	ogs => {
+		#$TEMP_DIR = '/tmp/qsub_pl_'.$ENV{USER};
+		HEADER => '#!/bin/bash
 # Options
 OGS_OPTIONS
 
@@ -77,23 +83,45 @@ PREPARE_CMDS
 
 # Command
 CMD
-';
+',
+		Options => {
+			'-S' => '/bin/sh', '-cwd' => '', '-q' => 'options_QUEUE',
+			'-hold_jid' => undef,
+			'-V' => '',	# pass environment variables
+			'-e' => 'QSUB_OUT', '-o' => 'QSUB_OUT',
+			'-p' => 'options_PRIORITY',
+			'-l' => 'h_vmem=options_MEMORY',
+			'-lhost' => undef,
+			'-pe' => sub { return $_[0]->{Ncpu} == 1? undef: sprintf('BWA %d', $_[0]->{Ncpu}) },
+			'-r' => 'yes',	# job re-runnable
+		},
+		# allow for double keys
+		OptionsKeyRenames => { '-lhost' => '-l'},
+		OptionsOnOff => { checkpointing => [ '-ckpt' =>  'check_userdefined'] }
+	},
+	slurm => {
+		TEMPLATE => qq{#!/bin/sh
+#SBATCH --ntasks=1
+#SBATCH --core-spec=%{NCPU}
+##SBATCH --cpu-bind=cores
+#SBATCH --output %{LOGOUTPUT}.stdout
+#SBATCH --error %{LOGOUTPUT}.stderr
+#SBATCH --nice=20
+#SBATCH --oversubscribe
+#SBATCH --mem %{MEMORY}
 
-my %Options = (
-	'-S' => '/bin/sh', '-cwd' => '', '-q' => 'options_QUEUE',
-	'-hold_jid' => undef,
-	'-V' => '',	# pass environment variables
-	'-e' => 'QSUB_OUT', '-o' => 'QSUB_OUT',
-	'-p' => 'options_PRIORITY',
-	'-l' => 'h_vmem=options_MEMORY',
-	'-lhost' => undef,
-	'-pe' => sub { return $_[0]->{Ncpu} == 1? undef: sprintf('BWA %d', $_[0]->{Ncpu}) },
-	'-r' => 'yes',	# job re-runnable
-);
-# allow for double keys
-my %OptionsKeyRenames = ('-lhost' => '-l');
-my %OptionsOnOff = (
-	checkpointing => [ '-ckpt' =>  'check_userdefined']
+%{EXPORTS}
+cd %{WORKINGDIRQ}
+date +'%F %H:%M:%S' > %{LOGOUTPUT}.log
+echo %{COMMANDQ} >> %{LOGOUTPUT}.log
+%{COMMAND}
+RETURN=\$?
+echo \$RETURN >> %{LOGOUTPUT}.log
+date +'%F %H:%M:%S' >> %{LOGOUTPUT}.log
+touch %{LOGOUTPUT}.finished
+}
+
+	}
 );
 
 my $stringRE='(?:([_\/\-a-zA-Z0-9.]+)|(?:\"((?:\\\\.)*(?:[^"\\\\]+(?:\\\\.)*)*)\"))';
@@ -103,7 +131,13 @@ sub qsS { my $p = $_[0];
 	return "'$p'";
 }
 
-sub submitCommand { my ($cmd, $o) = @_;
+sub submitCommandOgs { my ($cmd, $o, $t) = @_;
+	# <p> legacy mapping
+	my $HEADER = $t->{HEADER};
+	my %Options = %{$t->{Options}};
+	my %OptionsKeyRenames = %{$t->{OptionsKeyRenames}};
+	my %OptionsOnOff = %{$t->{OptionsOnOff}};
+
 	my ($cmdname) = ($cmd =~ m{^\s*'?([^\s']+)'?}so);
 	# don't delete
 	my $tf = tempFileName($o->{tmpPrefix}. "/job_$cmdname", '.sh', undef, 1);
@@ -138,9 +172,10 @@ sub submitCommand { my ($cmd, $o) = @_;
 
 	# <p> preparatory commands
 	my $prep = '';
-	if ($o->{outputDir} ne '' && $o->{moveOutputDir}) {
-		$prep = "if [ -e \"$o->{outputDir}\" ]; then\n"
-			. "\tmv $o->{outputDir} $o->{outputDir}-`cat /dev/urandom | tr -cd 'a-f0-9' | head -c 8` ; mkdir $o->{outputDir}\n"
+	my $outputDir = firstDef($o->{outputDir}, 'qsub_jobOutputs');
+	if ($outputDir ne '' && $o->{moveOutputDir}) {
+		$prep = "if [ -e \"$outputDir\" ]; then\n"
+			. "\tmv $outputDir $outputDir-`cat /dev/urandom | tr -cd 'a-f0-9' | head -c 8` ; mkdir $outputDir\n"
 			. "fi";
 	}
 	# <p> construct script
@@ -149,7 +184,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 	my @options = map { mergeDictToString(\%OptionsKeyRenames, "#\$ $_ $opts{$_}") } keys %opts;
 	my $script = $HEADER;
 	$script = mergeDictToString({
-		'QSUB_OUT' => $o->{outputDir},
+		'QSUB_OUT' => $outputDir,
 		'OGS_OPTIONS' => join("\n", @options),
 		'OGS_EXPORTS' => join("\n", ((map { "export $_" } @env), $setenv)),
 		'OGS_SOURCE' => join("\n", (map { ". $_" } @sourceFiles)),
@@ -158,7 +193,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 	}, $script, { sortKeys => 'YES' });
 
 	# <p> prepare file system
-	Mkpath($o->{outputDir}) if (!-e $o->{outputDir});
+	Mkpath($outputDir) if (!-e $outputDir);
 	writeFile($tf, $script, { doMakePath => 1 });
 
 	Log("qsub script:\n-- Start of script --\n$script\n-- End of script --\n", 5);
@@ -170,21 +205,71 @@ sub submitCommand { my ($cmd, $o) = @_;
 	writeFile($o->{jidReplace}, "$jid\n", { doMakePath => 1 } ) if (defined($o->{jidReplace}));
 }
 
+my $interpolationMagic = '%%undefined%%';
+my $sep = ('-' x 80). "\n";
+sub submitCommandFromTemplate { my ($cmd, $o, $template) = @_;
+	my $wd = firstDef($o->{workingDir}, $interpolationMagic);
+	my ($cmdInf) = ($cmd =~ m{^['"]?([^\s'"]+)}so);
+	my $logfDir = splitPathDict($o->{logFiles})->{isRelative}
+		? firstDef($o->{outputDir}, $o->{workingDir}, '.'): '';
+	my $logf = firstDef($o->{logFiles},
+		#$cmdInf	# use command infix, assume dir to be unique
+		splitPathDict(tempFileName("$logfDir/$cmdInf", undef, { touch => 1 }))->{file}
+	);
+	my %i = (
+		'%{NCPU}' => firstDef($o->{Ncpu}, $interpolationMagic),
+		'%{MEMORY}' => firstDef($o->{memory}, $interpolationMagic),
+		'%{WORKINGDIR}' => $wd,
+		'%{WORKINGDIRQ}' => qs($wd),
+		'%{COMMAND}' => $cmd,
+		'%{COMMANDQ}' => qs($cmd),
+		'%{LOGOUTPUT}' => qs($logfDir. '/'. $logf),
+		'%{EXPORTS}' => firstDef($exports, $interpolationMagic)
+	);
+	my $t = mergeDictToString(\%i, $template);
+	# delete lines without interpolated value
+	$t =~ s{^.*$interpolationMagic.*$}{}mg;
+
+	my $tf = "$logfDir/$logf.sh";
+	writeFile($tf, $t, { doMakePath => 1 });
+	Log($sep. "sbatch script:\n$t$sep", 5);
+	my $r = System("sbatch $tf", 4, undef, { returnStdout => 'YES' } );
+	#Stdout:
+	#Submitted batch job 2
+	my ($jid) = ($r->{output} =~ m{Submitted batch job (\d+)}so);
+	Log("Job id: $jid", 5);
+	writeFile($o->{jid}, "$jid\n", { append => 'YES', doMakePath => 1 }) if (defined($o->{jid}));
+	writeFile($o->{jidReplace}, "$jid\n", { doMakePath => 1 } ) if (defined($o->{jidReplace}));
+	return $r
+}
+sub submitCommandSlurm { my ($cmd, $o, $t) = @_;
+	submitCommandFromTemplate($cmd, $o, $t->{TEMPLATE});
+	
+}
+
+sub submitCommand { my ($cmd, $o) = @_;
+	my $f = 'submitCommand'. ucfirst($o->{type});
+	$f->($cmd, $o, $templates{$o->{type}});
+}
+
+
 #main $#ARGV @ARGV %ENV
 #	initLog(2);
 	my $o = {
 		config => 'config.cfg',
-		outputDir => firstDef($ENV{QSUB_LOG_DIR}, 'qsub_jobOutputs'),
+		#outputDir => firstDef($ENV{QSUB_LOG_DIR}, 'qsub_jobOutputs'),
+		outputDir => $ENV{QSUB_LOG_DIR},
 		moveOutputDir => 0,
 		queue => firstDef($ENV{QSUB_QUEUE}, 'default'),
 		priority => firstDef($ENV{QSUB_PRIORITY}, 0),
-		tmpPrefix => firstDef($ENV{QSUB_TMPPREFIX}, '/tmp/qsub_pl_'.$ENV{USER}),
+		tmpPrefix => firstDef($ENV{QSUB_TMPPREFIX}, "/tmp/perl_$ENV{USER}/qsub"),
 		exports => 'PATH',
 		sourceFiles => firstDef($ENV{QSUB_SOURCEFILES}, ''),
 		setenvsep => '+++',
 		memory => firstDef($ENV{QSUB_MEMORY}, '4G'),
 		Ncpu => 1,
 		excludeNodes => firstDef($ENV{QSUB_EXCLUDENODES}, undef),
+		type => firstDef($ENV{QSUB_DEFAULTTYPE}, 'slurm'),
 	};
 	my $optionsPresent = int(grep { $_ eq '--' } @ARGV) > 0;
 	# <!><i> proper command line splitting
@@ -194,10 +279,13 @@ sub submitCommand { my ($cmd, $o) = @_;
 	}
 	my $result = !$optionsPresent? 1
 	: GetOptionsStandard($o,
-		'help', 'jid=s', 'jidReplace=s', 'exports:s',
-		'waitForJids=s', 'outputDir=s', 'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
-		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s',
+		'help', 'jid=s', 'jidReplace|thisjid=s', 'exports=s',
+		'waitForJids=s',
+		'outputDir=s', 'temp!', 'logFiles=s', 'workingDir=s',
+		'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
+		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s', 'type=s'
 	);
+	$o->{outputDir} = tempFileName("$o->{tmpPrefix}_logs/log", undef, { mkdir => 1 }) if ($o->{temp});
 	# <!> heuristic for unquoting
 	$o->{unquote} = 1 if (!defined($o->{unquote}) && @ARGV == 1);
 	if ((!@ARGV && !defined($o->{cmdFromFile}))
@@ -210,7 +298,7 @@ sub submitCommand { my ($cmd, $o) = @_;
 	my $cmd = $o->{unquote}? join(' ', @ARGV): join(' ', map { qsS($_) } @ARGV);
 	$cmd .= readFile($o->{cmdFromFile}) if (defined($o->{cmdFromFile}));
 	#Log($_) foreach (@ARGV);
-	Log("Command to run:\n$cmd", 3);
+	Log($sep. "Command to run:\n$cmd", 3);
 	submitCommand($cmd, $o);
 exit(0);
 

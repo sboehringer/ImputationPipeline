@@ -295,7 +295,7 @@ sub PrintRunningJobsSlurmOgs { my ($o) = @_;
 	return 0;
 }
 sub PrintRunningJobsSlurm { my ($o) = @_;
-	return System("squeue --format '%i' | tail -n +2", 2);
+	return System("squeue --me --format '%i' | tail -n +2", 2);
 }
 sub printRunningJobs { my ($o) = @_;
 	my $f = 'PrintRunningJobs'. ucfirst($o->{type});

@@ -23,6 +23,7 @@ my $helpText = <<HELP_TEXT;
 	--workingDir	set workding directory before command execution
 	--logFiles		prefix of logfiles in outputdir
 	--temp			write to temporary logfile dir
+	--runningJobs	list ids of running jobs on the cluster, exit
 	# Options to qsub.pl have to be terminated by --
 
 	# Environment variables
@@ -109,6 +110,7 @@ CMD
 #SBATCH --nice=20
 #SBATCH --oversubscribe
 #SBATCH --mem %{MEMORY}
+#SBATCH --dependency afterok:%{DEPENDON}
 
 %{EXPORTS}
 cd %{WORKINGDIRQ}
@@ -251,6 +253,27 @@ sub submitCommand { my ($cmd, $o) = @_;
 	my $f = 'submitCommand'. ucfirst($o->{type});
 	$f->($cmd, $o, $templates{$o->{type}});
 }
+sub PrintRunningJobsSlurmOgs { my ($o) = @_;
+	my $xml = substr(Set::firstDef(`which xml 2>/dev/null`, `which xmlstarlet 2>/dev/null`), 0, -1);
+	my @jobs;
+	if (defined($xml)) {
+		@jobs = (`qstat -u \\* -xml | $xml sel -t -m '//JB_job_number' -v 'text()' -o ' '`
+			=~ m{(\d+)}sog);
+	} else {
+		my $jobs = TempFileNames::System("qstat -u '*' | tail -n+3 | cut -d ' ' -f 1 -",
+			7, undef, { returnStdout => 'YES'})->{output};
+		@jobs = split(/\n/, $jobs);
+	}
+	print(join("\n", @jobs));
+	return 0;
+}
+sub PrintRunningJobsSlurm { my ($o) = @_;
+	return System("squeue --format '%i' | tail -n +2", 2);
+}
+sub printRunningJobs { my ($o) = @_;
+	my $f = 'PrintRunningJobs'. ucfirst($o->{type});
+	return $f->($o);
+}
 
 
 #main $#ARGV @ARGV %ENV
@@ -279,20 +302,21 @@ sub submitCommand { my ($cmd, $o) = @_;
 	}
 	my $result = !$optionsPresent? 1
 	: GetOptionsStandard($o,
-		'help', 'jid=s', 'jidReplace|thisjid=s', 'exports=s',
+		'help', 'runningJobs', 'jid=s', 'jidReplace|thisjid=s', 'exports=s',
 		'waitForJids=s',
 		'outputDir=s', 'temp!', 'logFiles=s', 'workingDir=s',
 		'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
-		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s', 'type=s'
+		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s', 'type=s',
 	);
 	$o->{outputDir} = tempFileName("$o->{tmpPrefix}_logs/log", undef, { mkdir => 1 }) if ($o->{temp});
 	# <!> heuristic for unquoting
 	$o->{unquote} = 1 if (!defined($o->{unquote}) && @ARGV == 1);
-	if ((!@ARGV && !defined($o->{cmdFromFile}))
+	if ((!@ARGV && !defined($o->{cmdFromFile}) && !$o->{runningJobs})
 		|| !$result || $o->{help} || (@ARGV == 1 && $ARGV[0] =~ m{^(--help|-h)$})) {
-		printf("USAGE: %s command arg1 ...\n$helpText", ($0 =~ m{/?([^/]*)$}o));
+		printf("USAGE: %s command [option1 ... --] arg1 ...\n$helpText", ($0 =~ m{/?([^/]*)$}o));
 		exit(!$result);
 	}
+	exit(printRunningJobs($o)) if ($o->{runningJobs});
 #	$c = readConfigFile($o->{config});
 #	$cred = KeyRing->new()->handleCredentials($o->{credentials}, '.this_cookie') || exit(0);
 	my $cmd = $o->{unquote}? join(' ', @ARGV): join(' ', map { qsS($_) } @ARGV);

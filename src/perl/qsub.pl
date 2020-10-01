@@ -253,7 +253,7 @@ sub submitCommandFromTemplate { my ($cmd, $o, $template) = @_;
 		'%{LOGOUTPUT}' => qs($logfDir. '/'. $logf),
 		'%{EXPORTS}' => join("\n", (map { "export $_" } @env)),
 		'%{SOURCE}' => join("\n", (map { ". $_" } @sourceFiles)),
-		'%{DEPENDON}' => $#jids >= 0? join(':', @jids): $interpolationMagic,
+		'%{DEPENDON}' => (@jids > 0)? join(':', @jids): $interpolationMagic,
 	);
 	my $t = mergeDictToString(\%i, $template);
 	# delete lines without interpolated value

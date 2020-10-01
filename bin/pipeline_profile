@@ -2,7 +2,7 @@
 
 BASEDIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/../
 export PIPELINEBASE=`realpath $BASEDIR`
-# set PIPELINE_HOST if using a cluster as nodes will have a different host name
+# set PIPELINE_HOST if using a cluster form a  node (interactive login) which  will have a different host name
 export HOST=${PIPELINE_HOST:-`hostname`}
 export HOSTSUFFIX=`echo $PIPELINEBASE | perl -ne "@a = ((m{(_.*)})); print @a"`
 export HOST_PIPELINE="$HOST$HOSTSUFFIX"
@@ -15,6 +15,8 @@ export RINCLUDES=RgenericAll.R
 export RSCRIPTS=$RPRIVATE:$PIPELINEBASE/src/R
 export PERL5LIB=$PIPELINEBASE/src/perl-lib:$HOME/perl5/lib/perl5:$PERL5LIB
 export QSUB_SOURCEFILES=$QSUB_SOURCEFILES:$PIPELINEBASE/bin/pipeline_profile
+# will be overwritten by pipeline defaults in Piplines/defaults_*, defaults file is determined by the HOST_PIPELINE combo
+export QSUB_QUEUE=all
 
 if [ "$1" == '-v' ]; then
 	pipeline_profile_print

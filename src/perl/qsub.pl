@@ -47,10 +47,14 @@ my $helpText = <<HELP_TEXT;
 	qsub.pl --unquote -- 'echo hello world > /tmp/redirect'
 
 	# environment
-	# do not use default PATH export
-	qsub.pl --exports -
+	# do not use default PATH export (left of dash)
+	qsub.pl --exports PATH,- -- echo
 	# exactly export PERL5LIB
-	qsub.pl --exports -,PERL5LIB
+	qsub.pl --exports -,PERL5LIB -- echo
+	# reset PATH, export PERL5LIB, set A and B
+	qsub.pl --exports PATH,-,PERL5LIB --setenv A=1+++B=2 -- echo hello
+	# source the envrionment
+	qsub.pl --sourcefiles .env_profile -- echo
 
 	# job dependencies
 	# Append the job id of the submitted job to file /tmp/myJobIds
@@ -58,6 +62,7 @@ my $helpText = <<HELP_TEXT;
 	# Wait for jobs to finish prior to starting new job
 	qsub.pl --waitForJids /tmp/myJobIds -- echo hello world --echoOption
 	qsub.pl --waitForJids 100,200,230 -- echo hello world --echoOption
+	echo -e '1\n2\n3' > /tmp/myjid123s ; qsub.pl --waitForJids /tmp/myjids --loglevel 5 --dologonly -- echo hello ; rm /tmp/myjids123
 
 	# debugging
 	# print and run the generated qsub script
@@ -102,6 +107,7 @@ CMD
 	},
 	slurm => {
 		TEMPLATE => qq{#!/bin/sh
+#SBATCH --partition=%{QUEUE}
 #SBATCH --ntasks=1
 #SBATCH --core-spec=%{NCPU}
 ##SBATCH --cpu-bind=cores
@@ -110,9 +116,10 @@ CMD
 #SBATCH --nice=20
 #SBATCH --oversubscribe
 #SBATCH --mem %{MEMORY}
-#SBATCH --dependency afterok:%{DEPENDON}
+#SBATCH --dependency afterany:%{DEPENDON}
 
 %{EXPORTS}
+%{SOURCE}
 cd %{WORKINGDIRQ}
 date +'%F %H:%M:%S' > %{LOGOUTPUT}.log
 echo %{COMMANDQ} >> %{LOGOUTPUT}.log
@@ -149,8 +156,8 @@ sub submitCommandOgs { my ($cmd, $o, $t) = @_;
 	my @envKeys = grep { $_ ne '' } split(/\s*,\s*/, $o->{exports});
 	my @sourceFiles = grep { !($_ =~ m{^\s*$}sog) } unique(split(/\s*:\s*/, $o->{sourceFiles}));
 	my @envReset = which_indeces(['-'], [@envKeys]);
-	@env = @envKeys[($envReset[0] + 1) .. $#envKeys] if (defined($envReset[0]));
-	my @env = map { "$_=$ENV{$_}" } grep { !/$\s*^/ } @envKeys;
+	@envReset = @envKeys[($envReset[0] + 1) .. $#envKeys] if (defined($envReset[0]));
+	my @env = map { "$_=$ENV{$_}" } grep { !/^\s*$/ } @envKeys;
 	my $setenv = join("\n", split(/\Q$o->{setenvsep}\E/, $o->{setenv}));
 
 	# <p> generic options
@@ -207,6 +214,17 @@ sub submitCommandOgs { my ($cmd, $o, $t) = @_;
 	writeFile($o->{jidReplace}, "$jid\n", { doMakePath => 1 } ) if (defined($o->{jidReplace}));
 }
 
+sub environment { my ($o) = @_;
+	my @envKeys = grep { $_ ne '' } split(/\s*,\s*/, $o->{exports});
+	my @envReset = which_indeces(['-'], [@envKeys]);
+	my @envR = defined($envReset[0])
+		? map { "$_=" } @envKeys[0 .. ($envReset[0] - 1)]
+		: ();
+	@envKeys = @envKeys[(defined($envReset[0])? ($envReset[0] + 1): 0) .. $#envKeys];
+	my @envE = map { "$_=$ENV{$_}" } grep { ! $_ =~ /$\s*^/ } @envKeys;
+	return (@envR, @envE, split(/\Q$o->{setenvsep}\E/, $o->{setenv}));
+}
+
 my $interpolationMagic = '%%undefined%%';
 my $sep = ('-' x 80). "\n";
 sub submitCommandFromTemplate { my ($cmd, $o, $template) = @_;
@@ -218,7 +236,14 @@ sub submitCommandFromTemplate { my ($cmd, $o, $template) = @_;
 		#$cmdInf	# use command infix, assume dir to be unique
 		splitPathDict(tempFileName("$logfDir/$cmdInf", undef, { touch => 1 }))->{file}
 	);
+	my @sourceFiles = grep { !($_ =~ m{^\s*$}sog) } unique(split(/\s*:\s*/, $o->{sourceFiles}));
+	my @jids = grep { !!$_ } (($o->{waitForJids} =~ m{^\d+(,\d+)*$}so)
+		? split(/,/, $o->{waitForJids})
+		: split("\n", readFile($o->{waitForJids})));
+	my @env = environment($o);
+
 	my %i = (
+		'%{QUEUE}' => $o->{queue},
 		'%{NCPU}' => firstDef($o->{Ncpu}, $interpolationMagic),
 		'%{MEMORY}' => firstDef($o->{memory}, $interpolationMagic),
 		'%{WORKINGDIR}' => $wd,
@@ -226,7 +251,9 @@ sub submitCommandFromTemplate { my ($cmd, $o, $template) = @_;
 		'%{COMMAND}' => $cmd,
 		'%{COMMANDQ}' => qs($cmd),
 		'%{LOGOUTPUT}' => qs($logfDir. '/'. $logf),
-		'%{EXPORTS}' => firstDef($exports, $interpolationMagic)
+		'%{EXPORTS}' => join("\n", (map { "export $_" } @env)),
+		'%{SOURCE}' => join("\n", (map { ". $_" } @sourceFiles)),
+		'%{DEPENDON}' => $#jids >= 0? join(':', @jids): $interpolationMagic,
 	);
 	my $t = mergeDictToString(\%i, $template);
 	# delete lines without interpolated value
@@ -283,7 +310,7 @@ sub printRunningJobs { my ($o) = @_;
 		#outputDir => firstDef($ENV{QSUB_LOG_DIR}, 'qsub_jobOutputs'),
 		outputDir => $ENV{QSUB_LOG_DIR},
 		moveOutputDir => 0,
-		queue => firstDef($ENV{QSUB_QUEUE}, 'default'),
+		queue => firstDef($ENV{QSUB_QUEUE}, 'all'),
 		priority => firstDef($ENV{QSUB_PRIORITY}, 0),
 		tmpPrefix => firstDef($ENV{QSUB_TMPPREFIX}, "/tmp/perl_$ENV{USER}/qsub"),
 		exports => 'PATH',
@@ -313,7 +340,7 @@ sub printRunningJobs { my ($o) = @_;
 	$o->{unquote} = 1 if (!defined($o->{unquote}) && @ARGV == 1);
 	if ((!@ARGV && !defined($o->{cmdFromFile}) && !$o->{runningJobs})
 		|| !$result || $o->{help} || (@ARGV == 1 && $ARGV[0] =~ m{^(--help|-h)$})) {
-		printf("USAGE: %s command [option1 ... --] arg1 ...\n$helpText", ($0 =~ m{/?([^/]*)$}o));
+		printf("USAGE: %s [option1 ... --] command [command-options] arg1 ...\n$helpText", ($0 =~ m{/?([^/]*)$}o));
 		exit(!$result);
 	}
 	exit(printRunningJobs($o)) if ($o->{runningJobs});

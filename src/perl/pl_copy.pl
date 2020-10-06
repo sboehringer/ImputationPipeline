@@ -46,7 +46,7 @@ sub copyFiles { my ($c, @files) = @_;
 		return $_ if (! -l $sp->{dir});
 		my $l = readlink($sp->{dir});
 		return $l if (!splitPathDict($l)->{isRelative});
-		return join('/', splice($sp->{dirComponents}, 0, -1), $l, $sp->{file});
+		return join('/', splice(@{$sp->{dirComponents}}, 0, -1), $l, $sp->{file});
 	}->($_) } @files;
 
 	# <p> aggregate all files
@@ -61,7 +61,7 @@ sub copyFiles { my ($c, @files) = @_;
 			#	run-folder, pipeline stage
 			my $r = { %f,
 				name =>  $sp->{isRelative}
-					? join('/', splice(splitPathDict($files[$i])->{dirComponents}, 0, -2)). "/$f{name}"
+					? join('/', splice(@{splitPathDict($files[$i])->{dirComponents}}, 0, -2)). "/$f{name}"
 					: $f{name}
 			};
 			$r

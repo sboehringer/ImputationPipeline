@@ -8,8 +8,8 @@
 library('MASS');
 
 testGlmOrdPerSnp = function(data, formula1, formula0, snp, ...) {
-	m1 = polr(f1, data, Hess = T);
-	m0 = polr(f0, data, Hess = T);
+	m1 = polr(formula1, data, Hess = T);
+	m0 = polr(formula0, data, Hess = T);
 	# <N> workaround for above call in order to make confint work w/o Hess = T -> ... not successful
 	#m1 = eval(parse(text = Sprintf('polr(%{f1}s)', f1 = formula.to.character(f1))), envir = data);
 	#m0 = polr(f0, data);

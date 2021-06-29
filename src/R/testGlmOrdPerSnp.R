@@ -8,6 +8,7 @@
 library('MASS');
 
 testGlmOrdPerSnp = function(data, formula1, formula0, snp, ...) {
+	#browser();
 	m1 = polr(formula1, data, Hess = T);
 	m0 = polr(formula0, data, Hess = T);
 	# <N> workaround for above call in order to make confint work w/o Hess = T -> ... not successful
@@ -31,9 +32,9 @@ testGlmOrdPerSnp = function(data, formula1, formula0, snp, ...) {
 
 	r = as.list(c(
 		coefficients(m0),
-		summary(m0)$coefficients[, 'Std. Error'],
+		summary(m0)$coefficients[names(coefficients(m0)), 'Std. Error'],
 		coefficients(m1),
-		summary(m1)$coefficients[, 'Std. Error'],
+		summary(m1)$coefficients[names(coefficients(m1)), 'Std. Error'],
 		anova(m0, m1)[2, 'Pr(Chi)']
 	));
 	names(r) = c(

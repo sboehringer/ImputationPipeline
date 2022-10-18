@@ -55,16 +55,15 @@ Log("Return code:$ret");
 	# query job ids (jids) currently queued
 	sub queuedJobs {
 		my @jobs;
-# 		my $xml = substr(Set::firstDef(`which xml 2>/dev/null`, `which xmlstarlet 2>/dev/null`), 0, -1);
-# 		if (defined($xml)) {
-# 			@jobs = (`qstat -u \\* -xml | $xml sel -t -m '//JB_job_number' -v 'text()' -o ' '`
-# 				=~ m{(\d+)}sog);
-# 		} else {
-# 			my $jobs = TempFileNames::System("qstat -u '*' | tail -n+3 | cut -d ' ' -f 1 -",
-# 				7, undef, { returnStdout => 'YES'})->{output};
-# 			@jobs = split(/\n/, $jobs);
-# 		}
-		@jobs = (`qsub.pl --runningJobs --` =~ m{(\d+)}sog);
+		my $xml = substr(Set::firstDef(`which xml 2>/dev/null`, `which xmlstarlet 2>/dev/null`), 0, -1);
+		if (defined($xml)) {
+			@jobs = (`qstat -u \\* -xml | $xml sel -t -m '//JB_job_number' -v 'text()' -o ' '`
+				=~ m{(\d+)}sog);
+		} else {
+			my $jobs = TempFileNames::System("qstat -u '*' | tail -n+3 | cut -d ' ' -f 1 -",
+				7, undef, { returnStdout => 'YES'})->{output};
+			@jobs = split(/\n/, $jobs);
+		}
 		return @jobs;
 	}
 	no Moose;

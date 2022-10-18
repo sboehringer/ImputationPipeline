@@ -1,0 +1,38 @@
+#	Pipe name:
+#		-
+#	Creation date:
+#		Wed Nov 23 16:42:00 CET 2016
+#	Description:
+#		Meta-pipe to include all pipes necessary to extract SNPs from an imputation run
+#	Input:
+#		3col transposed genotype files via inject
+#	Output:
+#		3col for selected SNPs
+#	Pipe instances:
+#		-
+
+#
+#	<p> dependencies
+#
+
+@include	imputation_qt_snptest.pipe
+@include	inject.pipe
+@include	copy.pipe
+@include	selectSnps.pipe
+
+#
+#	<p> input
+#
+
+# directory of another pipeline run containing imputations, with spec file
+G:PipeInput				__must_be_specified__
+G:PipeInput_example		../myImputation/imputation_06
+selectSnpsImpute2:strata			__must_be_specified__
+selectSnpsImpute2:strata_example	snpList1.txt,snpList2.txt
+
+#
+#	<p> specification
+#
+
+G:Name			SNPSelection
+G:SNPSelection	injectExternal | ( selectSnpsImpute2 | SummarizeImpute2select ) | Copy:Union

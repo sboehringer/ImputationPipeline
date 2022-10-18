@@ -1,7 +1,77 @@
 #
 #	Rmeta.R
 #Wed Jun  3 15:11:27 CEST 2015
+#Mon 27 Jun 2005 10:49:06 AM CEST
+#system("~/src/Rprivate/exportR.sh");
+#system("~/src/Rprivate/exportR.sh"); source("RgenericAllRaw.R"); source("Rgenetics.R"); loadLibraries();
+#system('. ~/src/Rprivate/exportR.sh ; cp ~/src/Rprivate/RgenericAllRaw.R .');
 
+#
+#	<p> Meta-helpers
+#
+
+#
+#	level dependend logging
+# moved from Rsystem.R to break dependency cylce (22.3.2017)
+#Global..Log..Level = 4;
+#Default..Log..Level = 4;
+#assign(Default..Log..Level, 4, envir = .GlobalEnv);
+Log_env__ <- new.env();
+assign('DefaultLogLevel', 4, envir = Log_env__);
+
+#' Log a message to stderr.
+#' 
+#' Log a message to stderr. Indicate a logging level to control verbosity.
+#' 
+#' This function prints a message to stderr if the condition is met that a
+#' global log-level is set to greater or equal the value indicated by
+#' \code{level}. \code{Log.level} returns the current logging level.
+#' 
+#' @aliases Log Log.setLevel Log.level
+#' @param o Message to be printed.
+#' @param level If \code{Log.setLevel} was called with this value, subsequent
+#' calls to \code{Log} with values of \code{level} smaller or equal to this
+#' value will be printed.
+#' @author Stefan Böhringer <r-packages@@s-boehringer.org>
+#' @seealso \code{\link{Log.setLevel}}, ~~~
+#' @keywords ~kwd1 ~kwd2
+#' @examples
+#' 
+#' 	Log.setLevel(4);
+#' 	Log('hello world', 4);
+#' 	Log.setLevel(3);
+#' 	Log('hello world', 4);
+#' 
+Log = function(o, level = get('DefaultLogLevel', envir = Log_env__), doPrint = NULL) {
+	if (level <= get('GlobalLogLevel', envir = Log_env__)) {
+		cat(sprintf("R %s: %s\n", date(), as.character(o)));
+		if (!is.null(doPrint)) print(doPrint);
+	}
+}
+Logs = function(o, level = get('DefaultLogLevel', envir = Log_env__), ..., envir = parent.frame()) {
+	Log(Sprintf(o, ..., envir = envir), level = level);
+}
+LogS = function(level, s, ..., envir = parent.frame()) {
+	Log(Sprintf(s, ..., envir = envir), level = level);
+}
+
+Log.level = function()get('GlobalLogLevel', envir = Log_env__);
+Log.setLevel = function(level = get('GlobalLogLevel', envir = Log_env__)) {
+	assign("GlobalLogLevel", level, envir = Log_env__);
+}
+Log.expr = function(level, expr, envir = parent.frame()) {
+	oldLevel = Log.level();
+	on.exit(Log.setLevel(oldLevel));
+	Log.setLevel(level);
+	return(eval(expr, envir = envir));
+}
+
+Log.setLevel(4);	# default
+
+
+Stop = function(..., call. = TRUE, domain = NULL, envir = parent.frame()) {
+	stop(Sprintf(list(...)[[1]], envir = envir), call., domain)
+}
 
 #
 #	<p> Meta-functions
@@ -95,6 +165,19 @@ environment_evaled = function(f, functions = FALSE, recursive = FALSE) {
 environment_eval = function(f, functions = FALSE, recursive = FALSE) {
 	environment(f) = environment_evaled(f, functions = functions, recursive = recursive);
 	f
+}
+
+#
+#	Parsing, evaluation
+#
+
+Parse = function(text, ...) {
+	parse(text = text, ...)
+}
+Eval = function(e, ..., envir = parent.frame(), autoParse = T) {
+	if (autoParse && is.character(e)) e = Parse(e, ...);
+	eval(e, envir = envir)
+	
 }
 
 #
@@ -194,11 +277,45 @@ FreezeThawControlDefaults = list(
 	freeze_relative = F, freeze_ssh = T, logLevel = Log.level()
 );
 
+freezeObjectsCooked = function(objects, envir = parent.frame(), defaultEnv = 0) {
+	if (is.null(objects)) return(NULL);
+	ns = names(objects);
+	o = lapply(seq_along(objects), function(i) {
+		if (ns[i] != '') {
+			lapply(objects[[i]], function(n)setNames(list(get(n, envir = get(ns[i], envir))), n));
+		} else setNames(list(get(objects[[i]], envir = envir)), objects[[i]])
+	});
+	return(setNames(o, ns));
+}
+thawObjectsCooked = function(objects, envir = parent.frame(), assignPos = 1) {
+	if (is.null(objects)) return(NULL);
+	ns = names(objects);
+	freeze = lapply(seq_along(objects), function(i) {
+		if (ns[i] != '') {
+			os = sapply(objects[[i]], function(o) {
+				this = mget(ns[i], envir, ifnotfound = NA)[[1]];
+				if (!is.environment(this)) {
+					this = new.env();
+					assign(ns[i], this, pos = assignPos);
+				}
+				assign(names(o[1]), o[[1]], envir = this);
+				return(names(o[1]));
+			});
+			return(os);
+		} else {
+			assign(names(objects[[i]]), objects[[i]][[1]], pos = assignPos);
+			return(names(objects[[i]]));
+		}
+	});
+	return(setNames(freeze, ns));
+}
+
 thawCall = function(
 	freeze_control = FreezeThawControlDefaults,
-	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag)) {
+	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
+	envir = .GlobalEnv) {
 
-	load(freeze_file, envir = .GlobalEnv);
+	load(freeze_file, envir = envir);
 	r = with(callSpecification, {
 		for (library in freeze_control$libraries) {
 			eval(parse(text = sprintf('library(%s)', library)));
@@ -206,6 +323,7 @@ thawCall = function(
 		for (s in freeze_control$sourceFiles) source(s, chdir = T);
 		Log.setLevel(freeze_control$logLevel);
 		if (!is.null(freeze_control$rng)) RNGuniqueSeed(freeze_control$rng);
+		thawObjectsCooked(freeze_objects, envir);
 
 		if (is.null(callSpecification$freeze_envir)) freeze_envir = .GlobalEnv;
 		# <!> freeze_transformation must be defined by the previous source/library calls
@@ -223,7 +341,6 @@ frozenCallWrap = function(freeze_file, freeze_control = FreezeThawControlDefault
 	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
 	sp = splitPath(freeze_file, ssh = freeze_ssh);
 	file = if (freeze_relative) sp$file else sp$path;
-browser();
 	#wrapperPath = sprintf("%s-wrapper.RData", splitPath(file)$fullbase);
 	r = sprintf("R.pl --template raw --no-quiet --loglevel %d --code 'eval(get(load(\"%s\")[[1]]))' --",
 		logLevel, file);
@@ -239,7 +356,8 @@ frozenCallResults = function(file) {
 freezeCallEncapsulated = function(call_,
 	freeze_control = FreezeThawControlDefaults,
 	freeze_tag = 'frozenFunction', freeze_file = sprintf('%s/%s.RData', freeze_control$dir, freeze_tag),
-	freeze_save_output = F, freeze_objects = NULL, thaw_transformation = identity)
+	freeze_save_output = F, freeze_objects = NULL, freeze_objects_envir = parent.frame(),
+	thaw_transformation = identity)
 	with(merge.lists(FreezeThawControlDefaults, freeze_control), {
 
 	sp = splitPath(freeze_file, ssh = freeze_ssh);
@@ -267,7 +385,8 @@ freezeCallEncapsulated = function(call_,
 	#Save(c('callWrapper', 'callSpecification', 'thawCall', objects),
 	#	file = freeze_file, symbolsAsVectors = T);
 	#Save(c(c('callWrapper', 'callSpecification', 'thawCall'), objects),
-	Save(c('callWrapper', 'callSpecification', 'thawCall', freeze_objects),
+	freeze_objects = freezeObjectsCooked(freeze_objects, freeze_objects_envir);
+	Save(c('callWrapper', 'callSpecification', 'thawCall', 'freeze_objects'),
 		file = freeze_file, symbolsAsVectors = T);
 	freeze_file
 })
@@ -319,7 +438,8 @@ freezeCall = function(freeze_f, ...,
 
 	freezeCallEncapsulated(call_,
 		freeze_control = freeze_control, freeze_tag = freeze_tag,
-		freeze_file = freeze_file, freeze_save_output = freeze_save_output, freeze_objects = freeze_objects,
+		freeze_file = freeze_file, freeze_save_output = freeze_save_output,
+		freeze_objects = freeze_objects, freeze_objects_envir = freeze_envir,
 		thaw_transformation = thaw_transformation
 	);
 }
@@ -352,7 +472,37 @@ encapsulateCall = function(.call, ..., envir__ = environment(.call), do_evaluate
 	call_
 }
 
+#
+# compact saving for delayed loading
+#
+# <i> make 
+# object: list with single element
+freezeObject = function(object, env) {
+	dir = attr(env, 'path');
+	name = names(object);
+	file = Sprintf('%{dir}s/%{name}s.Rdata');
+print(file);
+	save(list = name, envir = as.environment(object), file = file);
+	eval(substitute(delayedAssign(OBJECT, get(load(file = FILE)[1])),
+		list(OBJECT = name, FILE = file)), envir = env);
+}
+freezeObjectsList = function(objects, pos = 2, parent = parent.frame(), freezeObjectDir = NULL) {
+	td = firstDef(freezeObjectDir, tempdir());
+	env = new.env(parent = parent);
+	attr(env, "path") = td;
+
+	if (any(names(objects) == '')) stop('Only named objects can be frozen. Check for naming conflicts.');
+	#n = names(objects) == '';
+	#if (sum(n) > 0) names(objects)[n] = paste('ARG_ANON__', 1:sum(n), sep = '');
+	nlapply(objects, function(n)freezeObject(objects[n], env = env));
+	env
+}
+freezeObjects = function(..., pos = 2, parent = parent.frame(), freezeObjectDir = NULL) {
+	freezeObjectsList(list(...), pos = pos, parent, freezeObjectDir)
+}
 
 #
 #	</p> freeze/thaw functions
 #
+
+Deparse = function(o)join(deparse(o));

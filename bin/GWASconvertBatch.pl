@@ -1,0 +1,1 @@
+../src/perl/GWASconvertBatch.pl

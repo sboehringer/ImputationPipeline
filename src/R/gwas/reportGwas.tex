@@ -280,7 +280,7 @@ To avoid uninterpretable results, SNPs were filtered again based on minor allele
 
 \subsubsection{Manhattan plot}
 
-The manhattan-plot of the data for model \emph{ASS:MODEL} is given in the following figure. Significance level (red horizontal line) is set to ASS:PvalueCutoff. ASS:Nmarkers markers were analyzed.
+The manhattan-plot of the data for model \emph{ASS:MODEL} is given in the following figure. Significance level (red horizontal line) is set to ASS:PvalueCutoff. For ASS:Nmarkers markers the association model could be evaluated. For ASS:NanalysisFail markers the model failed to evaluate.
 
 \begin{center}
 	\includegraphics[width=1\textwidth]{ASS:MANHATTEN_plot}
@@ -296,9 +296,15 @@ The corresponding QQ-plot is given as follows.
 
 \subsubsection{List of markers by decreasing association}
 
-The top QC:PAR:ASS:TopN number of association are listed in the following table.
+The top ASS:PAR:TopN number of association are listed in the following table.
 
-ASS:TABLE
+ASS:TABLE:P
+
+Regression coefficients associated with the model corresponding to the SNPs above are given in the following table.
+
+ASS:TABLE:Coeff
+
+Number of NA-values in full result table: ASS:Nnas.
 
 \subsubsection{Inflation factor}
 

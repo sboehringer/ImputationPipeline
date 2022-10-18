@@ -74,7 +74,10 @@ applyLmPerSnp:formula1			__must_be_specified__
 applyLmPerSnp:formula1_example	BMI ~ MARKER_dosage + Age + Sex
 applyLmPerSnp:formula0			__must_be_specified__
 applyLmPerSnp:formula0_example	BMI ~ Age + Sex
+applyLmPerSnp:select			TRUE
+applyLmPerSnp:select_example	nit(type = 'CCC')
 applyLmPerSnp:extraOptions		--formula1 'applyLmPerSnp:formula1' --formula0 'applyLmPerSnp:formula0' \
+	--select 'applyLmPerSnp:select'
 	--writeAsTable 1 --digits 6
 applyLmPerSnp:meta				{ formula0 = "applyLmPerSnp:formula0"; formula1 = "applyLmPerSnp:formula1"; }
 
@@ -89,8 +92,10 @@ applyLogisticPerSnp:formula1			__must_be_specified__
 applyLogisticPerSnp:formula1_example	KRAS ~ MARKER_dosage + Age + Sex
 applyLogisticPerSnp:formula0			__must_be_specified__
 applyLogisticPerSnp:formula0_example	KRAS ~ Age + Sex
+applyLogisticPerSnp:select				TRUE
+applyLogisticPerSnp:select_example	nit(type = 'CCC')
 applyLogisticPerSnp:extraOptions		--formula1 'applyLogisticPerSnp:formula1' \
-	--formula0 'applyLogisticPerSnp:formula0' --writeAsTable 1 --digits 6
+	--formula0 'applyLogisticPerSnp:formula0' --select 'applyLogisticPerSnp:select' --writeAsTable 1 --digits 6
 applyLogisticPerSnp:meta				{ \
 	formula0 = "applyLogisticPerSnp:formula0"; \
 	formula1 = "applyLogisticPerSnp:formula1"; \
@@ -107,5 +112,39 @@ applyCoxPerSnp:formula1			__must_be_specified__
 applyCoxPerSnp:formula1_example	Surv(time, event) ~ MARKER + age + sex
 applyCoxPerSnp:formula0			__must_be_specified__
 applyCoxPerSnp:formula0_example	Surv(time, event) ~ age + sex
-applyCoxPerSnp:extraOptions		--formula1 'applyCoxPerSnp:formula1' --formula0 'applyCoxPerSnp:formula0'
+applyCoxPerSnp:select			TRUE
+applyCoxPerSnp:select_example	nit(type = 'CCC')
+applyCoxPerSnp:extraOptions		--formula1 'applyCoxPerSnp:formula1' --formula0 'applyCoxPerSnp:formula0' --select 'applyCoxPerSnp:select'
 applyCoxPerSnp:meta				{ formula0 = "applyCoxPerSnp:formula0"; formula1 = "applyCoxPerSnp:formula1"; }
+
+#
+#	Instance: perform ordinal regression per SNP
+#
+
+applyGlmOrdPerSnp:isa				applyRperSnp
+applyGlmOrdPerSnp:RfunctionSource	testGlmOrdPerSnp.R
+applyGlmOrdPerSnp:RfunctionName		testGlmOrdPerSnp
+applyGlmOrdPerSnp:formula1			__must_be_specified__
+applyGlmOrdPerSnp:formula1_example	y ~ MARKER + age + sex
+applyGlmOrdPerSnp:formula0			__must_be_specified__
+applyGlmOrdPerSnp:formula0_example	y ~ age + sex
+applyGlmOrdPerSnp:select			TRUE
+applyGlmOrdPerSnp:select_example	nit(type = 'CCC')
+applyGlmOrdPerSnp:extraOptions		--formula1 'applyGlmOrdPerSnp:formula1' --formula0 'applyGlmOrdPerSnp:formula0' --select 'applyGlmOrdPerSnp:select'
+applyGlmOrdPerSnp:meta				{ formula0 = "applyGlmOrdPerSnp:formula0"; formula1 = "applyGlmOrdPerSnp:formula1"; }
+
+#
+#	Instance: perform logistic mixed model per SNP
+#
+
+applyGlmrPerSnp:isa				applyRperSnp
+applyGlmrPerSnp:RfunctionSource	testGlmrPerSnp.R
+applyGlmrPerSnp:RfunctionName	testGlmrPerSnp
+applyGlmrPerSnp:formula1		__must_be_specified__
+applyGlmrPerSnp:formula1_example	y ~ MARKER + age + sex
+applyGlmrPerSnp:formula0		__must_be_specified__
+applyGlmrPerSnp:formula0_example	y ~ age + sex
+applyGlmrPerSnp:select			TRUE
+applyGlmrPerSnp:select_example	nit(type = 'CCC')
+applyGlmrPerSnp:extraOptions	--formula1 'applyGlmrPerSnp:formula1' --formula0 'applyGlmrPerSnp:formula0' --select 'applyGlmrPerSnp:select'
+applyGlmrPerSnp:meta			{ formula0 = "applyGlmrPerSnp:formula0"; formula1 = "applyGlmrPerSnp:formula1"; }

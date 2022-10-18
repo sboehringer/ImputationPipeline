@@ -1,22 +1,19 @@
 #
-#	<p> template for performing 
+#	<p> template for performing imputation only
 #
 
-@include	imputation_qt_snptest.pipe
-@include	inject.pipe
-@include	copy.pipe
-@include	applyR.pipe
-@include	filterResults.pipe
-@include	gwas_report.pipe
+#
+#	this is a pipeline template to run imputation with a prephasing step
+#
+
+# input parameters
+
+@include	imputation.pipe
+
+G:Name					Shapeit
+G:Shapeit				PrephasedShapeit:imputationPrephased
 
 # <p> Inputs
-G:PipeInput				PREFIX
-G:VariableFile			[SEP=C,HEADER=T,HEADERMAP=__HEADERMAP__]:PREFIX-variables.csv
+G:PipelineInput			PREFIX
+G:PipeInput				G:PipelineInput
 G:referencePanel		REFPANEL
-applyRperSnp:pedFile	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,SEP=S]:InputPlink_OUTPUT_DIR/pedfile
-
-# <p> pipeline
-G:Models		( TESTS_PIPELINE )
-G:PipelineTests	G:Models | Copy:Union | filterResults | gwasReport
-
-TESTS_FORMULAS

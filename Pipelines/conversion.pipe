@@ -13,20 +13,40 @@
 #
 
 #
+# <p> input plink
+#
 InputPlink:Options	
+InputPlink:cmd		loaddata.py -m G:PipeInput -o OUTPUT_DIR InputPlink:Options	
+InputPlink:ENV_ADD_QSUB_OPTIONS	 --memory 16G
+
+#
+# <p> map-replace
+#
 MapReplace:Options
 MapReplace:ENV_ADD_QSUB_OPTIONS	 --memory 16G
-
-InputPlink:cmd		loaddata.py -m G:PipeInput -o OUTPUT_DIR InputPlink:Options	
-# map-replace
 MapReplace:cmd		mapreplace.py --spec INPUTS --hapmap G:referencePanel -o OUTPUT_DIR MapReplace:Options
-# convert to tped format
+
+#
+# <p> convert to tped format
+#
 tped:Options		--type ped2tped --qsub
-# convert to 3column format
+# support big input files
+tped:ENV_ADD_QSUB_OPTIONS	--memory 32G
+
+#
+# <p> convert to 3column format
+#
 3col:Options		--type tped2tped3col --qsub
+3col:ENV_ADD_QSUB_OPTIONS	--memory 32G
 
-
+#
+#	<p> input plink for X-chromosome analysis
+#
 InputPlinkX:Options	--chrX
 InputPlinkX:cmd		InputPlink:cmd InputPlinkX:Options
+
+#
+#	<p> mapreplace for X-chromosome analysis
+#
 MapReplaceX:Options	--chrX
 MapReplaceX:cmd		MapReplace:cmd MapReplaceX:Options

@@ -1,0 +1,17 @@
+#
+#	<p> template for performing 
+#
+
+@include	associate.pipe
+
+# <p> Inputs
+# directory of another pipeline run containing imputations, with spec file
+G:PipelineInput			IMPUTATION_PIPELINE
+G:VariableFile			[SEP=C,HEADER=T,HEADERMAP=__HEADERMAP__,AS_CHARACTER=iid]:PREFIX-variables.csv
+applyRperSnp:pedFile	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,SEP=S,AS_CHARACTER=iid]:EXTERNAL_PED_FILE
+filterResults:maf		FILTER_MAF
+
+# <p> pipeline
+G:Models		( TESTS_PIPELINE )
+
+TESTS_FORMULAS

@@ -4,13 +4,19 @@
 
 source('gwas_qc.R');
 source('gwas_analysis.R');
+source('gwas_downstream.R');
+source('gwas_prs.R');
+source('gwas_meta.R');
 
 gwasParameterDefaults = list(
 	# flags controlling execution of the pipeline
 	readVariablesCache = F,
 	readVariablesDeduplicateFam = FALSE,	#<!> not implemented
+	#Example: readVariablesDeduplicateIdLabels = 'Leeg',
+	# deduplicate ids starting with 'Leeg'
 	readVariablesDeduplicateIds = FALSE,
 	readVariablesEnforceUniqueIds = TRUE,
+	readVariablesRemoveNAids = TRUE,
 	qcParPathesExludedSNPs = NULL,
 	qcPerformDistRun = T,	# run long running jobs
 	# shell environment
@@ -30,15 +36,24 @@ gwasParameterDefaults = list(
 
 	qcParMissingLcutoff = 0.02,
 
+	# individuals
 	qcParIMissCutOff = 0.02,
+	qcParIexlusionCol = NULL,
+	qcParIexclusionFiles = NULL,	# fed into readTable, use first column or column specified (next par)
+	qcParIexclusionFilesColumn = NULL,
+	qcParIexclusionList = NULL,		# list ids directly for exclusion
 	qcIgnoreSexCheck = F,
 
+	# markers
+	qcParAfCutoff = 0.01,
 	qcParHWEzoom = 1e3,
 	qcParHWEzoomQuantile = .05,
 	qcParInbreedingCIlevel = .95,
 	qcParTechnicalDuplicatesListCount = 30,
+
 	# <p> integrative analysis
 	qcParPruning = list(windowSize = 50, windowShift = 5, thresholdVIF = 2),
+	qcParMDSDims = 7,
 	qcParMdsUsePrunedSnps = T,
 	qcParMdsRule = '',
 	qcParMdsForce = '',
@@ -52,20 +67,30 @@ gwasParameterDefaults = list(
 	qcParIBSruleIBS01 = '',
 	qcParPruning = list(windowSize = 50, windowShift =  5, thresholdVIF = 2),
 
-	assParMaf = 0.01,
+	# association
 	assParCountMDScomponents = c(),
 	assParFlipToRare = T,	# recode genotypes to calculate effect according to allele w/ MAF < 0.5
-	assParTopN = 70,
+	assParTopN = 100,
 	assParMafTest = 0.00,	# maf for complete data to be tested (0 for compatibility as default)
 							# reasonably 0.01 or 0.05 depending on sample size
+	assParMafTestImp = 0.02,# maf at which to filter imputation results
+	assParGtfsTest = 0.005,	# if two genotypes have frequency less than assParGtfsTest,
+							# exclude SNP; relevant when only heterozygotes are observed
+							# should be filtered by earlier steps
 	assManhattenCutoff = 5e-8,
-	assPerfModels = NULL,	# perform all models by default, otherwise model indeces are given
 
 	# as per default, take sex from ped file
 	filesFamFormat = '[HEADER=F,SEP=S,NAMES=fid.gt;id;pid.gt;mid.gt;sex.gt;affected.gt,CONST=genotyped:1]',
 	filesMergeBy = 'id',
 
-	outputFileTemplate = '%{outputDir}s/reportGwas-%{runName}s.pdf'
+	outputFileTemplate = c(
+		'%{outputDir}s/export',
+		'%{outputDir}s/reportGwas-%{runName}s.pdf'
+	),
+
+	# <p> debugging parameters
+	assAnalyzeNsnpsPerChunk = 0,	# if > 0, only analzyze that many SNPs per chunk (splitting step
+	assPerfModels = NULL			# perform all models by default, otherwise model indeces are given
 );
 
 gwasParameterEraser = list(
@@ -77,16 +102,22 @@ gwasParameterEraser = list(
 	assParCountMDScomponents = c()
 );
 
+gwasReadVariablesDeduplicateFam = function(o) with(o, {
+	fam = readTable(sprintf('[HEADER=F,SEP=S,NAMES=fid;id;pid;mid;sex;y]:%s.fam', o$input));
+	if (!any(duplicated(fam$id))) return();
+	Log(join(c("Duplicated ids in fam-file: ", fam$id[duplicated(fam$id)])), 2);
+	Logs("Warning: modifying fam-file. Original stored in %{input}q.fam-duplicated-ids", logLevel = 2);
+	System(Sprintf("cp %{input}q.fam %{input}q.fam-duplicated-ids"), 2);
+	fam$id = deduplicateLabels(fam$id);
+	write.table(fam, file = Sprintf('%{input}q.fam'), col.names = F, row.names = F, quote = F);
+})
+
 gwasReadVariablesStd = function(o, readVariables.headermap = list()) with(o, {
-	if (readVariablesDeduplicateFam) {
-		fam = readTable(sprintf('%s:%s.fam', filesFamFormat, o$input));
-		stop("readVariablesDeduplicateFam option not implemented");
-	} else {
-		files = c(
-			readVariables.file,
-			sprintf('%s:%s.fam', filesFamFormat, o$input)
-		);
-	}
+	if (readVariablesDeduplicateFam) gwasReadVariablesDeduplicateFam(o);
+	files = c(
+		readVariables.file,
+		sprintf('%s:%s.fam', filesFamFormat, o$input)
+	);
 	d = NULL;
 	for (file in files) {
 		Logs('gwasReadVariablesStd: reading %{file}s', logLevel = 5);
@@ -232,10 +263,12 @@ gwasInitializeGlobalData = function(o) with(o, {
 	# <p> bim database
 	bimDb = Sprintf('%{outputPrefixGlobal}s_bim.sqlite');
 	bimPath = Sprintf('%{input}s.bim');
-	if (!file.exists(bimDb) || file.info(bimDb)$mtime < file.info(bimPath)$mtime) {
+	fi = file.info(bimDb);
+	if (!file.exists(bimDb) || fi$mtime < fi$mtime || fi$size == 0) {
 		csv2sqlite(bimPath, bimDb, columnsNames = qquote('chr id mapGen mapPhy a1 a2'),
 			index = 'id', inputSep = 'T', inputHeader = F,
-			types = list(chr = 'integer', pos_gen = 'real', pos_phy = 'integer'));
+			types = list(chr = 'integer', pos_gen = 'real', pos_phy = 'integer'),
+			unique = list('id'));
 	}
 	o
 })
@@ -261,6 +294,11 @@ gwasInitialize = function(optionsFile, run = NULL, doReset = F) {
 	# <p> variables
 	runI = o$runIndex;
 	outputPrev = Sprintf('%{output}s/sowreap', output = o$previousOutputDir);
+
+	# <p> batch queueing
+	logOption = Sprintf('--outputDir %{od}q/qsubLogs', od = o$outputDir);
+	o$qsubOptions = join(c(o$qsubOptions, logOption));
+	o$qsubOptionsBigMem = join(c(o$qsubOptionsBigMem, logOption));
 
 	# <p> prepare directory, document parameters
 	if (!file.exists(o$outputDir)) dir.create(o$outputDir, recursive = T);
@@ -383,8 +421,8 @@ readExclusionsMarkers = function(o, type = 'all', do.union = T) {
 
 readExclusions = function(o, type = 'all', do_union = T) {
 	r = list(
-		individuals = readExclusionsInds(o, type, do_union = do_union),
-		markers = readExclusionsMarkers(o, type, do_union = do_union)
+		individuals = readExclusionsInds(o, type, do.union = do_union),
+		markers = readExclusionsMarkers(o, type, do.union = do_union)
 	);
 	r
 }
@@ -415,33 +453,63 @@ gwasCheckInput = function(o, d) {
 		Logs('Essential column(s) "%{cols}s" missing from data', cols = join(nsMiss, ', '), level = 1);
 		stop('essential column missing from data');
 	}
-	if (o$readVariablesEnforceUniqueIds && sum(duplicated(d$id)) > 0) {
-		Logs('Id column not unique: "%{ids}s" duplicated.',
+	if (o$readVariablesRemoveNAids) {
+		d = d[!is.na(d$id), , drop = F];
+		if (nrow(d) == 0) stop('id column only contains NAs');
+	}
+	if (o$readVariablesEnforceUniqueIds && any(duplicated(d$id))) {
+		Logs('id column not unique: "%{ids}s" duplicated.',
 			ids = join(d$id[duplicated(d$id)], ', '), level = 1);
-		stop('Id column not unique');
+		stop('id column not unique');
 	}
 
-	sexF = as.factor(d$sex);
-	if (!all(sort(levels(sexF)) == 1:2)) {
+	sexFL = sort(levels(as.factor(d$sex)));
+	if (!all(sexFL %in% 1:2)) {
 		Logs('Sex must be coded as 1:male, 2:female', level = 1);
 		stop('Sex column wrongly coded');
 	}
-	# check variables of association model
+	if (!all(sexFL == 1:2)) {
+		Logs('Warning only one gender present: %{sex}s [expected coding: 1:male, 2:female]',
+			sex = join(sexFL, ','), level = 1);
+	}
+	# <p> check variables of association model
 	varsResponses = list.kp(o$assParModels, 'responses', do.unlist = TRUE);
 	varsU = setdiff(unique(c(
 		unlist(lapply(list.kp(o$assParModels, 'f1'), function(e)all.vars(as.formula(e)))),
 		varsResponses
 	)), c('MARKER', 'RESPONSE'));
 	Logs('Variables used in analysis: %{vars}s', vars = join(varsU, ', '), level = 4);
-	if (!all(all(varsU %in% names(d)))) {
-		varMiss = join(varsU[!(varsU %in% names(d))], ', ');
+	varsMDS = paste('C', 1:o$qcParMDSDims, sep = '');
+	varsAvail = union(names(d), varsMDS)
+	if (!all(varsU %in% varsAvail)) {
+		varMiss = join(varsU[!(varsU %in% varsAvail)], ', ');
 		Logs('Variables used in formulas not present in data: %{varMiss}s', level = 1);
 		stop('Variables missing from data');
 	}
-	Ncomplete = sum(!apply(d[, setdiff(varsU, varsResponses), drop = F], 1, function(r)any(is.na(r))));
+	varsUM = setdiff(varsU, varsMDS);	# MDS vars will only be available later
+	Ncomplete = sum(!apply(d[, setdiff(varsUM, varsResponses), drop = F], 1, function(r)any(is.na(r))));
 	Logs('Number of complete cases: %{Ncomplete}s', level = 4);
 	if (Ncomplete == 0) {
 		stop('No non-missing data (except genotypes, response)');
+	}
+
+	# <p> check subsetting
+	subsets = unlist.n(list.kp(o$assParModels, 'subSets'), 1)
+	lapply(subsets, function(subset) {
+		if (is.null(subset)) return();
+		d1 = try(subset(d, with(d, eval(subset))));
+		if (class(d1) == 'try-error') {
+			LogS(1, 'Could not create subset: %{ss}s', ss = Deparse(subset));
+			stop('subsetting failed');
+		}
+		NULL
+	});
+
+	# <p> check data types
+	classes = lapply(d, class);
+	if (any(classes %in% c('list', 'matrix'))) {
+		print(classes);
+		stop('Forbidden column classes found in covariate data.');
 	}
 	NULL
 }
@@ -453,7 +521,6 @@ gwasRun = function(optionsFile, run = NULL, opts = NULL, resetCache = F) {
 	# <p> initialize options and files
 	r = gwasInitialize(optionsFile, run, doReset = resetCache);
 	o = r$options;
-
 	# <p> prepare reporting
 	# set variable global to the ensuing analysis
 	.globalOutput = list(prefix = con(o$outputDir, '/'));
@@ -508,156 +575,7 @@ gwasRun = function(optionsFile, run = NULL, opts = NULL, resetCache = F) {
 }
 
 gwasPublish = function(optionsFile, runs = c('R01', 'R02', 'R03')) {
-	sapply(runs, function(run) {
-		publishFile(Sprintf('results/%{run}s/reportGwas-%{run}s.pdf'));
-		publishDir(Sprintf('results/%{run}s/export'), into = Sprintf('export-%{run}s'));
-	})
+	sapply(runs, function(runName) with(gwasInitialize(optionsFile, run = runName)$options, {
+		publishFile(Sprintf(outputFileTemplate), into = Sprintf('%{runName}s'));
+	}))
 }
-
-#
-#	<p> post-GWAS
-#
-
-exportCleanedData = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03') {
-	# <p> initialize
-	Dir.create(prefix, treatPathAsFile = T);
-	o = gwasInitialize(optionsFile, run = run)$options;
-
-	# <p> plink file
-	e = readExclusions(o, type = 'all');
-	plinkExportPrunedFile(o$input, prefix, list(exclusions = e));
-
-	# <p> data
-	d = gwasReadVariableFromOptionsFile(optionsFile, run = run);
-	write.csv(data.frame(id = e$individuals), Sprintf('%{prefix}s-individuals-excluded.csv'));
-	included = setdiff(d$id, e$individuals);
-	d0 = d[which.indeces(included, d$id), , drop = F];
-	write.csv(d0[, 'id', drop = F], Sprintf('%{prefix}s-individuals-included.csv'));
-	write.csv(d0, Sprintf('%{prefix}s-variables.csv'));
-
-	# <p> logging
-	Logs('Individuals excluded: %{Ne}d, included: %{Ni}d, Rows in data: %{Nr}d',
-		Ne = length(e$individuals), Ni = length(included), nrow(d0),
-		logLevel = 1
-	);
-}
-
-testTypes = list(glmBin = 'applyLogisticPerSnp', glmOrd = NULL);
-
-pipelineModels = function(models) {
-	r = lapply(seq_along(models), function(i) {
-		m = models[[i]];
-		if (is.null(testTypes[[m$stat]])) return(list());
-		r = list(name = Sprintf('%{testType}s:model%{i}d', testType = testTypes[[m$stat]]),
-			formulas = listKeyValue( c(Sprintf('model%{i}d:formula1'), Sprintf('model%{i}d:formula0')),
-				c(	mergeDictToString(list(MARKER = 'MARKER_dosage'), m$f1),
-					mergeDictToString(list(MARKER = 'MARKER_dosage'), m$f0)))
-		);
-		r
-	});
-	r = r[sapply(r, length) > 0];
-	formulas = join(sapply(r, function(e) {
-		ns = names(e$formulas);
-		Sprintf('%{n1}s\t%{v1}s\n%{n2}s\t%{v2}s\n',
-			n1 = ns[1], v1 = e$formulas[[1]], n2 = ns[2], v2 = e$formulas[[2]])
-	}), sep = "\n");
-
-	pipeline = join(sapply(list.kp(r, 'name', do.unlist = T), function(p)
-		Sprintf('%{p}s | GWASsummarize')), ', ');
-	r0 = list(TESTS_PIPELINE = pipeline, TESTS_FORMULAS = formulas);
-	r0
-}
-
-writePipeFile = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
-	referencePanel = 'hapmap2b22', headerMap = 'id:iid') {
-	# <p> initialize
-	Dir.create(prefix, treatPathAsFile = T);
-	o = gwasInitialize(optionsFile, run = run)$options;
-	sp = splitPath(prefix);
-	spR = splitPath(o$remotePath);
-
-	# <p> template interpolation
-	models = pipelineModels(o$assParModels);
-	template = readFile('gwas/gwasImputationTemplate.pipe');
-	pipe = mergeDictToString(c(
-		list(PREFIX = sp$file, REMOTE_PATH = spR$path,
-			REFPANEL = referencePanel,
-			`__HEADERMAP__` = headerMap),
-		models
-	), template);
-	cat(pipe);
-	writeFile(Sprintf('%{prefix}s.pipe'), pipe);
-	pipe
-}
-
-transferPipeline = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
-	doCopy = T, doCopyPipeFile = F) {
-	sp = splitPath(prefix);
-	o = gwasInitialize(optionsFile, run = run)$options;
-	Dir.create(o$remotePath, recursive = T);
-	files = Sprintf('%{prefix}s%{file}s', file = c('.bim', '.bed', '.fam', '.pipe', '-variables.csv'));
-	print(files);
-	if (doCopy) File.copy(files, o$remotePath);
-	if (doCopyPipeFile) File.copy(Sprintf('%{prefix}s%{file}s', file = '.pipe'), o$remotePath);
-	spR = splitPath(o$remotePath, ssh = T);
-	cmd = Sprintf('pipeline.pl --print-pipeline %{base}s.pipe', base = sp$file);
-	System(cmd, patterns = c('cwd', 'ssh'), 1, doLogOnly = T, ssh_host = spR$userhost, cwd = spR$path);
-}
-
-startPipeline = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03') {
-	o = gwasInitialize(optionsFile, run = run)$options;
-	sp = splitPath(prefix);
-	spR = splitPath(o$remotePath, ssh = T);
-	cmd = Sprintf('pipeline.pl %{base}s.pipe', base = sp$file);
-	System(cmd, patterns = c('cwd', 'ssh'), 1, doLogOnly = F, ssh_host = spR$userhost, cwd = spR$path);
-}
-
-pipelineGetResultDir = function(prefix, optionsFile, run, pipeline_pattern) {
-	o = gwasInitialize(optionsFile, run = run)$options;
-	sp = splitPath(prefix);
-	spR = splitPath(o$remotePath, ssh = T);
-	cmd = Sprintf('pipeline.pl --print-pipeline %{base}s.pipe', base = sp$file);
-	r = System(cmd, patterns = c('cwd', 'ssh'), 1, return.output = T, doLogOnly = F,
-		ssh_host = spR$userhost, cwd = spR$path);
-	stage = as.integer(fetchRegexpr('(\\d+)\\s+-gwasReport', r$output, captures = T));
-	pipeline_dir = Sprintf(pipeline_pattern);
-	r = list(pipeline_dir = pipeline_dir, o = o)
-	r
-}
-
-descDoc = 'This folder contains reports copied from a compute server. Naming of files is related to the workflow process on the server.';
-
-pipelineGetReports = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
-	pipeline_pattern = 'imputation_%{stage}02d') {
-
-	rd = pipelineGetResultDir(prefix, optionsFile, run, pipeline_pattern);
-	pipeline_dir = rd$pipeline_dir;
-
-	# destination sub-folder
-	descDocPath = tempfile();
-	writeFile(descDocPath, descDoc);
-	path = publishFile(descDocPath, 'imputation-reports', 'description.txt');
-	outputDir = splitPath(path)$dir;
-	r = System(Sprintf('umask 766 ; scp "%{remote}s/%{pipeline_dir}s/*.pdf" "%{outputDir}s"', remote = rd$o$remotePath), 2);
-
-}
-
-descDocFiles = 'This folder contains a verbatim copy of files from the compute server which are summarized in the pdf-files. Naming of files is related to the workflow process on the server and might seem arbitrary. Tables and pictures are included in the pdf and are stored here to facilitate extraction for publication.';
-
-pipelineResultFiles = function(prefix = 'results/data-cleaned-%D', optionsFile = optionsFile, run = 'R03',
-	pipeline_pattern = 'imputation_%{stage}02d') {
-
-	rd = pipelineGetResultDir(prefix, optionsFile, run, pipeline_pattern);
-	pipeline_dir = rd$pipeline_dir;
-
-	# destination sub-folder
-	descDocPath = tempfile();
-	writeFile(descDocPath, descDocFiles);
-	path = publishFile(descDocPath, 'imputation-files', 'description.txt');
-	outputDir = splitPath(path)$dir;
-	r = System(Sprintf('umask -S u=rwx,g=r,o=r ; scp "%{remote}s/%{pipeline_dir}s/*" "%{outputDir}s"',
-		remote = rd$o$remotePath), 2);
-	r
-}
-
-

@@ -9,14 +9,14 @@ use DBI;
 use FileHandle;
 
 $TEST_CSV = <<TEST_CSV_TEXT;
-a	b	c	d
-a	c	1	X
-b	d	2	X
-aa	g	3	X
-a	a	3	X
-b	a	3	Y
-c	d	4	Y
-b	a	1.5	Z
+a	b	c	d	c1
+a	c	1	X	3
+b	d	2	X	4
+aa	g	3	X	1
+a	a	3	X	2
+b	a	3	Y	3
+c	d	4	Y	4
+b	a	1.5	Z	5
 TEST_CSV_TEXT
 
 $helpText = <<HELP_TEXT;
@@ -64,6 +64,13 @@ $helpText = <<HELP_TEXT;
 	# filter rows by expression
 	csv.pl -t --useTestData --selectRowsByExpression 'c > 1.2'
 	csv.pl -t --useTestData --selectRowsByExpression 'c > 1.2 && d eq "Y"'
+	csv.pl -t --useTestData --selectRowsByExpression 'map { \$r{\$_} > 1 } \$colsBy->("[abc]" || a == "a")'
+	csv.pl -t --useTestData --selectRowsByExpression 'all(map { abs(\$r{\$_}) > 2 } \$colsBy->("[c]")) && d eq "X"'
+
+	# deduplicate column
+	csv.pl -t --deduplicate=0 --useTestData
+	csv.pl -t --deduplicate=0,1 --useTestData
+	csv.pl -t --deduplicate=0,1 --useTestData --noheader --joinwith '-'
 
 	# order of operator precedence
 	selectRowsFor, select, delete, reshuffle, constant, setHeader, filter
@@ -107,10 +114,18 @@ sub processor { my ($o, $header) = @_;
 	}
 	if ($o->{selectRowsByExpression} ne '') {
 		my $cols = makeHash($header, [map { "\$_[$_]" } 0 .. $#$header]);
-		my $code = 'sub { $_ = $_[0]; '. mergeDictToString($cols, $o->{selectRowsByExpression}). ' }';
+		$cols->{''} = undef;
+		Log("Columns: ". join(', ', keys %$cols), 5);
+		my $colsBy = sub { return (grep { m{$_[0]}s } @$header) };
+		#my $code = 'sub { $_ = $_[0]; my %r = %{makeHash($header, [@_])}; print(Dumper(\%r));'
+		#my $code = 'sub { $_ = $_[0]; my %r = %{makeHash($header, [@_])}; print(Dumper([map { abs($r{$_}) > 2 } $colsBy->("[c]")]));'
+		my $code = 'sub { $_ = $_[0]; my %r = %{makeHash($header, [@_])}; '
+		. mergeDictToString($cols, $o->{selectRowsByExpression}, { sortKeys => 'yes', keysWs => 'yes' })
+		. ' }';
 		Log("row filter: '$code'", 5);
 		my $sub = eval($code);
 		push(@prcs, sub {
+			#Log('Row evaluation: '. $sub->(@_), 7);
 			return undef if (!$sub->(@_));
 			return @_;
 		});
@@ -208,6 +223,16 @@ sub processor { my ($o, $header) = @_;
 			splice(@_, $colTo, 0, sprintf("%06d", $o));
 			return @_;
 		});
+	}
+	if ($o->{deduplicate} ne '') {
+		my @cols = colsFromColSpec($o->{deduplicate}, $header);	#split(/,/, $o->{delete});
+		my $valueDict = {};
+		push(@prcs, sub {
+			for my $i (@cols) {
+				$_[$i] .= $o->{joinWith}. $valueDict->{$_[$i]} if ($valueDict->{$_[$i]}++);
+			}
+			return @_;
+		} );
 	}
 
 	if ($o->{filter} ne '') {
@@ -346,7 +371,7 @@ sub parser_dbi { my ($o, $f) = @_;
 sub iterateInput { my ($pa, $o) = @_;
 	my $header = undef;
 	if ($o->{header}) {
-		$header = [$pa->()];
+		$header = [map { uqs($_) } $pa->()];
 		my $hpr = headerProcessor($o, $header);
 		my @headerNew = $hpr->(@$header);
 	}
@@ -485,16 +510,19 @@ sub probeColumns { my ($o, $files) = @_;
 	initLog(2);
 	$o = { output => 'STDOUT',
 		separator => ',', quoteChar => '"', header => 1, mapHeader => 1, mapSeparator => "\t",
-		magic => '<!>magic-placeholder<!>'
+		magic => '<!>magic-placeholder<!>', joinWith => ':'
 	};
 	$result = GetOptionsStandard($o, 'separator=s', 'outputSeparator|os=s', 'quoteChar=s', 'magic=s',
 		'header!', 'outputHeader!', 'setHeader=s',
+
+		# filters
 		'map=s', 'mapHeader!', 'mapFile=s', 'mapSeparator=s',
 		'select=s', 'constant=s', 'delete=s', 'reshuffle=s', 'filter=s@', 'insertOrderByFile=s',
 		'selectRowsBy=s', 'selectRowsIds=s', 'selectRowsByFile=s', 'selectRowsByRowNumbers=s',
 			'selectRowsByExpression=s',
 		'logRowNumbers=s',
 		'deleteBeforeSelect',
+		'deduplicate=s',
 
 		# short hands
 		't', 's',	#initialize separators to tab, space resp.
@@ -510,6 +538,9 @@ sub probeColumns { my ($o, $files) = @_;
 
 		# testing
 		'useTestData',
+
+		# parameters
+		'joinWith=s',
 		
 		# output
 		'output|o=s'

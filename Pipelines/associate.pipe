@@ -1,0 +1,46 @@
+#	Pipe name:
+#		-
+#	Creation date:
+#		Tue Sep 20 11:29:19 2016
+#	Description:
+#		Meta-pipe to include all pipes necessary to run an association analysis
+#	Input:
+#		3col transposed genotype files via inject
+#	Output:
+#		GWAS reports
+#	Pipe instances:
+#		-
+
+#
+#	<p> dependencies
+#
+
+@include	imputation_qt_snptest.pipe
+@include	inject.pipe
+@include	copy.pipe
+@include	applyR.pipe
+@include	filterResults.pipe
+@include	gwas_report.pipe
+
+#
+#	<p> input
+#
+
+# directory of another pipeline run containing imputations, with spec file
+G:PipeInput				__must_be_specified__
+G:PipeInput_example		../myImputation/imputation_06
+G:VariableFile			__must_be_specified__
+G:VariableFile_example	[SEP=C,HEADER=T,HEADERMAP=__HEADERMAP__]:PREFIX-variables.csv
+G:Models				__must_be_specified__
+G:Models_example		( applyCoxPerSnp:model1 | GWASsummarize,  applyCoxPerSnp:model2 | GWASsummarize ) 
+applyRperSnp:pedFile	__must_be_specified__
+applyRperSnp:pedFile_example	[HEADER=F,NAMES=fid;iid;pid;mid;sex.plink;y.plink,SEP=S]:EXTERNAL_PED_FILE
+
+
+#
+#	<p> specification
+#
+
+G:Name		Association
+G:Association	injectExternal | G:PipelineTests
+G:PipelineTests	G:Models | Copy:Union | filterResults | gwasReport

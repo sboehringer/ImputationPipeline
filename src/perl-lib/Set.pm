@@ -7,7 +7,7 @@ require	Exporter;
 
 @ISA		= qw(Exporter);
 
-@EXPORT		= qw(&intersection &minus &product &union &pair &substitute &productJoin &join2 &joinNE &makeHash &dictWithKeys &mergedHashFromHash &mergeDict2dict &arrayFromKeys &mergeDict2dictDeeply &deepCopy &valuesForKeys &readHeadedTable &readHeadedTableString &readHeadedTableHandle &readCsv &writeCsv &tableColumn &tableAddColumn &writeHeadedTable &productT &productTL &arrayIsEqualTo &stripWhiteSpaceForColumns &multiply &sum &max &min &Min &Max &scaleSetTo &dictFromDictArray &toList &definedArray &definedDict &firstDef &firstTrue &compareArrays &inverseMap &dictIsContainedInDict &keysOfDictLevel &sortTextNumber &readUnheadedTable &indexOf &mapDict &subDictFromKeys &compareSets &arrayFromDictArrayWithKey &unique &cmpSets &unlist &any &all &dict2defined &instantiateHash &order &which &whichMax &which_indeces &hashSlice &hashMin &moddiv &modfloor &modround &changeSet &syncSets &hashPrune);
+@EXPORT		= qw(&intersection &minus &product &union &pair &substitute &productJoin &join2 &joinNE &makeHash &makeHashPairs &dictWithKeys &mergedHashFromHash &mergeDict2dict &arrayFromKeys &mergeDict2dictDeeply &deepCopy &valuesForKeys &readHeadedTable &readHeadedTableString &readHeadedTableHandle &readCsv &writeCsv &tableColumn &tableAddColumn &writeHeadedTable &productT &productTL &arrayIsEqualTo &stripWhiteSpaceForColumns &multiply &sum &max &min &Min &Max &scaleSetTo &dictFromDictArray &toList &definedArray &definedDict &firstDef &firstTrue &compareArrays &inverseMap &dictIsContainedInDict &keysOfDictLevel &sortTextNumber &readUnheadedTable &indexOf &mapDict &subDictFromKeys &dictPath &compareSets &arrayFromDictArrayWithKey &unique &cmpSets &unlist &any &all &dict2defined &instantiateHash &order &which &whichMax &which_indeces &hashSlice &hashMin &moddiv &modfloor &modround &changeSet &syncSets &hashPrune &readPrefixedTable &readPrefixedTableString &cumSum);
 
 use TempFileNames;
 
@@ -64,6 +64,18 @@ sub instantiateHash { my ($h) = @_;
 
 sub subDictFromKeys { my ($h, $keys) = @_;
 	return makeHash($keys, arrayFromKeys($h, $keys));
+}
+
+# <p> $key is path in the form key1/key2/... translated into $dict->{key1}{key2}{...}
+my %dictPathDefaults = ( sep => '/' );
+sub dictPath { my ($dict, $path, $assign, %c) = @_;
+	%c = (%dictPathDefaults, %c);
+
+	my @path = split(/$c{sep}/, $path);
+	my $last = defined($assign)? pop(@path): undef;
+	$dict = $dict->{$_} for (@path);
+	$dict->{$last} = $assign if (defined($assign));
+	return $dict;
 }
 
 # compare arrays numerically by means of the '==' operator
@@ -297,6 +309,31 @@ sub makeHash { my ($keys, $values, $omitKey)=@_;
 	}
 	return $hash;
 }
+
+# $pairs: array of key/value pairs
+# %o: options
+#	coalesce: coalesce duplicate keys into array of values
+#	recursive (requires coalesce => 1)
+my %makeHashPairsOptions = ( coalesce => 1, recursive => 0 );
+sub makeHashPairs { my ($pairs, %o) = @_;
+	%o = (%makeHashPairsOptions, %o);
+	my @keys = unique(map { $_[0] } @$pairs);
+	my %hash = map {
+		my $key = $_;
+		my @pairsK = grep { $_->[0] == $key } @$pairs;
+		my @valuesK = map { $_->[1] } @pairsK;
+		my %r;
+		if ($o{coalesce}) {
+			%r = ($key => [$o{recursive}? makeHashPairs([@valuesK], $o): @valuesK]);
+		} else {
+			%r = ($key => $valuesK[0]);
+		}
+		%r
+	} @keys;
+	
+	return {%hash};
+}
+
 sub dictWithKeys { my($keys, $value) = @_;
 	my $hash = {};
 	$value = firstDef($value, 0);
@@ -544,6 +581,47 @@ sub tableAddColumn { my ($t, $col) = @_;
 	}
 }
 
+sub readPrefixedTableString { my ($s, $c) = @_;
+	my $sep = firstDef($c->{metaSep}, '---');
+	my @lines = split(/\n/, $s);
+	my $meta = {};
+
+	# <p> read meta information
+	while (1) {
+		my $l = shift @lines;
+		last if ($l eq $sep);
+		my ($k, $v) = ($l =~ m{^(\S+):\s+(.*)$}so);
+		my ($kIni) = ($l =~ m{^\[([^\]]*)\]}sog);
+		#print("Colon key: $k; Ini Key: $kIni\n");
+		if (defined($k)) {
+			$meta->{$k} = $v;
+		} elsif (defined($kIni)) {
+			$v = '';
+			while (1) {
+				last if (($l = shift @lines) =~ m{(?:^\[([^\]]*)\])|(?:^$sep$)}so);
+				$v .= $l. "\n";
+			}
+			#print("Value: $v\n");
+			unshift(@lines, $l);
+			# pop empty line
+			$v = $1 if ($v =~ m{^(.*?)(?:\n{1,2})$}so);
+			$meta->{$kIni} = $v;
+		} else {
+			die "No key value pair found in prefix [$l]";
+		}
+	}
+
+	# read table
+	#my $table = readHeadedTableString(join("\n", @lines), undef, $c)->{data};
+	$c = { %$c, sep => firstDef($meta->{meta_set_sep}, $c->{sep}, "\t") };
+	my $table = readHeadedTableString(join("\n", @lines), undef, $c)->{data};
+
+	return { table => $table, meta => $meta };
+}
+sub readPrefixedTable { my ($path, $c) = @_;
+	return readPrefixedTableString(TempFileNames::readFile($path), $c);
+}
+
 sub readUnheadedTable { my ($path) = @_;
 	my $ret = [];
 
@@ -567,13 +645,11 @@ sub writeHeadedTableHandle { my ($fileHandle, $sets, $factorList, $options) = @_
 	print $fileHandle join($sep, ref($sets) eq 'HASH' && defined($sets->{printFactors})?
 		@{$sets->{printFactors}}: @{$factors}),"\n" if (!$options->{noHeader} && defined($factors));
 
-	foreach $data (ref($sets) eq 'ARRAY'? @{$sets}: @{$sets->{list}})
-	{	my $dmy = (ref($data) eq 'ARRAY')? $data: arrayFromKeys($data, $factors);
-		if ($options->{quoteSpace})
-		{
-			foreach $el (@{$dmy})
-			{	$el = '"'.$el.'"' if ($el =~ m{\s}o);
-			}
+	foreach $data (ref($sets) eq 'ARRAY'? @{$sets}: @{$sets->{list}}) {
+		my $dmy = (ref($data) eq 'ARRAY')? $data: arrayFromKeys($data, $factors);
+		# quoting
+		foreach $el (@{$dmy}) {
+			$el = '"'. $el. '"' if (($el =~ m{\s}o && $options->{quoteSpace}) || $el =~ m{$sep}o);
 		}
 		print $fileHandle join($sep, @{$dmy}), "\n";
 	}
@@ -612,12 +688,15 @@ sub dictFromDictArray { my ($array, $key) = @_;
 
 # compute a Map with value => key
 # which of course is not unique
+# if values are ARRAYS, associate all values with key
 
 sub inverseMap { my ($dict) = @_;
 	my $idict = {};
 
-	foreach $k (keys %{$dict}) {
-		$idict->{$dict->{$k}} = $k;
+	foreach my $k (keys %{$dict}) {
+		if (ref($dict->{$k}) eq 'ARRAY') {
+			foreach my $v (@{$dict->{$k}}) { $idict->{$v} = $k; }
+		} else { $idict->{$dict->{$k}} = $k; }
 	}
 	return $idict;
 }
@@ -691,6 +770,14 @@ sub hashSlice { my ($h, $keys) = @_;
 sub hashMin { my ($h, $keys) = @_;
 	my $k = minus([keys %$h], $keys);
 	return makeHash($k, [@{$h}{$k}]);
+}
+
+sub cumSum { my (@a) = @_;
+	my @r;
+	for (my $i = 0; $i < @a; $i++) {
+		$r[$i] = ($i > 0? $r[$i - 1]: 0) + $a[$i];
+	}
+	return @r;
 }
 
 #

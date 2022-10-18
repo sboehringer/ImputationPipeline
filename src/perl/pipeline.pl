@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #
 #Tue Dec 21 20:40:43 CET 2010
 
@@ -22,14 +22,14 @@ $main::d = {
 	helpOnEmptyCall => 1
 };
 # options
-$main::o = ['+print-example', '+print-pipeline', '+print-progress', '+print-parameters',
-	'rerun', 'input|i=s', 'from=i', 'to=i',
+$main::o = ['+print-example', '+print-pipeline', '+print-progress', '+print-parameters', '+dump',
+	'rerun', 'input|i=s', 'from=i', 'to=i', 'range=s', 'subrange=s',
 	'pipelineClass=s', 'print-diagnostics',
 	'maxConfigNesting=i'
 ];
 $main::usage = 'pipeline-spec.pipe ...';
 $main::helpText = <<HELP_TEXT;
-	(c) 2010-2011 by Stefan Boehringer, Statistical Genetics, LUMC
+	(c) 2010-2016 by Stefan Boehringer, Statistical Genetics, LUMC
 
 	Options:
 	--print-pipeline	print the pipeline as specified in the spec file
@@ -38,11 +38,21 @@ $main::helpText = <<HELP_TEXT;
 	--print-diagnostics	print generated commands; otherwise they get stored in
 			pipeline-diagnostics-[pipeline-name]
 	--print-parameters	print all pipeline parameters as defined by the input files
+	--dump	print internal pipeline configuration
 
 	Examples:
 	pipeline.pl my_pipeline.pipe
 	pipeline.pl my_pipeline.pipe my_overwrites --input myFile
 	pipeline.pl my_pipeline.pipe --print-parameters | less -S
+	pipeline.pl --from 5 --to 7 my_pipeline.pipe
+	pipeline.pl --range 5:7 my_pipeline.pipe
+	# same as from
+	pipeline.pl --range 5 my_pipeline.pipe
+	# subrange is only effective for transforming steps, runs specified jobs from the subrange
+	pipeline.pl --range 5 --subrange 10:10 my_pipeline.pipe
+	# same as --subrange 10:10
+	pipeline.pl --range 5 --subrange 10 my_pipeline.pipe
+
 
 $TempFileNames::GeneralHelp
 HELP_TEXT
@@ -65,6 +75,7 @@ PIPELINE
 @main::pipelinePathes = ( '.', $ENV{PIPELINEPATHES}, "$ENV{HOME}/MyLibrary/Pipelines" );
 
 # triggers
+sub dump { print Dumper($_[0]) }
 sub print_example { print $main::examplePipeline, "\n"; }
 sub print_pipeline { printPipeline($_[0]) }
 sub print_progress { my ($c) = @_;
@@ -118,7 +129,7 @@ my $pgrammar = q{
 	pipe_input_identifier: pipe_identifier | number
 	pipe_input_selector: pipe_input_identifier(s /,/)
 };
-# <%> recover syntax highlighting in kate
+# <%> recover syntax highlighting in kate | /
 
 # $ls:	lines
 sub readPipelineConfig { my ($ls, $c) = @_;
@@ -145,6 +156,7 @@ sub readPipelineConfigFile { my ($f, $c) = @_;
 	my $path = firstFile($f, $c->{pathes});
 	die "Config file $f not found" if (! -e $path);
 	# <p> read file into lines
+	Log("Including pipeline configuration:$path", 5);
 	my @c = readPipelineConfig([split(/\n/, readFile($path))], $c);
 	return @c;
 }
@@ -154,7 +166,7 @@ sub readPipelineConfigFile { my ($f, $c) = @_;
 # split with regex "split", match regex globally on value and join with "sep"
 sub parseConfigRegexes { my (%c) = @_;
 	my @vs = map {
-		my ($spl, $regex, $sep, $v) = ($_ =~ m{^~~(.*)~~{(.*)}~~(.*)~~(.*)$}so);
+		my ($spl, $regex, $sep, $v) = ($_ =~ m{^[~][~](.*)[~][~][{](.*)[}][~][~](.*)[~][~](.*)$}so);
 		
 		if ($regex ne '') {
 			$v = mergeDictToString(\%c, $v, { iterate => 'YES' });
@@ -285,6 +297,17 @@ sub iteratePipeline { my ($p, $i, %o) = @_;
 	return iteratePipelineRaw($p, $i, undef, %o);
 }
 
+# allow to redefine pipeinstances based on the namesapce stratumSubstitution parameter
+# (see gwas examples). allows to stratify by subpipleines instead of only changing parameters
+sub expandStrataPipeSubstitution { my ($pipe, $stratum, $pars) = @_;
+	return $pipe if (!defined($pars->{stratumSubstitution}));
+	# instantiate substitution
+	my $pS = mergeDictToString({STRATUM => $stratum}, $pars->{stratumSubstitution});
+	my $pN = makeHash(['name', 'tag'], [split(':', $pS)]);
+	my %r = (%$pipe, %$pN);
+	return {%r};
+}
+
 sub expandStrataRaw { my ($pl, $pars, %o) = @_;
 	my @p = ();
 	for (my $i = 0; $i < @$pl; $i++) {
@@ -296,9 +319,13 @@ sub expandStrataRaw { my ($pl, $pars, %o) = @_;
 			if (defined($strata)) {
 				my @strata = split(/\s*[,\n]\s*/, $strata);
 				Log("Strata expansion $pipe->{name}:$pipe->{tag}: $strata", 5);
-				my @sp = map {
-					my $head = { %$pipe, stratum => $_ };
-					my @tail = @{expandStrataRaw([@{$pl}[($i + 1) .. $#$pl]], $pars,
+				my @sp = map { my $stratum = $_;
+					my $head = expandStrataPipeSubstitution({ %$pipe, stratum => $stratum },
+						$_, $pars->{$pipe->{name}});
+					my @subPipeline = map {
+						expandStrataPipeSubstitution($_, $stratum, $pars->{$_->{name}})
+					} @{$pl}[($i + 1) .. $#$pl];
+					my @tail = @{expandStrataRaw([@subPipeline], $pars,
 						forceSubpipe => 1)};
 					[$head, @tail]
 				} @strata;
@@ -510,8 +537,7 @@ sub prepareRunningDir { my ($c, $p) = @_;
 	my $prefixDigits = firstDef($p->{parameters}{G}{digits}, 2);
 	my $pipeDir = sub { sprintf('%s_%0*d', $prefix, $prefixDigits, $_[0]) };
 	my @outputDirs = map { $pipeDir->($_->{id}) } unlist(@{$p->{pipeline}});
-	my ($from, $to) = (firstDef($c->{from}, 0), firstDef($c->{to}, int(@outputDirs)));
-	@outputDirs = @outputDirs[$from .. $to];
+	@outputDirs = @outputDirs[@{$c->{pipeRange}}];
 
 	# further directories
 	my @otherDirs = ('diag');
@@ -571,8 +597,7 @@ sub submitPipeline { my ($c, $p) = @_;
 
 	writeFile($c->{pipelineStateFile}, stringFromProperty({ pipeline => $p, config => $c }));
 	writeFile($c->{pipelineParameterFile}, join("\n", parameters_as_text($p)));
-	my ($from, $to) = (firstDef($c->{from}, 0), firstDef($c->{to}, int(@p2) - 1));
-	for (my $i = $from; $i <= $to; $i++) {
+	for my $i (@{$c->{pipeRange}}) {
 		my $pipe = $p2[$i];
 		# pipe options
 		my %po = (%{$ppars->{$pipe->{name}}}, %{$ppars->{$pipe->{tag}}});
@@ -636,10 +661,11 @@ sub submitPipeline { my ($c, $p) = @_;
 				strata => [$pipe->{stratum}],	#<!> stack of strata from super-pipelines
 				fileMeta => defined($po{meta})? { %{propertyFromString($po{meta})} }: {},
 				# <!> hack to allow debugging/working around server configuration bugs
-				o => { synchroneous_prepare => $po{synchroneous_prepare} }
+				o => { synchroneous_prepare => $po{synchroneous_prepare} },
+				range => $c->{subRange}
 			);
 			$pt->run(@inputs);
-			Log("cmd inlined as $pipelineClass: $pipe->{name}", 4);
+			Log("Cmd inlined as $pipelineClass: $pipe->{name}", 4);
 		} else {
 			System($cmd, 3);
 		}
@@ -651,12 +677,30 @@ sub submitPipeline { my ($c, $p) = @_;
 	}
 }
 
+sub splitRange { my ($s, $N) = @_;
+	my @els = split(/:/, $s);
+	$from = $els[0];
+	$to = (int(@els) == 2)? $els[1]: (defined($N)? $N: $from);
+	return ($from .. $to);
+}
+
+sub refineConfig { my ($c, $p) = @_;
+	my $Npipeline = int(unlist(@{$p->{pipeline}}));
+	my ($from, $to) = (firstDef($c->{from}, 0), firstDef($c->{to}, $Npipeline - 1));
+	my @pipeRange = ($from .. $to);
+	@pipeRange = splitRange($c->{range}, $Npipeline - 1) if (defined($c->{range}));
+	my @subRange = defined($c->{subrange})? splitRange($c->{subrange}): ();
+	return {%$c, pipeRange => [@pipeRange], subRange => [@subRange]};
+}
+
 #main $#ARGV @ARGV %ENV
 	#initLog(2);
 	my $c = StartStandardScript($main::d, $main::o);
-	# <p> refine configuration
+	# <p> read pipeline
 	my $p = readPipeline([@ARGV], [@main::pipelinePathes]);
 #print(Dumper($p->{parameters}));
+	# <p> refine configuration
+	$c = refineConfig($c, $p);
 	# <p> triggers
 	callTriggersFromOptions({%$c, %$p});
 	# <p> pipeline scheduling

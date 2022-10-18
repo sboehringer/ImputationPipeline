@@ -3,7 +3,7 @@ require 5.000;
 require Exporter;
 
 @ISA       = qw(Exporter);
-@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix);
+@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &verbosityLevel &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &existsWithBase &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &qs2 &uqs &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix &slurpToTemp &slurpPipeToTemp &pathInter &pathUnInter);
 
 #@EXPORT_OK = qw($sally @listabob %harry func3);
 
@@ -17,8 +17,10 @@ use IO::File;
 use PropertyList;
 use Set;
 use POSIX;
+#use POSIX::strptime qw(strptime);	# -> load
 use Fcntl ':flock';	# testService
 use Fcntl qw(&F_WRLCK &F_SETLKW &F_UNLCK &F_SETLK);	#lockFile
+use Module::Load;
 #require 'sys/fcntl.ph';	#lockFile
 
 #use Locale;	# dependence is: germ2ascii <i><A> tb removed
@@ -36,7 +38,7 @@ $GeneralHelp=<<GENERAL_HELP;
 	--credentials	export credentials from keyring
 GENERAL_HELP
 
-$locale = undef;
+my $locale = undef;
 
 #
 #	<p> functions
@@ -44,7 +46,8 @@ $locale = undef;
 
 sub locale {
 	return $locale if ($locale);
-	eval("use Locale::Locale");
+	#eval("use Locale::Locale");
+	load('Locale::Locale');
 	$locale = Locale::Locale->new();
 	return $locale;
 }
@@ -64,6 +67,12 @@ sub existsOnHost { my ($file, $host) = @_;
 }
 sub existsOnHostLambda { my ($host) = @_;
 	return sub { return existsOnHost($_[0], $host); }
+}
+sub existsWithBase { my ($path) = @_;
+	my $sp = splitPathDict($path);
+	my @bases = grep { splitPathDict($_)->{base} eq $sp->{base} } dirList($sp->{dir});
+	#Log("bases [dir:$sp->{dir}], [base:$sp->{base}]: ". join(', ', @bases), 2);
+	return map { "$sp->{dir}/$_" } @bases;
 }
 
 sub fileOperation { my ($local, $remote, $uri, @args) = @_;
@@ -108,7 +117,7 @@ sub tempFileName { my ($prefix, $postfix, $onHost, $dontDelete, $digits) = @_;
 }
 
 sub tempEdit { my ($s, $o) = @_;
-	my $path = tempFileName(firstDef($o->{tempfilePrefix}, "/tmp/tempEdit"));
+	my $path = tempFileName(Set::firstDef($o->{tempfilePrefix}, "/tmp/tempEdit"));
 	writeFile($path, $s);
 	System("vi $path", 5);
 	$s = readFile($path);
@@ -134,6 +143,15 @@ sub removeTempFiles {
 
 END { removeTempFiles() if (!$DONT_REMOVE_TEMP_FILES && !$ENV{DONT_REMOVE_TEMP_FILES}); }	# perl shutdown
 
+sub pathInter { my ($p) = @_;
+	$p =~ s{^~}{$ENV{HOME}}o;
+	return $p;
+}
+sub pathUnInter { my ($p) = @_;
+	$p =~ s{^$ENV{HOME}}{~}o;
+	return $p;
+}
+
 sub resourcePath { my ($resource) = @_;
 	foreach $path (@INC)
 	{
@@ -153,9 +171,12 @@ sub firstFile { my ($filePath, $dirs, $extensions, $c) = @_;
 	my $p = splitPathDict($filePath);
 	# <!> changed [23.8.2003]: $p->{base} -> $p->{basePath}
 	my $base = $c->{useBase}? $p->{base}: $p->{basePath};
-	foreach $dir ($p->{directory}, @$dirs) {
+	# used to include $p->{directory} but undefined (dir would be correct)
+	# commented out 27.9.2018
+	#foreach $dir ($p->{directory}, @$dirs) {
+	foreach $dir (@$dirs) {
 		foreach $ext ($p->{extension}, @$extensions) {
-			my $file = firstDef($dir, '.'). "/$base". ($ext ne ''? ".$ext": '');
+			my $file = Set::firstDef($dir, '.'). "/$base". ($ext ne ''? ".$ext": '');
 			$file =~ s{^~}{$ENV{HOME}}o if (!$c->{dontInterpolateHome});
 			Log("firstFile: $file", 7);
 			return $file if -e $file;
@@ -182,6 +203,9 @@ sub readFileFirstLocation { my ($filePath, $c, @dirs) = @_;
 	return $c->{returnPath}? { path => $location, file => $f }: $f;
 }
 
+# search for filename $fileName in @paths
+# if not found use $c->{default} if defined
+# if $c->{configPaths} is defined prepend to @paths
 sub readConfigFile { my ($fileName, $c, @paths) = @_;
 	@paths = ('.', "$ENV{HOME}/MyLibrary/Configs", "$ENV{HOME}/Library/Configs",
 		"/Library/Configs", "/MyLibrary/Configs", '/'
@@ -191,18 +215,23 @@ sub readConfigFile { my ($fileName, $c, @paths) = @_;
 		push(@paths, $c) if (defined($c));
 		$c = {};
 	}
+	unshift(@paths, @{$c->{paths}}) if (defined($c->{paths}));
+	Log('readConfigFile: pathes: '. join(':', @paths), 7);
 	my $plistFile = readFileFirstLocation($fileName, $c, @paths);
 	my $plist;
 	if (!defined($plistFile)) {
 		die "Config file $fileName not found" if (!defined($c->{default}));
 		$plist = $c->{default};
 	} else {
-		$plist = $c->{returnPath}? propertyFromString($plistFile->{file}): propertyFromString($plistFile);
+		my $plistFct = $c->{noExtendedPlist}? \&propertyFromString: \&propertyFromStringExt;
+		$plist = $c->{returnPath}? $plistFct->($plistFile->{file}): $plistFct->($plistFile);
 	}
 	return $c->{returnPath}
 	? { path => $plistFile->{path}, propertyList => $plist } : $plist;
 }
-
+sub writeConfigFile { my ($path, $config) = @_;
+	writeFile($path, stringFromProperty($config));
+}
 
 sub interpolatedPropertyFromString { my ($s, $hashNames) = @_;
 	return undef() if ($s eq '');
@@ -261,7 +290,7 @@ sub readFile { my ($path, $host, $encodingFrom) = @_;
 	if (ref($host) eq 'HASH') {
 		$c = $host;
 		$encodingFrom = $c->{from};
-		$encodingTo = firstDef($c->{to}, 'utf8');
+		$encodingTo = Set::firstDef($c->{to}, 'utf8');
 		$host = $c->{host};
 	}
 
@@ -282,7 +311,7 @@ sub readFile { my ($path, $host, $encodingFrom) = @_;
 		my $l;
 		if (!defined($path)) {
 			$handle = \*STDIN;
-			$l = firstDef($c->{stdinLength}, 1e7); #handleLength($handle);
+			$l = Set::firstDef($c->{stdinLength}, 1e7); #handleLength($handle);
 		} else {
 			if ($filter ne '') { $filter = "cat '$path' | $filter"; } else { $filter = $path; }
 			return undef if ((! -e $path && !($path =~ m{[|<>]}o))
@@ -310,9 +339,9 @@ sub writeFile { my ($path, $buffer, $doMakePath, $fileMode, $dirMode, $host) = @
 		($doMakePath, $fileMode, $dirMode, $host, $group) = @$c{
 		('doMakePath','fileMode','dirMode','host','group')};
 	}
-	if ($c->{encodeFrom} ne 'raw') {
-		my $enc = firstDef($c->{encodeFrom}, 'utf8');
-		eval("use Encode;");
+	if (defined($c->{encodeFrom}) && $c->{encodeFrom} ne 'raw') {
+		my $enc = Set::firstDef($c->{encodeFrom}, 'utf8');
+		load('Encode', 'encode'); #eval("use Encode;");
 		$buffer = encode($enc, $buffer);
 	}
 	if (defined($host)) {
@@ -336,8 +365,9 @@ sub writeFile { my ($path, $buffer, $doMakePath, $fileMode, $dirMode, $host) = @
 		my $openPostf = defined($c->{encoding})? ":encoding($c->{encoding})": '';
 		if (uc($c->{append}) eq 'YES') { return undef if (!open(WRITEFILE, ">>$openPostf", $path));
 		} else {						 return undef if (!open(WRITEFILE, ">$openPostf", $path)); }
-		syswrite(WRITEFILE, $buffer, length($buffer), 0);
+		my $l = syswrite(WRITEFILE, $buffer, length($buffer), 0);
 		close(WRITEFILE);
+		Log("writeFile: path='$path' append='$c->{append}' length=". length($buffer). " written=$l", 7);
 		chmod($fileMode, $path) if ($fileMode); # chmod needs umask
 		if (defined($group)) {
 			my $gid = getgrnam($group);
@@ -375,7 +405,7 @@ sub searchOutputPattern { my ($pattern,$cmd)=@_;
 # Sandboxed file operations
 sub Mkpath { my ($pathes, $logLevel) = @_;
 	foreach $path (ref($pathes) eq 'ARRAY'? @$pathes: ($pathes)) {
-		Log("Mkpath: $path", $logLevel);
+		Log("Mkpath: $path [". !$main::__doLogOnly. "]", $logLevel);
 		mkpath($path) if (!$main::__doLogOnly);
 	}
 }
@@ -402,16 +432,19 @@ sub Rename { my ($from, $files, $to, $logLevel, $c) = @_;
 		} @$files );
 	# <p> case 2
 	} elsif (!defined($files)) {
-		@stack = ( { from => $from, to => $to } );
+		@stack = ref($from) eq 'ARRAY'
+			? map { { from => $from->[$_], to => $to->[$_] } } 0..$#$from
+			: ( { from => $from, to => $to } );
 	# <p> case 1
 	} else {
-		my $m = firstDef($c->{mapper}, \&standardMapper);
+		my $m = Set::firstDef($c->{mapper}, \&standardMapper);
 		@stack = ( map { { from => "$from/$_", to => "$to/". $m->($_, $from, $to) } } @$files );
 	}
 	foreach $m (@stack) {
 		Log("Rename: $m->{from} --> $m->{to}", $logLevel);
 		Mkpath(splitPathDict($m->{to})->{dir}, $logLevel + 1) if ($c->{mkpath});
-		rename($m->{from}, $m->{to}) if (!$main::__doLogOnly);
+		move($m->{from}, $m->{to}) if (!$main::__doLogOnly);
+		#rename($m->{from}, $m->{to}) if (!$main::__doLogOnly);
 	}
 }
 sub Move { my ($from, $to, $logLevel, $c) = @_;
@@ -437,6 +470,7 @@ sub	scanDir { my($dstPath, $basePath, $path, $fct, $obj)=@_;
 # $c (the context):
 #	noDirs: should the function be triggered for dirs
 #	context: function argument
+#	fBranch: function controlling entering of subdirs
 
 sub depthSearchDirLeaf { my ($path, $c) = @_;
 	$c->{f}->($path, $c) if (
@@ -449,7 +483,10 @@ sub	depthSearchDirBranch { my($path, $c) = @_;
 	my @list = dirList($path, $c->{host});
 	foreach $p (@list) {
 		my $npath = "$path/$p";
-		depthSearchDirBranch($npath, $c) if (-d $npath && !-l $npath);
+		$c->{fullPath} = $npath;
+		next if (-d $npath && defined($c->{fBranch}) && !$c->{fBranch}->($p, $c));
+		depthSearchDirBranch($npath, $c)
+			if (-d $npath && !-l $npath && !defined(which($npath, $c->{exclusions})));
 		depthSearchDirLeaf($npath, $c);
 	}
 	$c->{depth}--;
@@ -567,7 +604,7 @@ sub dirListDeep { my ($path, $o) = @_;
 	# <i> implement fileManager
 	die 'remote dirListDeep not supported' if ($host ne '' && $host ne 'localhost');
 	$host = '' if ($host eq 'localhost');
-	my $c = { %$o, maxDepth => firstDef($o->{maxDepth}, $o->{exactDepth}),
+	my $c = { %$o, maxDepth => Set::firstDef($o->{maxDepth}, $o->{exactDepth}),
 		exactDepth => $o->{exactDepth}, files => [], host => $host };
 	depthSearchDir($pathLocal, sub { my ($p, $c) = @_;
 		my $file = substr($p, length($pathLocal) + 1);
@@ -634,7 +671,7 @@ sub dirListPattern { my ($prefix, $postfix, $o) = @_;
 		my $r = System('find '. qs($sp->{dir}), 5, undef, { returnStdout => 'YES' });
 		@files = map { substr($_, length($sp->{dir})) } split(/\n/, $r->{output});
 	} else {
-		@files = dirList(firstDef($o->{asDir}? $prefix: $sp->{dir}, '.'),
+		@files = dirList(Set::firstDef($o->{asDir}? $prefix: $sp->{dir}, '.'),
 			defined($o)? $o->{host}: undef);
 	}
 	@files = grep { /^$sp->{file}.*($postfix)$/ } @files;
@@ -651,12 +688,12 @@ sub FileList { my ($prefix, $postf, $o) = @_;
 }
 
 sub normalizedPath { my($path, $sep, $doSlashes, $beURLaware, $beAbsolute) = @_;
-	my $c = firstDef($sep, {});
+	my $c = Set::firstDef($sep, {});
 	if (ref($c) eq 'HASH') {
-		$sep = firstDef($c->{sep}, $c->{separator}, '/');
-		$doSlashes = firstDef($c->{doSlashes}, 1);
-		$beURLaware = firstDef($c->{beURLaware}, 0);
-		$beAbsolute = firstDef($c->{beAbsolute}, 0);
+		$sep = Set::firstDef($c->{sep}, $c->{separator}, '/');
+		$doSlashes = Set::firstDef($c->{doSlashes}, 1);
+		$beURLaware = Set::firstDef($c->{beURLaware}, 0);
+		$beAbsolute = Set::firstDef($c->{beAbsolute}, 0);
 	}
 
 	if ($beAbsolute && substr($path, 0, 1) ne '/') {
@@ -682,7 +719,7 @@ sub normalizedPath { my($path, $sep, $doSlashes, $beURLaware, $beAbsolute) = @_;
 	return $path;
 }
 sub relativePath { my($absCurr, $absDest, $sep, $ignoreCase)=@_;
-	$sep = firstDef($sep, '/');
+	$sep = Set::firstDef($sep, '/');
 	#	trailing null fields are stripped
 	my ($curS,$curD)=(normalizedPath($absCurr), normalizedPath($absDest));
 	my @curr=($curS eq $sep)? (''): split(/$sep/, $curS);
@@ -758,10 +795,11 @@ sub pipeStringToCommandSystem { my ($strRef, $cmd, $logLevel)=@_;
 # flags:
 #	maxIterations: for iterate eq 'YES' iterate that often. 0: 2^(bitWidth - 1) iterations
 sub mergeDictToString { my ($hash, $str, $flags)=@_;
-	my $maxIterations = firstDef($flags->{maxIterations}, 100);
+	my $maxIterations = Set::firstDef($flags->{maxIterations}, 100);
 	my @keys = grep { defined($hash->{$_}) } keys(%{$hash});
 	my $doIterate = uc($flags->{iterate}) eq 'YES';
 	my $keysRe = uc($flags->{keysAreREs}) eq 'YES';
+	my $ws = uc($flags->{keysWs}) eq 'YES';
 	if (uc($flags->{sortKeys}) eq 'YES' || $doIterate)
 	{	@keys = sort { length($b) <=> length($a) } @keys;
 	}
@@ -773,6 +811,7 @@ sub mergeDictToString { my ($hash, $str, $flags)=@_;
 		$str0 = $str;
 		foreach $key (@keys)
 		{	if ($keysRe) {	$str =~ s/$key/$hash->{$key}/sg; }
+			elsif ($ws) {	$str =~ s/(?:(?<=\s)|^)\Q$key\E(?=\s|$)/$hash->{$key}/sg; }
 			else {			$str =~ s/\Q$key\E/$hash->{$key}/sg; }
 			# need to start from beginning to retain length order
 			last if ($doIterate && $str ne $str0);
@@ -796,6 +835,16 @@ sub deepTrimmStr { my($str)=@_;
 sub removeWS { my($str)=@_;	#remove all whitespace inside string
 	$str=~s/\s+//og;
 	return $str;
+}
+
+sub prefix { my ($s, $sep) = @_;
+	($s eq '')? '': $sep.$s;
+}
+sub postfix { my ($s, $sep) = @_;
+	($s eq '')? '': $s.$sep;
+}
+sub circumfix { my ($s, $sepPre, $sepPost) = @_;
+	postfix(prefix($s, $sepPre), $sepPost)
 }
 
 sub lcPrefix { my (@s) = @_;
@@ -988,15 +1037,19 @@ sub callTriggersFromOptions { my ($c, @args) = @_;
 	# extract options and detect deep vs non-deep structure
 	my $o = defined($c->{o})? $c->{o}: $c;
 	foreach $key (keys %{$c->{_triggers}}) {
+		#if (defined($o->{$key})) {
+		# <!> changed 23.11.2016 due to introduction of default trigger without entry in $c/$o
+		# <!> changed back 17.1.2017 due to breaking behaviour
 		if (defined($o->{$key})) {
-			my $sub = (ref($c->{_triggers}{$key}) eq 'CODE'? $c->{_triggers}{$key}
-			: 'main::'. $o->{triggerPrefix}. ($o->{triggerPrefix} eq ''? $key: ucfirst($key)));
+			my $sub = (ref($c->{_triggers}{$key}) eq 'CODE'
+				? $c->{_triggers}{$key}
+				: 'main::'. $o->{triggerPrefix}. ($o->{triggerPrefix} eq ''? $key: ucfirst($key)));
 			$sub =~ tr{-}{_} if (ref($sub) ne 'CODE');
 			$didCall = 1;
 			$ret += $sub->($c, @args);
 		}
 	}
-	exit($ret) if ($didCall);
+	exit($ret) if ($didCall && !$o->{doReturn});
 }
 
 
@@ -1005,8 +1058,12 @@ sub callTriggersFromOptions { my ($c, @args) = @_;
 );
 # example for option === function name
 # $main::d = { triggerPrefix => '' };
+# $main::d = { triggerDefault => 'myFunction' };
 # $main::o = [ '+encryptToHex=s'];
 
+# triggers:
+#	triggers are specified as a code reference in defaults, as a +option in options or as 
+#	a auto-vivifying default trigger that is called even if no option is given to the program
 # $returnDeepStruct returns a dict with elements c, o, cred
 #	return a merged dict otherwise
 # if an option has a subroutine as a default that subroutine gets called
@@ -1018,21 +1075,25 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 	# copy trigger definitions
 	my @triggers = grep { ref($o->{$_}) eq 'CODE' } keys %$o;
 	my $subs = makeHash([@triggers], [@{$defaults}{@triggers}]);
-	my @options = @$options;
 	# are any arguments present before calling GetOptionsStandard
 	my $noArgs = !@ARGV;
 	# get subroutine triggers (+options)
+	my @options = @$options;
+	my $triggerDefault = $defaults->{triggerDefault};
+	push(@options, "+$triggerDefault") if (defined($triggerDefault));
 	@options = map {
 		my ($t, $o, $oa) = ($_ =~ m{^(\+?)([a-z0-9_-]*)(.*)$}i);
 		$subs->{$o} = 0 if ($t eq '+');
 		$o.$oa
 	} (@options, @triggers);
 	# <!> reset $o in order to prevent Getopt::Long from calling triggers interpreted as callbacks
-	my $od = { %$o };	# option defaults
-	$od->{$_} = undef foreach (@triggers);
+	my $od = { %$o, ( map { $_ => undef }  keys %$subs ) };	# option defaults, reset triggers
 	my $os = {};	# specified options
 	my $result = GetOptionsStandard($os, @options);
-	$o = { %$od, %$os };
+	# no triggers triggered?
+	my $doTrigger = (int(grep { defined($_) }  @$os{keys %$subs}) == 0 && defined($triggerDefault));
+	my %odt = ($doTrigger? ($triggerDefault => 0): ());
+	$o = { %$od, %$os, %odt };
 	my $programName = cmdNm();
 
 	if ($o->{help} || !$result || ($noArgs && $o->{helpOnEmptyCall})) {
@@ -1040,7 +1101,8 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 		exit(!$result);
 	}
 	my $c = {};
-	$c = readConfigFile($o->{config}, { default => {} }) if (defined($o->{config}));
+	$c = readConfigFile($o->{config}, { default => {}, paths => $o->{configPaths} })
+		if (defined($o->{config}));
 	my $cred = undef;
 	if (defined($o->{credentials})) {
 		load('KeyRing');
@@ -1048,7 +1110,7 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 			'.this_cookie.'. $programName) || exit(0)
 	}
 	my $deepR = { o => $o, c => $c, cred => $cred, _triggers => $subs };
-	my $flatR = { %$od, %$c, %$os, %$cred, _triggers => $subs };
+	my $flatR = { %$od, %$c, %$os, %odt, %$cred, _triggers => $subs };
 	my $r = $o->{returnDeepStruct}? $deepR: $flatR;
 	# handle call triggers, triggering might be delayed
 	callTriggersFromOptions($r, @ARGV) if ($o->{callTriggers});
@@ -1086,7 +1148,7 @@ sub splitPathDict { my ($path, $doTestDir, $fileNameToSubstitue, %c)=@_;
 	my ($user, $host, $pathN);
 	$path = $pathN
 		if ((($user, $host, $pathN)
-		= ($path =~ m{^(?:(\w+)\@)?(?:(\w+):)(.*)}goi)) && $c{testRemote});
+		= ($path =~ m{^(?:(\w+)\@)?(?:([\w-]+):)(.*)}goi)) && $c{testRemote});
 	my ($directory, $filename, $ext) = splitPath($path, $doTestDir, $fileNameToSubstitue);
 	my $base = defined($ext)? substr($filename, 0, - length($ext) - 1): $filename;
 	my $dirPrefix = defined($directory)? ($directory eq '/'? '/': "$directory/"): '';
@@ -1117,7 +1179,7 @@ sub splitPathDict { my ($path, $doTestDir, $fileNameToSubstitue, %c)=@_;
 # 	perc|percentage: percentage to print
 # 	width: width of resulting string
 sub progressPrint { my ($p, %a) = @_;
-	my $w = firstDef($a{width}, 20) - 2;	# remaining width without delimeters
+	my $w = Set::firstDef($a{width}, 20) - 2;	# remaining width without delimeters
 	return '<'. ( '=' x $w ). '>' if ($p == 1);
 	# progress position
 	my $pp = max(int($p * $w + 0.5), 1);
@@ -1191,7 +1253,7 @@ sub testService { my ($MUTEX, $serviceName) = @_;
 	writeFile($MUTEX, '') if (! -e $MUTEX);
 	open($MUTEX, $MUTEX);
 		return 0 if (!flock($MUTEX, LOCK_EX));
-			my $pid = firstDef(readFile("${MUTEX}_pid"), 12345 );
+			my $pid = Set::firstDef(readFile("${MUTEX}_pid"), 12345 );
 			my ($name) = (`ps -p $pid -w -w -o command=` =~ m{(\S+)\n*$}so);
 			if ($name eq $serviceName) {
 				$r = 0;
@@ -1217,9 +1279,24 @@ sub testIfMount { my ($path, $doFollowLink) = @_;
 sub qw { $_[0] =~ s{"}{\\"}sog; $_[0] }
 sub qsB { $_[0] =~ s{\\}{\\\\}sog; return $_[0]; }
 sub qsQ { return qw(qsB($_[0])) }
-sub qs { my $p = qsB($_[0]); $p =~ s{'}{'\\''}sog; return "'$p'"; }
+sub qs { my $p = $_[0];
+	$p = qsB($p);
+	$p =~ s{'}{'"'"'}sog;
+	return "'$p'";
+}
+sub qs2 { my $p = $_[0];
+	$p = qsB($p);
+	$p =~ s{"}{\\"}sog;
+	return "\"$p\"";
+}
 sub prefix { my ($s, $prefix) = @_;
 	return $s eq ''? '': "$prefix$s";
+}
+sub uqs { my ($t) = @_;
+	my $u;
+	return $u if (($u) = ($t =~ m{\A"(.*)"\Z}so));
+	return $u if (($u) = ($t =~ m{\A'(.*)'\Z}so));
+	return $t;
 }
 
 #
@@ -1247,33 +1324,49 @@ sub prefix { my ($s, $prefix) = @_;
 	}
 );
 
+sub traverseRaw { my ($v, $keys) = @_;
+	my @keys = @$keys;
+	return $v if (!int(@keys));
+	my $key = shift(@keys);
+
+	if (ref($v) eq 'HASH') {
+		$v = $v->{$key};
+	} else {
+		my $code = ref($v)->can($key);
+		$v = $v->$code();
+		#Log("Col: $c; value:$v; Class: ". ref($v).": ". ref($r). " Method: $m, ", 2);
+	}
+	return traverseRaw($v, [@keys]);
+}
+
+sub traverse { my ($v, $kp) = @_;
+	my @keys = split(/[.]/, $kp);
+	return traverseRaw($v, [@keys]);
+}
+
 sub formatTableHeader { my ($d, $cols) = @_;
 	#my $fmt = join(' ', map { $_->{format} } @{$d->{columns}}{@$cols});
 	#$fmt =~ s{%0?\*\.?\d?[df]}{%*s}sog;
 	my $fmt = join(' ', ('%*s') x int(@$cols));
 	my $header = sprintf($fmt, map {
-		( -abs($d->{columns}{$_}{width}), ucfirst($_) )
+		( -abs($d->{columns}{$_}{width}), ucfirst(Set::firstDef($d->{columns}{$_}{rename}, $_)) )
 	} @$cols);
 	return $header;
 }
 sub formatTableRows { my ($d, $t, $cols) = @_;
 	my $fmt = join(' ', map {
-		firstDef($Set::tableFormats{$_->{format}}{format}, $_->{format})
+		Set::firstDef($Set::tableFormats{$_->{format}}{format}, $_->{format})
 	} @{$d->{columns}}{@$cols});
 	my @rows = map { my $r = $_;
 		sprintf($fmt, map { my $c = $_;
-			my $v;
-			if (ref($r) eq 'HASH') {
-				$v = $r->{$c};
-			} else {
-				my $code = ref($r)->can($c);
-				$v = $r->$code();
-			}
-			my $f = $d->{columns}{$_}{format};
+			my $col = $d->{columns}{$c};
+			my $f = $col->{format};
+			my $m = $col->{method};
+			my $v = traverse($r, Set::firstDef($col->{keyPath}, $c));
 			my $tr = $Set::tableFormats{$f}{transform};
 			$v = $tr->($v) if (defined($tr));
 			# <p> width
-			my $w = $d->{columns}{$_}{width};
+			my $w = $col->{width};
 			my $tw = $Set::tableFormats{$f}{width};
 			$w = $tw->($w) if (defined($tw));
 			($w, $v)
@@ -1296,8 +1389,25 @@ sub formatTable { my ($d, $rows, $cols) = @_;
 }
 
 sub dateReformat { my ($date, $fmtIn, $fmtOut) = @_;
-	return strftime($fmtOut, strptime($date, $fmtIn));
+	load('POSIX::strptime', qw(strptime));
+	return strftime($fmtOut, POSIX::strptime($date, $fmtIn));
 }
 
+sub slurpToTemp {
+	my @lines = <>;
+	my $tf = tempFileName("/tmp/perl_$ENV{USER}/slurp_pl", undef, { doTouch => 'YES' });
+	writeFile($tf, join("\n", @lines));
+	return $tf;
+}
+
+sub slurpPipeToTemp { my ($cmd) = @_;
+	$fh = new IO::File;
+    return undef if (!$fh->open("$cmd |"));
+	my @lines = <$fh>;
+	my $tf = tempFileName("/tmp/perl_$ENV{USER}/slurp_pl", undef, { doTouch => 'YES' });
+	writeFile($tf, join("\n", @lines));
+	$fh->close;
+	return $tf;
+}
 
 1;

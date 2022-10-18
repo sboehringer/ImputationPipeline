@@ -116,7 +116,7 @@ sub colSelectorFromArg { my ($o, $arg) = @_;
 
 sub fileOptions { my ($oStr) = @_;
 	my %options = map { my ($k, $v) = split(/=/, $_);
-		($FOMappers{$k}->($v))
+		($FOMappers{lc($k)}->($v))
 	} split(/,/, $oStr);
 	return %options;
 }

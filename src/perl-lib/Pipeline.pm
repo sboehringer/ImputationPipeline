@@ -56,7 +56,7 @@ sub readPipelineConfigFile { my ($f, $c) = @_;
 # split with regex "split", match regex globally on value and join with "sep"
 sub parseConfigRegexes { my (%c) = @_;
 	my @vs = map {
-		my ($spl, $regex, $sep, $v) = ($_ =~ m{^~~(.*)~~{(.*)}~~(.*)~~(.*)$}so);
+		my ($spl, $regex, $sep, $v) = ($_ =~ m{^~~(.*)~~[{](.*)[}]~~(.*)~~(.*)$}so);
 		if ($regex ne '') {
 			$v = mergeDictToString(\%c, $v, { sortKeys => 'YES', iterate => 'YES' });
 			join($sep, map { $_ =~ m{$regex}s } split(/$spl/, $v));

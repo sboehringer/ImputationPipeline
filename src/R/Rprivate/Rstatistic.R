@@ -57,7 +57,30 @@ logSumExp = function(x) {
 	Imx = which.max(x);
 	log1p(sum(exp(x[-Imx] - x[Imx]))) + x[Imx]
 }
-   
+logSumExp_add = function(v, bins) {
+	diff = abs(bins - v);
+	diffB = pop(bins) - shift(bins);
+	if (max(diff) > max(diffB)) {	# bin-reshuffeling
+		Ibin = which.min(diffB);
+		bins[Ibin] = logSumExp(bins[c(Ibin, Ibin + 1)]);
+		bins[Ibin + 1] = v;
+	} else {
+		Ibin = which.min(abs(diff));
+		bins[Ibin] = logSumExp(c(v, bins[Ibin]));
+	}
+	return(sort(bins, na.last = T, decreasing = T));
+}
+
+logSumExpIter_raw = function(x, Nbins = 30) {
+	if (length(x) < Nbins) return(x);
+	lse = x[1:Nbins];
+	for (e in x[-(1:Nbins)]) lse = logSumExp_add(e, lse);
+	return(logSumExp(lse));
+}
+logSumExpIter = function(x, Nbins = 30) {
+	return(logSumExp(logSumExpIter_raw(x)));
+}
+
 # rejFrac = function(x, alpha = 0.05) {
 # 	x = na.omit(x);
 # 	f = count(x <= alpha) / length(x);
@@ -681,16 +704,20 @@ regressionMethods = list(
 		}
 	),
 	gee = list(
-		fit = function(formula, data, clusterCol, ...) {
+		fit = function(formula, data, clusterCol, family = binomial(), ...) {
 			if (!length(formula.covariates(formula))) return(NULL);
-			# geeglm needs ordered clusterIds <!>
-			data = data[order(data[[clusterCol]]), ];
-			names(data)[which(names(data) == clusterCol)] = "..gee.clusters";	# hack to make geeglm work
-			r = geeglm(formula, data = data, id = ..gee.clusters, ...);
+			# geeglm needs ordered clusterIds <!> <N> now pre-processed
+			#data = data[order(data[[clusterCol]]), , drop = F];
+			#data = Df_(data, headerMap = listKeyValue(clusterCol, 'regrCompClusters'));
+			#names(data)[which(names(data) == clusterCol)] = "regrCompClusters";	# hack to make geeglm work
+			#geeClusters = as.integer(data[[clusterCol]]);
+			myFamily = get(family$family)();
+			r = geeglm(formula, data = data, id = regrCompClusters, ...);
 			r
 		},
 		compare = function(m1, m0){
-			a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			#a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			a = if (is.null(m0)) anova(m1$r) else { anova(m0$r, m1$r); }
 			list(anova = a, m0 = m0, m1 = m1, p.value = a[["P(>|Chi|)"]][1],
 				effects0 = coefficients(summary(m0$r))[, "Estimate"],
 				sdevs0 = coefficients(summary(m0$r))[, "Std.err"],
@@ -698,10 +725,51 @@ regressionMethods = list(
 				sdevs1 = coefficients(summary(m1$r))[, "Std.err"]
 			)
 		}
+	),
+	geebin = list(
+		fit = function(formula, data, clusterCol, ...) {
+			if (!length(formula.covariates(formula))) return(NULL);
+			# <!> workaround for generic approach that gives obscure error message
+			#	gee with family = binomial()
+			r = geeglm(formula, data = data, id = regrCompClusters, family = binomial(), ...);
+			r
+		},
+		compare = function(m1, m0){
+			#a = if (is.null(m0)) anova(m1$r) else anova.geeglm(m0$r, m1$r);
+			a = if (is.null(m0)) anova(m1$r) else { anova(m0$r, m1$r); }
+			list(anova = a, m0 = m0, m1 = m1, p.value = a[["P(>|Chi|)"]][1],
+				effects0 = coefficients(summary(m0$r))[, "Estimate"],
+				sdevs0 = coefficients(summary(m0$r))[, "Std.err"],
+				effects1 = coefficients(summary(m1$r))[, "Estimate"],
+				sdevs1 = coefficients(summary(m1$r))[, "Std.err"]
+			)
+		}
+	),
+	surv = list(
+		fit = function(formula, data, clusterCol, ...)
+			list(r = coxph(formula, data = data), formula = formula, data = data),
+		compare = function(m1, m0){
+			vars0 = formula.predictors(m0$r$formula, m0$r$data);
+			Nvars0 = length(vars0);
+			vars1 = formula.predictors(m1$r$formula, m1$r$data);
+			Nvars1 = length(vars1);
+			p.value = if (Nvars0 == 0 || (Nvars1 - Nvars0) == 1) {
+				v = setdiff(vars1, vars0);
+				summary(m1$r$r)$coefficients[v, 'Pr(>|z|)']
+			} else {
+				anova(m0$r$r, m1$r$r)[2, 'P(>|Chi|)']
+			}
+			r = list(
+				p.value = p.value,
+				effects0 = coefficients(summary(m0$r$r)),
+				effects1 = coefficients(summary(m1$r$r))
+			);
+			r
+		}
 	)
 );
 
-completeRows = function(f1, data) {
+CompleteRows = function(f1, data) {
 	vars = all.vars(as.formula(f1));
 	rows = apply(data[, vars, drop = F], 1, function(r)all(!is.na(r)));
 	r = which(rows);
@@ -720,18 +788,26 @@ regressionCompare = function(m1, m0) {
 }
 
 regressionCompareModelsRaw = function(f1, f0, data, type = "lm", clusterCol = NULL, ...) {
+	f0 = as.formula(f0);
+	f1 = as.formula(f1);
 	# <p> jointly trim data according to missing data
 	#rows = which(apply(data[, c(formula.vars(f1), clusterCol)], 1, function(r)all(!is.na(r))));
 	# more robust version
 	row.names(data) = NULL;
 	#rows = as.integer(row.names(model.frame(f1, data = data)));
 	# robust for random effects
-	rows = apply(data[, all.vars(as.formula(f1)), drop = F], 1, function(r)!any(is.na(r)));
-	d0 = data[rows, ];
+	#rows = apply(data[, all.vars(as.formula(f1)), drop = F], 1, function(r)!any(is.na(r)));
+	#d0 = data[rows, ];
+	# <p> general cluster processing: order (<!> required for geeglm, rename <!> required for geeglm
+	if (Nif(clusterCol)) {
+		data = data[order(data[[clusterCol]]), , drop = F];
+		data = Df_(data, headerMap = listKeyValue(clusterCol, 'regrCompClusters'));
+	}
+	d0 = model_matrix_from_formula(f1, data, returnComplete = T)$data;
 
 	# <p> fit and compare models
-	m1 = regressionFit(as.formula(f1), data = d0, type = type, clusterCol = clusterCol, ...);
-	m0 = regressionFit(as.formula(f0), data = d0, type = type, clusterCol = clusterCol, ...);
+	m1 = regressionFit(f1, data = d0, type = type, clusterCol = clusterCol, ...);
+	m0 = regressionFit(f0, data = d0, type = type, clusterCol = clusterCol, ...);
 	a = regressionCompare(m1, m0);
 	a
 }
@@ -840,6 +916,33 @@ permute = function(data, stat, vars, ..., Nperm = 5e3, Pvalue = 'lower', na.rm =
 	r
 }
 
+calibrate = function(f1, data, regression = glm, family = binomial(), quantiles = seq(0, 1, 0.25), ...) {
+	stat0 = regression(f1, data, family = family);
+	scores = predict(stat0, data, type = 'link');
+	ps = predict(stat0, data, type = 'response');
+	y = data[[formula.response(f1)]];
+	groups = quantile(scores, probs = quantiles, na.rm = FALSE);
+
+	calibration = lapply(2:length(quantiles), function(i) {
+		group = scores > groups[i - 1] & scores <= groups[i];
+		c(mean(y[group]), mean(ps[group]), sum(group))
+	});
+	c0 = Df(do.call(rbind, calibration),
+		row.names = paste0(sprintf('%.1f', quantiles[-1] * 100), '%'),
+			names = c('truth', 'prediction', 'N'));
+	r = list(calibration = c0, model = summary(stat0), quantiles = groups[-1], scores = scores);
+	r
+}
+
+#
+#	<p> P-values
+#
+
+alphaLevels = function(ps, Nalpha = 40, alphas = seq(1/Nalpha, 1 - 1/Nalpha, length.out = Nalpha)) {
+	lvls = setNames(sapply(alphas, function(alpha)mean(ps < alpha)), round(alphas, 2));
+	lvls
+}
+
 #
 #	<p> error propagation
 #
@@ -866,13 +969,18 @@ errSum = function(sdx, cx = 1, sdy = 0, cy = 1, covxy = 0) {
 #
 
 # convert confidence interval to standard dev based on a normality assumption
-ciToSd = function(ci.lo, ci.up, level = .95) {
+ciToSd_old = function(ci.lo, ci.up, level = .95) {
 	# upper centered limit
 	ciU = ci.up - mean(c(ci.lo, ci.up));
 	span = ci.up - ci.lo;
 	# corresponding sd
 	sd = Vectorize(inverse(function(s)qnorm(1 - (1 - level)/2, 0, s), interval = c(0, span * 8)))(ciU);
 	sd
+}
+ciToSd = function(ci.lo, ci.up, level = .95) {
+	alpha = 1 - level;
+	widthStd = qnorm(1 - alpha/2) * 2;
+	(ci.up - ci.lo)/widthStd
 }
 ciToP = function(ci.lo, ci.up, level = .95, one.sided = F, against = 0) {
 	sd = ciToSd(ci.lo, ci.up, level)
@@ -884,7 +992,7 @@ peSdToP = function(beta, sd, one.sided = F) {
 	pnorm(-abs(beta), 0, sd, lower.tail = T) * ifelse(one.sided, 1, 2);
 }
 
-ciFromBetaSdev = function(beta, sdev, level = .95) {
+betaSdToCi = ciFromBetaSdev = function(beta, sdev, level = .95) {
 	r = list(effect = beta,
 		lower = qnorm((1 - level)/2, beta, sdev, lower.tail = T),
 		upper = qnorm((1 - level)/2, beta, sdev, lower.tail = F)
@@ -893,8 +1001,8 @@ ciFromBetaSdev = function(beta, sdev, level = .95) {
 }
 
 ciFromSummary = function(s, var, level = .95) {
-	cs = coefficients(s)[var, ];
-	ciFromBetaSdev(cs[["Estimate"]], cs[["Std. Error"]], level = level);
+	cs = as.matrix(coefficients(s)[var, ]);
+	ciFromBetaSdev(cs[, 'Estimate'], cs[, 'Std. Error'], level = level);
 }
 
 pFromBetaSd = function(beta, sd, null = 0)pnorm(null, abs(beta), sd)
@@ -903,6 +1011,22 @@ betaPtoCi = function(beta, p) {
 	sd = sdFromBetaP(beta, p);
 	ciFromBetaSdev(beta, sd)
 }
+betaVarToCi = function(beta, var)ciFromBetaSdev(beta, sqrt(var))
+
+coefficientsOR = function(s, level = .95) {
+	cis = do.call(cbind, ciFromSummary(s, level = level));
+
+	# <p> ORs
+	cisOR = Df_(exp(cis));
+	cisOR['(Intercept)', ] = NA;	# intercept does not have an OR interpretation
+	names(cisOR) = paste(names(cisOR), 'OR', sep = '');
+
+	# <p> result
+	cfs = coefficients(s);
+	r = cbind(cfs, cis[, -1], as.matrix(cisOR));
+	r
+}
+coefficientsORmodel = function(model, level = .95)coefficientsOR(summary(model), level)
 
 #
 #	meta analysis
@@ -955,6 +1079,36 @@ imputeMean = function(data) {
 	d1 = apply(data, 2, imputeMeanVar);
 	d1
 }
+
+# impute using mice
+imputeVariables = function(data, formula = NULL, vars = NULL, Nimp = 10, returnOriginal = FALSE,
+	imputationColumn = 'Imputation_', returnMice = FALSE) {
+	require('mice');
+
+	# <p> preparation
+	if (notE(formula)) vars = all.vars(formula.re(formula, data = data));
+	invalidVars = vars[!lapply(data[, vars], class) %in% c('factor', 'numeric')];
+	if (length(invalidVars) > 0) {
+		stop(Sprintf('some columns neither factor nor numeric: %{v}s', v = join(invalidVars, ', ')));
+	}
+	s = descriptives(data[, vars]);
+	
+	# <p> imputation
+	dataImputed = mice(data[, vars, drop = F], m = Nimp);
+	dataL = Df_(complete(dataImputed, "long", include = returnOriginal),
+		min_ = c('.id'), headerMap = list(`.imp` = imputationColumn), as_numeric = imputationColumn);
+
+	dataC = DfStack(data, (Nimp + returnOriginal));
+	dataC[, vars] = Df_(dataL, min_ = imputationColumn);
+	dataR = Df(dataL[, imputationColumn], dataC, names = imputationColumn);
+	r = list(data = dataR, summary = s, vars = vars);
+	if (returnMice) r = c(r, list(mice = dataImputed));
+	#r = list(data = dataImputed, summary = s, vars = vars);
+	r
+}
+
+
+
 
 #
 #	<p> cross validation
@@ -1071,21 +1225,41 @@ seq.transf = function(from = 0, to = 1, length.out = 1e1, ..., transf = log, tra
 #	<p> bug fixes for packages
 #
 
-model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F) {
+completeRows = function(data)!apply(data, 1, function(r)any(is.na(r)))
+completeData = function(f = ~ ., data, collapse = F, varExclude = c()) {
+	vsRaw = all.vars(f);
+	if (any(vsRaw == '.')) vsRaw = names(data);
+	vs = setdiff(vsRaw, varExclude);
+	data[completeRows(data[, vs, drop = F]), if (collapse) vs else 1:ncol(data), drop = F]
+}
+
+model_matrix_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F,
+	returnComplete = F, formulaAsIs = F) {
 	# <p> prepare data matrices
-	f1 = formula.re(f, data = data, ignore.case = ignore.case);
+	f1 = if (formulaAsIs) f else formula.re(f, data = data, ignore.case = ignore.case);
 	f1vars = all.vars(f1);
 	response = formula.response(f1);
-	responseValues = if (length(response) > 0) data[[response]] else NULL;
-	row.names(data) = NULL;
-	complete = !apply(data[, f1vars, drop = F], 1, function(r)any(is.na(r)));
-	data = droplevels(data[complete, ]);
-	responseValues = responseValues[complete];
-	offset = if (!is.null(offset)) offset[complete] else NULL;
-	mm = model.matrix(f1, model.frame(f1, data = data));
-	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)')];
+	responseVars = all.vars(as.formula(con(response, ' ~ 1')));
 
-	r = list(mm = mm, response = responseValues, offset = offset, indeces = as.integer(row.names(data)));
+	# <p> complete data
+	complete = completeRows(data[, f1vars, drop = F]);
+	data = droplevels(data[complete, , drop = F]);
+	
+	# <p> response
+	responseData = if (notE(responseVars)) with(data, Eval(response)) else NULL;
+	# <p> offset
+	offset = if (!is.null(offset)) offset[complete] else NULL;
+	# <p> model matrix
+	#mm = if (exists('lFormula') && length(unlist(Regex('[+]\\s*[(]', Deparse(f1)))) > 0)
+	mm = if (exists('lFormula') && length(unlist(Regex('[+]\\s*[(].*?[|].*[)]', Deparse(f1)))) > 0)
+		lFormula(f1, data)$X else	# lme4
+		model.matrix(f1,  model.frame(f1, data = data));
+	if (remove.intercept) mm = mm[, !(dimnames(mm)[[2]] == '(Intercept)'), drop = F];
+
+	# <p> return
+	r = list(mm = mm, response = responseData, offset = offset, indeces = which(complete),
+		varsCov = setdiff(f1vars, responseVars), varsResponse = responseVars);
+	if (returnComplete) r = c(r, list(data = data));
 	r
 }
 complete_from_formula = function(f, data, offset = NULL, ignore.case = F, remove.intercept = F) {
@@ -1096,20 +1270,30 @@ complete_from_vars = function(vars, data, offset = NULL, ignore.case = F, remove
 	model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept)$indeces
 }
 
-glmnet_re = function(f, data, ..., offset = NULL, ignore.case = F, remove.intercept = F,
-	lambdas = NULL, cv = T) {
-	d = model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept);
+# <!><t> tb tested refactoring as of 19.2.2019
+
+glmnet_re_mm = function(y, mm, ..., offset = NULL, ignore.case = F, remove.intercept = F,
+	lambdas = NULL, cv = T, returnGlmnet = F) {
 	# <p> fit model
 	r = if (cv) {
-		r0 = cv.glmnet(x = d$mm, y = d$response, lambda = lambdas, ..., offset = d$offset);
+		r0 = cv.glmnet(x = mm, y = y, lambda = lambdas, ..., offset = offset);
 		args = c(List(..., min_ = c('foldid', 'nfolds', 'grouped')),
-			list(x = d$mm, y = d$response, lambda = r0$lambda.min, offset = d$offset));
-# 			list(x = d$mm, y = d$response, lambda = (3*r0$lambda.min + r0$lambda.1se)/4, offset = d$offset));
-#			list(x = d$mm, y = d$response, lambda = (r0$lambda.min), offset = d$offset));
+			list(x = mm, y = y, lambda = r0$lambda.min, offset = offset));
+# 			list(x = mm, y = y, lambda = (3*r0$lambda.min + r0$lambda.1se)/4, offset = offset));
+#			list(x = mm, y = y, lambda = (r0$lambda.min), offset = offset));
 		do.call('glmnet', args);
-	} else glmnet(x = d$mm, y = d$response, lambda = lambdas, ..., offset = d$offset);
-	r = c(r, list(formula = f));
-	r
+	} else glmnet(x = mm, y = y, lambda = lambdas, ..., offset = offset);
+	if (returnGlmnet) r = list(glmnet = r);
+	return(r);
+}
+
+glmnet_re = function(f, data, ..., offset = NULL, ignore.case = F, remove.intercept = F,
+	lambdas = NULL, cv = T, returnGlmnet = F) {
+	d = model_matrix_from_formula(f, data, offset, ignore.case, remove.intercept);
+	r = glmnet_re_mm(d$response, d$mm, ..., offset = d$offset,
+		ignore.case = ignore.case, remove.intercept = remove.intercept, lambdas = lambdas,
+		cv = cv, returnGlmnet = returnGlmnet);
+	return(c(r, list(formula = f)));
 }
 glmnet_re_refit = function(model, data, ..., var_cutoff =  1e-6, intercept = '1', impute = NULL) {
 	response = formula.response(model$formula);
@@ -1282,18 +1466,50 @@ cv_test_glm = function(model, formula, data, ...) {
 	ll
 }
 
+cv_train_glmnet = function(f1, data, ...) {
+	glmnet_re(f1, data, ..., returnGlmnet = T);
+}
+cv_test_glmnet = function(model, f1, data, ...) {
+	preds = predict(model$glmnet, model_matrix_from_formula(f1, data)$mm, type = 'response');
+	# detect logistic model, constrain probabilities
+	if (notE(model$glmnet$classnames) && length(model$glmnet$classnames) == 2) preds = minimax(preds, 0, 1);
+	return(preds);
+}
+
+cv_train_glmnet_mm = function(data, ...) {
+	i = FirstDef(which(dimnames(data)[[2]] == 'y'), 1);
+	glmnet_re_mm(data[, i], data[, -i], ..., returnGlmnet = T);
+}
+cv_test_glmnet_mm = function(model, data, ...) {
+	i = FirstDef(which(dimnames(data)[[2]] == 'y'), 1);
+	preds = predict(model$glmnet, data[, -i], type = 'response');
+	# detect logistic model, constrain probabilities
+	if (notE(model$glmnet$classnames) && length(model$glmnet$classnames) == 2) preds = minimax(preds, 0, 1);
+	return(preds);
+}
+
+
+cv_train_glm = function(f1, data, ..., family = binomial()) {
+	glm(f1, data = data, family = family)
+}
+cv_test_glm_predict = function(model, f1, data, ..., type = 'response') {
+	predict(model, data, type = type)
+}
+
+
 # cv_prepare = function(data, argsFrom...)
 # cv_train = function(data, argsFrom...)
 # cv_test = function(model, data, argsFrom...)
 # @arg cv_fold number of crossvalidation folds, denotes leave -cv_fold out if negative
+# <!> 19.2.2019: removed cv_prepare for lack of functionality
+# <i> argument routing to train/test
 
-crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list(),
+crossvalidate = function(cv_train, cv_test,
 	data, cv_fold = 20, cv_repeats = 1, ..., parallel = F, align_order = TRUE) {
 	if (cv_fold == 0) stop('crossvalidate: cv_fold must be an integer != 0');
 	if (!parallel) Lapply = lapply;
 	N = nrow(data);
-	r = with(cv_prepare(data = data, ...), {
-		Lapply(1:cv_repeats, function(i, ...) {
+	r = Lapply(1:cv_repeats, function(i, ...) {
 			perm = Sample(1:N, N);
 			# compute partitions
 			fold = if (cv_fold > 0) cv_fold else as.integer(N/-cv_fold);
@@ -1311,9 +1527,10 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			# re-establish order
 			r = if (align_order
 				&& all(sapply(r, class) %in% c('numeric', 'integer'))
-				&& all(sapply(r, length) == 1)) {
+				#&& all(sapply(r, length) == 1)) {
+				&& sum(sapply(r, length)) == nrow(data)) {
 				unlist(r)[o];
-			} else if (align_order && all(sapply(r, class) == 'data.frame') &&
+			} else if (align_order && all(sapply(r, class) %in% c('data.frame', 'matrix')) &&
 				sum(sapply(r, nrow)) == nrow(data)) {
 				#<!> untested
 				#r = rbindDataFrames(r, colsFromFirstDf = T);
@@ -1322,7 +1539,7 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 			} else if (align_order) stop("Crossvalidate: didn't know how to align order.") else r;
 			gc();
 			r
-	}, ...)});
+	}, ...);
 	r
 }
 
@@ -1330,7 +1547,15 @@ crossvalidate = function(cv_train, cv_test, cv_prepare = function(data, ...)list
 #	<p> data standardization
 #
 
-standardize = function(v)(v / sd(v));
+standardize = function (x, ...)UseMethod("standardize", x);
+standardize.numeric = function(v, na.rm = TRUE, orig.mean = FALSE) {
+	vM = mean(v, na.rm = na.rm);
+	vC = v - vM;
+	vS = vC / sd(vC, na.rm = na.rm);
+	if (orig.mean) vS + vM else vS
+}
+standardize.data.frame = function(df, na.rm = TRUE)apply(df, 2, standardize.numeric, na.rm = na.rm);
+standardize.matrix = function(m, na.rm = TRUE)apply(m, 2, standardize.numeric, na.rm = na.rm);
 
 df2z = function(data, vars = names(as.data.frame(data))) {
 	data = as.data.frame(data);
@@ -1416,7 +1641,7 @@ compareVectors = function(l) {
 }
 
 pairs_std.panel.hist <- function(x, ...) {
-	usr <- par("usr"); on.exit(par(usr))
+	usr <- par("usr"); on.exit(par(usr));	# restore settings
 	par(usr = c(usr[1:2], 0, 1.5) )
 	h <- hist(x, plot = FALSE)
 	breaks <- h$breaks; nB <- length(breaks)
@@ -1434,9 +1659,53 @@ pairs_std.panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
 	if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
 	text(0.5, 0.5, txt, cex = cex.cor * 1)	# used tb cex.cor * r
 }
-pairs_std = function(...) {
-	pairs(..., diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor)
+
+unique_fraction = function(x) (length(unique(x))/length(x))
+guess_is_factor = function(x, na.rm = T, uniqueFraction = .1, Nlevels = 10) {
+	all(as.integer(x) == x, na.rm = na.rm) &&
+		unique_fraction(x) < uniqueFraction &&
+		length(unique(x)) <= Nlevels
 }
+
+
+panel.scatter = function(x, y, col = par("col"), bg = NA, pch = par("pch"), 
+	cex = 1, col.smooth = "red", span = 2/3, iter = 3, blotSize = cm2in(.3), ...) 
+{
+	#call_ = match.call(envir = parent.frame(1L));
+	# it is difficult to get information on the plotted variables, for now a heuristics is used
+	#	to determine factor status
+	if (guess_is_factor(x) && guess_is_factor(y)) {
+		pars = par(c('usr', 'xaxt', 'yaxt')); on.exit(par(pars));
+		t0 = table(x, y);
+		#plot(t0);
+		mx = max(as.integer(t0));
+		d0 = Df(merge.multi.list(dimnames(t0)), w = sqrt(as.integer(t(t0))), as_numeric = c('x', 'y'));
+		#par(new = TRUE);
+		#plot(d0[, c('x', 'y')], type = 'n', xaxt='n', yaxt = 'n');
+		par(new = TRUE);
+		with(d0,
+			symbols(x = x, y = y, circles = w, inches = blotSize, ann = F, bg = "steelblue2", fg = NULL,
+			 xaxt='n', yaxt = 'n')
+		)
+		#return();
+	} else {
+		# <i> call forwarding
+		panel.smooth(x, y, col, bg, pch, cex, span, iter);
+	}
+}
+
+pairs_std = function(...,
+	lower.panel = panel.scatter, diag.panel = pairs_std.panel.hist, upper.panel = pairs_std.panel.cor) {
+	pairs(...,
+		lower.panel = lower.panel, diag.panel = diag.panel, upper.panel = upper.panel)
+}
+
+pairs_std_save = function(data, ..., path = NULL) {
+	if (is.null(path)) path = tempfile(fileext = '.png');
+		plot_save_eval(pairs_std(data), ..., plot_path = path);
+	return(path);
+}
+
 
 #
 #	<p> omics data
@@ -1578,10 +1847,345 @@ table.entropy = function(d) {
 #
 
 Qvalue = function(P.value, ...) {
-	require('qvalue');
+	Require('qvalue');
 	P.valuesNotNA = na.omit(P.value);
 	qv = qvalue(P.valuesNotNA, ...);
 	r = qv;
 	r$qvalue = vector.embed(rep(NA, sum(is.na(P.value))), which(!is.na(P.value)), qv$qvalue);
 	r
 }
+
+#
+#	<p> math functions
+#
+
+Ceiling = function(x, N = 0)(ceiling(x * 10^N) / 10^N)
+Floor = function(x, N = 0)(floor(x * 10^N) / 10^N)
+
+#
+#	<p> descriptive statistics
+#
+
+SummaryColNum = function(col, qtls = c(0, 0.25, .5, .75, 1)) {
+	qs = quantile(col, qtls, na.rm = T);
+	mn = vector.named(mean(col, na.rm = T), 'mean');
+	na = vector.named(fraction(is.na(col)), 'NA');
+	Sd = vector.named(sd(col, na.rm = T), 'sd');
+	medianI = which(qtls == .5);
+	qs1 = if (length(medianI) > 0) vector.embed(qs, medianI + 1, mn) else c(qs, mean);
+	c(qs1, Sd, na)
+}
+SummaryColFactor = function(col) {
+	na = vector.named(fraction(is.na(col)), 'NA');
+	na
+}
+SummaryCol = function(col, qtls = c(0, 0.25, .5, .75, 1)) {
+	r = if (class(col) == 'numeric') SummaryColNum(col, qtls) else
+		if (class(col) == 'factor') c(rep(NA, length(qtls) + 2), SummaryColFactor(col)) else
+			stop("Could not summarize column");
+	r
+}
+
+Summary = function(d) {
+	r0 = lapply(d, SummaryCol)
+	r = t(as.matrix(do.call(cbind, r0)));
+	r
+}
+
+
+descriptivesNumeric = function(data) {
+	bp = apply(data, 2, boxplot.stats);
+	N = list.kp(bp, 'n', do.unlist = T);
+	r = data.frame(
+		N = N,
+		Nna = nrow(data) - N,
+		mean = apply(data, 2, mean, na.rm = T),
+		median = apply(data, 2, median, na.rm = T),
+		se = apply(data, 2, sd, na.rm = T) / sqrt(N),
+		Nout = sapply(bp, function(v)length(v$out))
+	);
+	r
+}
+descriptivesFactor = function(data) {
+	Nnas = apply(data, 2, function(c)sum(is.na(c)));
+	r = data.frame(
+		N = nrow(data) - Nnas,
+		Nna = Nnas,
+		Ncat = sapply(lapply(data, levels), length)
+	);
+	r
+}
+
+descriptives = function(data) {
+	r1 = descriptivesFactor(data[, DfClasses(data) == 'factor']);
+	r2 = descriptivesNumeric(data[, DfClasses(data) == 'numeric']);
+	r = listOfDataFrames2data.frame(list(r1, r2), idColumn = NULL, colsFromUnion = T, row.names = T);
+	r$`NAperc` = with(r, Nna / nrow(data) * 100);
+	r
+}
+
+
+#
+#	<p> survival
+#
+
+# adapted from survival:::print.survfit
+survfit2m = function (x, scale = 1, ..., rmean = 'none') {
+	if (inherits(x, "survfitms")) {
+		x$surv <- 1 - x$prev
+		if (is.matrix(x$surv)) dimnames(x$surv) <- list(NULL, x$states)
+		if (!is.null(x$lower)) {
+			x$lower <- 1 - x$lower
+			x$upper <- 1 - x$upper
+		}
+		rmean <- "none"
+	}
+	omit <- x$na.action
+	temp <- survival:::survmean(x, scale = scale, rmean)
+	mtemp <- if (is.matrix(temp$matrix)) 
+		temp$matrix
+	else matrix(temp$matrix, nrow = 1, dimnames = list(NULL, 
+		names(temp$matrix)))
+	if (all(mtemp[, 2] == mtemp[, 3])) {
+		cname <- dimnames(mtemp)[[2]]
+		mtemp <- mtemp[, -2, drop = FALSE]
+		cname <- cname[-2]
+		cname[2] <- "n"
+		dimnames(mtemp)[[2]] <- cname
+	}
+	if (all(mtemp[, 1] == mtemp[, 2])) 
+		mtemp <- mtemp[, -1, drop = FALSE]
+	temp$matrix <- drop(mtemp)
+	temp$matrix
+}
+
+#
+#	<p> mixed models
+#
+
+lmer2ci = function(object, method = 'profile')confint.merMod(object, method = method);
+
+lmer2p = function(object, method = 'profile') {
+	cis = lmer2ci(object, method = method);
+	apply(cis, 1, function(ci)ciToP(ci[1], ci[2]))
+}
+
+# confint plus P-value
+confintP = function(m, level = .95) {
+	ci = confint(m, level = level);
+	P = apply(ci, 1, function(ci)ciToP(ci[1], ci[2], level = level));
+	cbind(ci, P)
+}
+
+# alternative check for convergence of glmer models
+#https://stackoverflow.com/questions/21344555/convergence-error-for-development-version-of-lme4
+glmerFit = function(m) {
+	relgrad = with(m@optinfo$derivs, solve(Hessian, gradient));
+	return(max(abs(relgrad)));
+}
+
+#
+#	<p> simulation studies
+#
+
+dataSimulation = function(Niteration, fSim, fStat = function(data, ...)summary(data), ...,
+	parSim = list(), parStat = list()) {
+	parShared = list(...);
+	r = Lapply(1:Niteration, function(i) {
+		data = do.call(fSim, c(parSim, parShared));
+		r = do.call(fStat, c(list(data = data), parStat, parShared));
+	});
+}
+
+#
+#	<p> delta rule
+#
+
+#
+#	Numeric delta rule
+#
+
+gradient = function(f, x, ..., eps = 1e-5) {
+	sapply(seq_along(x), function(i) {
+		epsI = vector.assign(0, i, eps, N = length(x));
+		(f(x + epsI, ...) - f(x - epsI, ...)) / (2 * eps)
+	});
+}
+
+totalDeriv = function(f, x, ..., eps = 1e-5) {
+	y = f(x, ...);
+	t(sapply(seq_along(y), function(i)gradient(function(x)f(x, ...)[i], x, eps = eps)));
+}
+
+# delta rule for functions of binomial data
+#N: list of pairs Nevents, Ntotal, or nx2 matrix of these numbers
+#f: function to computed on the frequencies
+deltaFreqs = function(N, f, logScale = T, ..., eps = 1e-5, alpha = .95) {
+	if (is.list(N)) N = sapply(N, identity);
+	freqs = N[1, ] / N[2, ];
+	var = freqs * (1 - freqs) / N[2, ];
+
+	fDeriv = if (logScale) function(x, ...)log(f(x, ...)) else f;
+	fGradient = gradient(fDeriv, freqs, ..., eps = eps);
+
+	varf = (t(fGradient) %*% diag(var) %*% fGradient)[1, 1];
+	limit = qnorm(1 - (1 - alpha)/2, 0, sqrt(varf));
+
+	y = fDeriv(freqs);
+	yCi = y + c(-limit, limit);
+
+	r = if (logScale) list(y = exp(y), ci = exp(yCi), var = varf) else list(y = y, ci = yCi, var = varf);
+	r
+}
+
+#
+#	<p> sensitvity/specificity/ROC/AUC
+#
+
+
+# assume TRUE/FALSE
+binaryMeasure = function(tab, strict = TRUE) {
+	if (strict && !all(names(dimnames(tab)) == c('pred', 'truth'))) stop('dimnames != pred, truth');
+	if (strict && !all(unique(unlist(dimnames(tab))) == c('FALSE', 'TRUE'))) stop('values != FALSE, TRUE');
+	r = list(
+		tp = sum(tab[, 'TRUE']) / sum(tab),
+		tn = sum(tab[, 'FALSE']) / sum(tab),
+		sensitivity = tab['TRUE', 'TRUE'] / sum(tab[, 'TRUE']),
+		specificity = tab['FALSE', 'FALSE'] / sum(tab[, 'FALSE']),
+		ppv = tab['TRUE', 'TRUE'] / sum(tab['TRUE', ]),
+		npv = tab['FALSE', 'FALSE'] / sum(tab['FALSE', ])
+	);
+	return(r);
+}
+
+binaryMeasures = function(prob, labels) {
+	cutoffs = sort(unique(prob));
+	measures = lapply(cutoffs, function(co) {
+		tab = Table(list(pred = prob >= co, truth = labels), cats = list(pred = c(F, T), truth = c(F, T)));
+		bm = c(list(cutoff = co), binaryMeasure(tab));
+		bm
+	});
+	r = apply(do.call(rbind, measures), 2, unlist);
+	r
+}
+
+cvROC = function(f1, data,
+	cv_fold = 10, cv_repeats = 1, cv_train = cv_train_glmnet, cv_test = cv_test_glmnet) {
+	Library('pROC');
+	Library('AUC');
+
+	# <p> data preparation
+	mm = model_matrix_from_formula(f1, data);
+	d0 = data[mm$indeces, ];
+	d0resp = d0[[formula.response(f1)]];
+
+	# <p> crossvalidation
+	pred = crossvalidate(cv_train, cv_test, data = d0, cv_fold = cv_fold, cv_repeats = cv_repeats, f1 = f1);
+
+	# <p> results
+	# <i><N> only first repeat headed at the moment
+	roc = AUC::roc(pred[[1]], as.factor(d0resp));
+	auc = AUC::auc(roc);
+	rocProc = pROC::roc(as.factor(d0resp), pred[[1]]);
+	aucProc = pROC::auc(rocProc);
+	P = cor.test(d0resp, pred[[1]])
+
+	r = list(roc = roc, auc = auc, rocProc = rocProc, aucProc = aucProc, aucCi = ci(rocProc), P = P,
+		data = Df(response = d0resp, prediction = pred[[1]]));
+	return(r);
+}
+
+plotRocs = function(data, interval = 0.2, breaks = seq(0, 1, interval)) {
+	d0 = do.call(rbind, nlapply(data, function(n) {
+		d = if (all( c('tpr', 'fpr') %in% names(data[[n]]))) data[[n]] else	# roc already computed
+			with(data[[n]], AUC::roc(prediction, as.factor(response)));
+		Df(fpr = 1 - d$fpr, tpr = d$tpr, type = n)
+	}));
+	p = ggplot(data = d0) +
+		#geom_line(aes(x = fpr, y = tpr)) +
+		geom_step(aes(x = fpr, y = tpr, col = type), lwd = 1) +
+		geom_segment(aes(x = 0, y = 1, xend = 1, yend = 0)) +	#diagonal
+		scale_x_reverse(name = "Specificity", limits = c(1,0), breaks = breaks,  expand = c(0.001,0.001)) + 
+		scale_y_continuous(name = "Sensitivity", limits = c(0,1), breaks = breaks, expand = c(0.001, 0.001))+
+		labs(color = 'ROC type') +
+		coord_equal() + theme_bw();
+	p
+}
+
+
+#
+#	<p> multiple testing
+#
+tailStrength = function(ps, M = length(ps)) {
+	N = length(ps);
+	# standardize p-values to 0
+	psS = 1 - sort(ps) * (N + 1)/(1:N);
+	r = - sum(psS[1:M])/M;	# return negative as small values are deemed relevant
+	r
+}
+
+#
+#	<p> power calculations
+#
+
+findBinomN = function(pTrue, pLower, level = 0.95, Nmax = 1e3, lower = T) {
+	Require('binom');
+	fBinom = if (lower)
+		function(N)binom.logit(N*pTrue, N, conf.level = level)$lower else
+		function(N)binom.logit(N*pTrue, N, conf.level = level)$upper
+	inverse(fBinom, c(1, Nmax))(pLower);
+}
+
+#
+#	<p> pseudo counts
+#
+
+# implement pseudo-count, needed as observations c(0, 0, X) cause diverging estimates
+mulitnomCoeff = function(x, log = TRUE) {
+	N = sum(x);
+	muco = lgamma(N + 1) - sum(sapply(x + 1, lgamma));
+	if (!log) muco = exp(muco);
+	return(muco);
+}
+
+dmultinomPseudo = function(x, prob, log = FALSE, pseudo = .1, factors = 1:1e2, F = NULL) {
+	# find multiplication factor
+	if (is.null(F)) {
+		pseudoF = t(t_(pseudo) %*% factors);
+		pseudoR = abs(pseudoF - round(pseudoF));
+		F = factors[apply(pseudoR, 2, which.min)];
+	}
+	# standardize probabilities
+	logP = log(v2freq(prob));
+	# raw likelihood contributions
+	pRaw = sum(round((x + pseudo) * F) * logP / F);
+	# add multinomial coefficient
+	pCooked = pRaw + mulitnomCoeff(x);
+	if (!log) pCooked = exp(pCooked);
+	return(pCooked);
+}
+
+#
+#	<p> random numbers
+#
+
+generateSeed = function(preSeed = Sys.time()) {
+	ints = hex2ints(md5sumString(as.integer(preSeed)));
+	r = 0
+	for (i in 1:length(ints)) r = bitwXor(r, ints[i]);
+	return(r);
+}
+
+# run expression with fixed seed but leave the RNG stream unchanged
+#	(bracket expression with save/restore of seed)
+#	as.integer(Sys.time())
+fixSeedForExpr = function(seed, expr, envir = parent.frame()) {
+	if (!exists('.Random.seed')) runif(1);	# vivify RNG
+	currentSeed = .Random.seed;
+	on.exit(.Random.seed <<- currentSeed);
+	set.seed(seed);
+	r = eval(expr, envir = envir);
+	#.Random.seed <<- currentSeed;
+	return(r);
+}
+

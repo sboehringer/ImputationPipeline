@@ -11,8 +11,10 @@
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
-	by = NULL, do_debug = F, skipToAndBrowseAtLine = NULL,
-	entropyLimit = 2e-2, entropyCuts = c(0, .5, 1.5, 2+1e-3)){
+	by = 'iid', do_debug = F, skipToAndBrowseAtLine = NULL,
+	entropyLimit = 2e-2, entropyCuts = c(0, .5, 1.5, 2+1e-3),
+	select = NULL) {
+
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
 	vars = readTable(variableFile);
@@ -23,7 +25,8 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	Nids = nrow(ped);
 
 	# <p> merge by 'id' and 'iid' or 'iid' alone
-	if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
+	#if (is.null(by)) by = intersect(intersect(names(vars), names(ped)), c('fid', 'iid'));
+	# <!> fid excluded by spurious cross-merging whem MDS components are added [-> iid tb unique]
 	Logs('pipeRmethod: merging by [%{by}s]', by = join(by, ' '), logLevel = 2);
 	peddata = Merge(vars, ped, sort = F, all.y = T, by = by);
 
@@ -51,17 +54,34 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 	source(script, chdir = T);
 	#N = nrow(gens);
 	#N = 100;
+
+	# <p> genotype file
+	# without header, Example:--- rs10970651 32000111 T A ...
+	# <!> hardcoded number of meta-data columns in every line
+	NgenoMeta = 5;
 	Tfile = file(genotypeFile, "r")
+
+	# <p> genotype info file
+	# impute 2.32 table, retrieved 21.9.2016
+	# snp_id rs_id position a0 a1 exp_freq_a1 info certainty type info_type0 concord_type0 r2_type0
 	Ifile = file(genotypeInfofile, "r")
-	infocols = scan(Ifile, what=character(0), n=10, quiet=T) #discard header
+	infocols = scan(Ifile, what = character(0), sep = "\n", n = 1, quiet = T) # discard header
+	Ninfo = length(splitString(' ', infocols));
+
 	r = lapply(1:N, function(i) {
 		# <p> scan SNP meta data
-		firstcols = scan(Tfile, what = character(0), n = 5, quiet=T)
-		infocols = scan(Ifile, what = character(0), n = 10, quiet=T)
+		firstcols = scan(Tfile, what = character(0), n = NgenoMeta, quiet=T)
+		infocols = scan(Ifile, what = character(0), n = Ninfo, quiet=T)
 		snpname = firstcols[2];
 		snpinfo = firstcols[3:5];
-		snpinfo2 = infocols[4:5];
+		snpinfo2 = infocols[6:7];
+		snpnameInfo = infocols[2];
 		genos = scan(Tfile, what=numeric(0), n = 3 * Nids, quiet=T)
+		if (snpname != snpnameInfo) {
+			Logs('Genotype snp %{snpname}s != %{snpnameInfo}s. Stating strategic retreat.', logLevel = 3);
+			stop('Meta-data snp name mismatch');
+		}
+
 		# <p> first part of return value
 		r0 = c(snpname, chromosome, snpinfo, snpinfo2);
 		names(r0) = c('marker', 'chr', 'position', 'A0', 'A1', 'allele_freq', 'impute_info');
@@ -82,6 +102,12 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 
 		# <p> merge to produce output
 		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);
+		if (!is.null(select) && !(select %in% c('NA', 'NULL', 'all'))) {
+			Logs('Subsetting with expression %{Select}s', Select = select, logLevel = 3);
+			# <A> assume select to be character 'expression(myexpr)', i.e. double eval is necessary
+			# <i> detect non-expression
+			data = subset(data, with(data, eval(eval(parse(text = select)))));
+		}
 		if (do_debug) print(head(data));
 		
 		# <p> call function

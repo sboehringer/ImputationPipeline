@@ -316,7 +316,7 @@ sub printRunningJobs { my ($o) = @_;
 		sourceFiles => firstDef($ENV{QSUB_SOURCEFILES}, ''),
 		setenvsep => '+++',
 		memory => firstDef($ENV{QSUB_MEMORY}, '4G'),
-		Ncpu => 1,
+		Ncpu => firstDef($ENV{QSUB_NCPU}, 1),
 		excludeNodes => firstDef($ENV{QSUB_EXCLUDENODES}, undef),
 		type => firstDef($ENV{QSUB_DEFAULTTYPE}, 'slurm'),
 	};

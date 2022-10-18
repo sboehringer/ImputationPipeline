@@ -108,7 +108,7 @@ CMD
 		TEMPLATE => qq{#!/bin/sh
 #SBATCH --partition=%{QUEUE}
 #SBATCH --ntasks=1
-#SBATCH --core-spec=%{NCPU}
+#SBATCH --cpus-per-task=%{NCPU}
 ##SBATCH --cpu-bind=cores
 #SBATCH --output %{LOGOUTPUT}.stdout
 #SBATCH --error %{LOGOUTPUT}.stderr

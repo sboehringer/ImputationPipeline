@@ -8,9 +8,9 @@
 library('MASS');
 
 testGlmOrdPerSnp = function(data, formula1, formula0, snp, ...) {
-	#browser();
-	m1 = polr(formula1, data, Hess = T);
-	m0 = polr(formula0, data, Hess = T);
+	d0 = completeData(formula1, data);
+	m1 = polr(formula1, d0, Hess = T);
+	m0 = polr(formula0, d0, Hess = T);
 	# <N> workaround for above call in order to make confint work w/o Hess = T -> ... not successful
 	#m1 = eval(parse(text = Sprintf('polr(%{f1}s)', f1 = formula.to.character(f1))), envir = data);
 	#m0 = polr(f0, data);
@@ -44,5 +44,8 @@ testGlmOrdPerSnp = function(data, formula1, formula0, snp, ...) {
 		if (is.null(coefficients(m1))) NULL else paste('sd1', names(coefficients(m1)), sep = '.'),
 		'P-value'
 	);
+#print(anova(m0, m1));
+#print(r$`P-value`);
+#browser();
 	r
 }

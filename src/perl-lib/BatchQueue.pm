@@ -60,9 +60,7 @@ Log("Return code:$ret");
 			@jobs = (`qstat -u \\* -xml | $xml sel -t -m '//JB_job_number' -v 'text()' -o ' '`
 				=~ m{(\d+)}sog);
 		} else {
-			#my $jobs = TempFileNames::System("qstat -u '*' | tail -n+3 | cut -d ' ' -f 1 -",
-			#	7, undef, { returnStdout => 'YES'})->{output};
-			my $jobs = TempFileNames::System("squeue -o '%.11i' -u $ENV{USER} -h",
+			my $jobs = TempFileNames::System("qstat -u '*' | tail -n+3 | cut -d ' ' -f 1 -",
 				7, undef, { returnStdout => 'YES'})->{output};
 			@jobs = split(/\n/, $jobs);
 		}

@@ -16,14 +16,13 @@ my $helpText = <<HELP_TEXT;
 				[./qsub_outputDir]
 	--jid=path		append jid to file
 	--jidReplace=path	write jid to file
-	--priority number	set priority to number
-				(-1000 to 1000 for SGE) [0]
-	--memory size	set memory limit (e.g. 8G)
-	--type schduler	cluster management software: slurm(default)|ogs
-	--workingDir	set workding directory before command execution
-	--logFiles		prefix of logfiles in outputdir
-	--temp			write to temporary logfile dir
-	--runningJobs	list ids of running jobs on the cluster, exit
+	--priority number	set priority to number (-1000 to 1000 for SGE) [0]
+	--memory size		set memory limit (e.g. 8G)
+	--type scheduler	cluster management software: [slurm]|ogs
+	--workingDir		set workding directory before command execution
+	--logFiles			prefix of logfiles in outputdir
+	--temp				write to temporary logfile dir
+	--runningJobs		list ids of running jobs on the cluster, exit
 	# Options to qsub.pl have to be terminated by --
 
 	# Environment variables

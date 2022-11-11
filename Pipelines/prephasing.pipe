@@ -12,6 +12,6 @@ Shapeit:Nthreads				8
 Shapeit:ENV_ADD_QSUB_OPTIONS	--Ncpu Shapeit:Nthreads --memory 16G
 Shapeit:cmd_isTransform	1
 Shapeit:cmd	\
-	shapeit --input-ped INPUT.ped INPUT.map --input-map ENV:referencepanel_G:referencePanel/ENV:G:referencePanel_mapMeta -O OUTPUT \
+	shapeit --input-ped INPUT.ped INPUT.map --input-map ENV:referencepanel_G:referencePanel/ENV:G:referencePanel_mapMeta -O OUTPUT --output-log OUTPUT_log \
 	--thread Shapeit:Nthreads
 Shapeit:outputExtension	phased

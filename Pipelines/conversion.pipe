@@ -17,13 +17,13 @@
 #
 InputPlink:Options	
 InputPlink:cmd		loaddata.py -m G:PipeInput -o OUTPUT_DIR InputPlink:Options	
-InputPlink:ENV_ADD_QSUB_OPTIONS	 --memory 16G
+InputPlink:ENV_ADD_QSUB_OPTIONS	 --memory 32G
 
 #
 # <p> map-replace
 #
 MapReplace:Options
-MapReplace:ENV_ADD_QSUB_OPTIONS	 --memory 16G
+MapReplace:ENV_ADD_QSUB_OPTIONS	 --memory 32G
 MapReplace:cmd		mapreplace.py --spec INPUTS --hapmap G:referencePanel -o OUTPUT_DIR MapReplace:Options
 
 #

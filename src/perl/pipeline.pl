@@ -15,7 +15,7 @@ use PipelineFileset;
 # default options
 $main::d = {
 	pipelineClass => 'PipelineTransform',
-	schedulerClass => 'BatchQueueSGE',
+	schedulerClass => 'BatchQueueSlurm',	# 'BatchQueueSGE',
 	pipelineStateFile => 'diag/pipeline.spec',
 	pipelineParameterFile => 'diag/pipeline_parameters',
 	callTriggers => 0, triggerPrefix => '', maxConfigNesting => 10,

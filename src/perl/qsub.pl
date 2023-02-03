@@ -16,13 +16,15 @@ my $helpText = <<HELP_TEXT;
 				[./qsub_outputDir]
 	--jid=path		append jid to file
 	--jidReplace=path	write jid to file
-	--priority number	set priority to number (-1000 to 1000 for SGE) [0]
-	--memory size		set memory limit (e.g. 8G)
-	--type scheduler	cluster management software: [slurm]|ogs
-	--workingDir		set workding directory before command execution
-	--logFiles			prefix of logfiles in outputdir
-	--temp				write to temporary logfile dir
-	--runningJobs		list ids of running jobs on the cluster, exit
+	--priority number	set priority to number
+				(-1000 to 1000 for SGE) [0]
+	--memory size	set memory limit (e.g. 8G)
+	--type schduler	cluster management software: slurm(default)|ogs
+	--workingDir	set workding directory before command execution
+	--logFiles		prefix of logfiles in outputdir
+	--temp			write to temporary logfile dir
+	--runningJobs	list ids of running jobs on the cluster, exit
+	--time			run time limit in slurm format days-hours:min:sec [7-08:00:00]
 	# Options to qsub.pl have to be terminated by --
 
 	# Environment variables
@@ -108,7 +110,7 @@ CMD
 		TEMPLATE => qq{#!/bin/sh
 #SBATCH --partition=%{QUEUE}
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=%{NCPU}
+#SBATCH --core-spec=%{NCPU}
 ##SBATCH --cpu-bind=cores
 #SBATCH --output %{LOGOUTPUT}.stdout
 #SBATCH --error %{LOGOUTPUT}.stderr
@@ -116,6 +118,7 @@ CMD
 #SBATCH --oversubscribe
 #SBATCH --mem %{MEMORY}
 #SBATCH --dependency afterany:%{DEPENDON}
+#SBATCH --time %{TIME}
 
 %{EXPORTS}
 %{SOURCE}
@@ -252,7 +255,8 @@ sub submitCommandFromTemplate { my ($cmd, $o, $template) = @_;
 		'%{LOGOUTPUT}' => qs($logfDir. '/'. $logf),
 		'%{EXPORTS}' => join("\n", (map { "export $_" } @env)),
 		'%{SOURCE}' => join("\n", (map { ". $_" } @sourceFiles)),
-		'%{DEPENDON}' => (@jids > 0)? join(':', @jids): $interpolationMagic,
+		'%{DEPENDON}' => $#jids >= 0? join(':', @jids): $interpolationMagic,
+		'%{TIME}' => $o->{time},
 	);
 	my $t = mergeDictToString(\%i, $template);
 	# delete lines without interpolated value
@@ -294,7 +298,7 @@ sub PrintRunningJobsSlurmOgs { my ($o) = @_;
 	return 0;
 }
 sub PrintRunningJobsSlurm { my ($o) = @_;
-	return System("squeue --me --format '%i' | tail -n +2", 2);
+	return System("squeue --format '%i' | tail -n +2", 2);
 }
 sub printRunningJobs { my ($o) = @_;
 	my $f = 'PrintRunningJobs'. ucfirst($o->{type});

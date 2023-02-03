@@ -323,6 +323,7 @@ sub printRunningJobs { my ($o) = @_;
 		Ncpu => firstDef($ENV{QSUB_NCPU}, 1),
 		excludeNodes => firstDef($ENV{QSUB_EXCLUDENODES}, undef),
 		type => firstDef($ENV{QSUB_DEFAULTTYPE}, 'slurm'),
+		time => '7-08:00:00',
 	};
 	my $optionsPresent = int(grep { $_ eq '--' } @ARGV) > 0;
 	# <!><i> proper command line splitting
@@ -337,6 +338,7 @@ sub printRunningJobs { my ($o) = @_;
 		'outputDir=s', 'temp!', 'logFiles=s', 'workingDir=s',
 		'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
 		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s', 'type=s',
+		'time=s',
 	);
 	$o->{outputDir} = tempFileName("$o->{tmpPrefix}_logs/log", undef, { mkdir => 1 }) if ($o->{temp});
 	# <!> heuristic for unquoting

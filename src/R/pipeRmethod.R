@@ -105,11 +105,12 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		if (!is.null(select) && !(select %in% c('NA', 'NULL', 'all'))) {
 			Logs('Subsetting with expression %{Select}s', Select = select, logLevel = 3);
 			# <A> if select is character 'expression(myexpr)', double eval is necessary
-			mySubset = eval(parse(text = select));
 			isExpr = length(unlist(Regex('^expression', select)));
+			mySubset = eval(parse(text = select));
+			if (isExpr) mySubset = eval(mySubset);	# double expression
+			# check for double quoted character strings
 			if (!isExpr && is.character(mySubset)) mySubset = parse(text = select);
 			# detect non-expression
-			print(eval(parse(text = select)));
 			data = subset(data, with(data, eval(mySubset)));
 		}
 		if (do_debug) print(head(data));

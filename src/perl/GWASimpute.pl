@@ -54,7 +54,6 @@ my $IMPUTATION_CMD_IMPUTE_SHAPEIT = 'impute232'
 .' -h HAP_FILE -l LEGEND_FILE -m MAP_FILE'
 .' -buffer NUMBER_BUFFER -k NUMBER_K -iter NUMBER_ITERATIONS -burnin NUMBER_BURNIN'
 .' -align_by_maf_g -int NUMBER_START NUMBER_STOP'
-.' --output-log OUTPUT_DIR/OUTPUT_FILE-shapeit.log'
 .' -o OUTPUT_DIR/OUTPUT_FILE';
 
 my %cmdTemplates21 = (

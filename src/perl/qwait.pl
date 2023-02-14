@@ -7,9 +7,9 @@ use BatchQueue;
 use Set;
 
 # default options
-$main::d = { sleep => 10 };
+$main::d = { sleep => 10, type => 'slurm' };
 # options
-$main::o = ['sleep=i'];
+$main::o = ['sleep=i', 'type=s' ];
 $main::usage = 'pid1 ...';
 $main::helpText = <<HELP_TEXT;
 	Options:
@@ -28,9 +28,12 @@ sub waitForJids_SGE { my ($c, @ids) = @_;
 	System("qrsh $tmpcmd", 3);
 }
 
+my %typeMap = ( ogs => 'OGS', slurm => 'Slurm' );
+
 sub waitForJids { my ($c, @wids) = @_;
 	my @jids;
-	my $bq = BatchQueueSGE->new();
+	my $className = 'BatchQueue'. $typeMap{$c->{type}};
+	my $bq = $className->new();
 	Log("Waiting for jids: ". join(', ', @wids), 5);
 	while (1) {
 		@jids = $bq->queuedJobs();

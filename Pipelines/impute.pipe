@@ -68,7 +68,7 @@ prephased:InputAsOptions	--prephased-files,--genotypes
 
 prephasedShapeit:isa			prephased
 prephasedShapeit:ExtraOptions	--cmdtemplate=impute_shapeit --prephasing-per-chromosome
-prephasedShapeit:ENV_ADD_QSUB_OPTIONS	 --memory 32G
+prephasedShapeit:ENV_ADD_QSUB_OPTIONS	 --memory 16G
 
 #
 #	Pipe definition: chrX

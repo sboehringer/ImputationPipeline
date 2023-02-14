@@ -108,9 +108,9 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 			isExpr = length(unlist(Regex('^expression', select)));
 			# detect non-expression
 			data = subset(data, with(data,
-				if (isExpr) eval(eval(parse(text = select)))) else
+				if (isExpr) eval(eval(parse(text = select))) else
 							eval(parse(text = select))
-			);
+			));
 		}
 		if (do_debug) print(head(data));
 		

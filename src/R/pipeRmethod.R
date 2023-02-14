@@ -107,6 +107,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 			# <A> if select is character 'expression(myexpr)', double eval is necessary
 			isExpr = length(unlist(Regex('^expression', select)));
 			# detect non-expression
+			print(eval(parse(text = select)));
 			data = subset(data, with(data,
 				if (isExpr) eval(eval(parse(text = select))) else
 							eval(parse(text = select))

@@ -160,17 +160,19 @@
 	# object states
 	has 'spec', is =>'rw';
 
-	sub postfix { my ($self) = @_;
-		return $self->outputExtension eq ''? '': ('.'. $self->outputExtension);
+	sub Postfix { my ($self) = @_;
+		return prefix($self->outputExtension, '.');
+		#return $self->outputExtension eq ''? '': ('.'. $self->outputExtension);
 	}
 	
 	sub batchCommands { my ($self) = @_;
 		my @cmds = map {
 			my $f = $_;
 			my $sp = splitPathDict($f->{name});
-			my $strata = !defined($self->strata)? '': join('-', @{$self->strata});
+			my $strata = (!defined($self->strata) || @{$self->strata} == 0)
+				? '': join('-', @{$self->strata});
 			my $outputPath = $self->outputDir. '/'. $sp->{base}.
-				($strata ne ''? "-$strata": $strata). $self->postfix;
+				($strata ne ''? "-$strata": $strata). $self->Postfix;
 			my %interp = (
 				OUTPUT => $outputPath,
 				INPUT_FILES => join(' ', map { qs($_->{file}) } @{$self->spec()->{files}}),
@@ -256,7 +258,7 @@
 		my $sp = splitPathDict($f->{name});
 		my $strata = join('-', @$self->strata);
 		my $outputPath = $self->outputDir. '/'. $sp->{base}.
-			($strata ne ''? "-$strata": $strata). $self->postfix;
+			(($strata ne '')? "-$strata": $strata). $self->Postfix;
 		my $cmd = {
 			cmd => mergeDictToString({
 				OUTPUT => $outputPath,

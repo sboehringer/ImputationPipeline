@@ -8,6 +8,7 @@
 
 # queue used on the batch queueing system
 ENV:QSUB_QUEUE	all
+ENV:QSUB_OPTIONS	--memory 16G
 ENV:QSUB_SOURCEFILES	$HOME/.env_profile
 ENV:PIPELINE_LOG_DIR	/usr/local/MedStat/.pipelineRuns
 ENV:RSCRIPTS			$RSCRIPTS:$PIPELINEBASE/R

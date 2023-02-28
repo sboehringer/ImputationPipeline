@@ -214,6 +214,7 @@ sub submitCommandOgs { my ($cmd, $o, $t) = @_;
 	my ($jid) = ($r->{output} =~ m{Your job (\d+)}so);
 	writeFile($o->{jid}, "$jid\n", { append => 'YES', doMakePath => 1 }) if (defined($o->{jid}));
 	writeFile($o->{jidReplace}, "$jid\n", { doMakePath => 1 } ) if (defined($o->{jidReplace}));
+	return $r;
 }
 
 sub environment { my ($o) = @_;
@@ -281,8 +282,15 @@ sub submitCommandSlurm { my ($cmd, $o, $t) = @_;
 
 sub submitCommand { my ($cmd, $o) = @_;
 	my $f = 'submitCommand'. ucfirst($o->{type});
-	$f->($cmd, $o, $templates{$o->{type}});
+	my $r;
+	for (my $i = 0; $i < $o->{retries}; $i++) {
+		sleep($o->{sleep}) if ($i);
+		$r = $f->($cmd, $o, $templates{$o->{type}});
+		last if (!$r->{returnCode});
+		Log('Job submission failed, retrying [$i]', 2);
+	}
 }
+
 sub PrintRunningJobsSlurmOgs { my ($o) = @_;
 	my $xml = substr(Set::firstDef(`which xml 2>/dev/null`, `which xmlstarlet 2>/dev/null`), 0, -1);
 	my @jobs;
@@ -324,6 +332,7 @@ sub printRunningJobs { my ($o) = @_;
 		excludeNodes => firstDef($ENV{QSUB_EXCLUDENODES}, undef),
 		type => firstDef($ENV{QSUB_DEFAULTTYPE}, 'slurm'),
 		time => '7-08:00:00',
+		retries => 3, sleep => 5,
 	};
 	my $optionsPresent = int(grep { $_ eq '--' } @ARGV) > 0;
 	# <!><i> proper command line splitting
@@ -338,6 +347,7 @@ sub printRunningJobs { my ($o) = @_;
 		'outputDir=s', 'temp!', 'logFiles=s', 'workingDir=s',
 		'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
 		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s', 'type=s',
+		'retries=d', 'sleep=d',
 		'time=s',
 	);
 	$o->{outputDir} = tempFileName("$o->{tmpPrefix}_logs/log", undef, { mkdir => 1 }) if ($o->{temp});

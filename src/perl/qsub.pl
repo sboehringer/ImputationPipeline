@@ -347,7 +347,7 @@ sub printRunningJobs { my ($o) = @_;
 		'outputDir=s', 'temp!', 'logFiles=s', 'workingDir=s',
 		'unquote!', 'queue=s', 'priority=i', 'cmdFromFile=s', 'checkpointing',
 		'memory=s', 'Ncpu=i', 'setenv=s', 'setenvsep=s', 'sourceFiles=s', 'excludeNodes=s', 'type=s',
-		'retries=d', 'sleep=d',
+		'retries=i', 'sleep=i',
 		'time=s',
 	);
 	$o->{outputDir} = tempFileName("$o->{tmpPrefix}_logs/log", undef, { mkdir => 1 }) if ($o->{temp});

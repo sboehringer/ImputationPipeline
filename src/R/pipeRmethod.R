@@ -84,7 +84,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		snpnameInfo = infocols[2];
 		genos = scan(Tfile, what=numeric(0), n = 3 * Nids, quiet=T)
 		if (snpname != snpnameInfo) {
-			Logs('Genotype snp %{snpname}s != %{snpnameInfo}s. Stating strategic retreat.', logLevel = 3);
+			LogS(3, 'Genotype snp %{snpname}s != %{snpnameInfo}s. Stating strategic retreat.');
 			stop('Meta-data snp name mismatch');
 		}
 
@@ -109,7 +109,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		# <p> merge to produce output
 		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);
 		if (!is.null(select) && !(select %in% c('NA', 'NULL', 'all'))) {
-			Logs('Subsetting with expression %{Select}s', Select = select, logLevel = 5);
+			LogS(5, 'Subsetting with expression %{Select}s', Select = select);
 			# <A> if select is character 'expression(myexpr)', double eval is necessary
 			isExpr = length(unlist(Regex('^expression', select))) > 0;
 			mySubset = parse(text = select);
@@ -162,7 +162,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 
 		# <p> regularize table
 		t0 = t(sapply(r, function(e) {
-			if (length(e) < l2) c(e[1],rep(NA, l2-1)) else e
+			if (length(e) < l2) c(e[1], rep(NA, l2 - 1)) else e
 		}));
 		t0 = data.frame(t0);
 		names(t0) = n0;

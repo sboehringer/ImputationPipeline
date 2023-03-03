@@ -7,13 +7,19 @@
 
 #source('../../RgenericAll.R');
 
+print.stderr = function(...) {
+	sink(stderr());
+		r = print(table(l0));
+	sink();
+	return(r);
+}
 
 #pipeRmethod = function(input, output, phenos, covs, variableFile, pedFile, writeAsTable = T) {
 pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, digits = NULL, ...,
 	RfunctionSource, RfunctionName, prefixes = splitString(':', Sys.getenv('RSCRIPTS')),
 	by = 'iid', do_debug = F, skipToAndBrowseAtLine = NULL,
 	entropyLimit = 2e-2, entropyCuts = c(0, .5, 1.5, 2+1e-3),
-	select = NULL) {
+	select = NULL, removeIrregularResults = TRUE) {
 
 	# <p> create data frame w/o genotypes
 	Log(sprintf("Trying to read variable file '%s'", variableFile), 2);
@@ -103,7 +109,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		# <p> merge to produce output
 		data = Merge(dataGts, vars, sort = F, all.x = T, by = by);
 		if (!is.null(select) && !(select %in% c('NA', 'NULL', 'all'))) {
-			Logs('Subsetting with expression %{Select}s', Select = select, logLevel = 3);
+			Logs('Subsetting with expression %{Select}s', Select = select, logLevel = 5);
 			# <A> if select is character 'expression(myexpr)', double eval is necessary
 			isExpr = length(unlist(Regex('^expression', select))) > 0;
 			mySubset = parse(text = select);
@@ -139,13 +145,17 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		l0 = sapply(r, length);
 		l1 = table(l0);
 		if (length(l1) > 2) {
-			Log('Irregular table produced; no output written.', 1);
-			sink(stderr());
-				print(table(l0));
-			sink();
-			return();
+			Log('Irregular table produced.', 1);
+			print.stderr(table(l0));
+			if (!removeIrregularResults) {
+				Log('Irregular table: removeIrregularResults not in effect; no output written.', 1);
+				return();
+			}
 		}
-		l2 = as.integer(names(l1))[length(l1)];
+		l2 = last(as.integer(names(l1)));	# longest lines
+		Ngood = sum(which(l2 == l0));
+		Nbad = sum(which(l2 != l0));
+		LogS(2, '... selecting output lines with %{l2}d columns. #selected: %{Ngood}d. #discarded: %{Nbad}d.');
 		first = which(l0 == l2)[1];	# first result with regular length
 		n0 = names(r[[first]]);
 		Log(sprintf('Regular line has %d columns.', l2), 5);

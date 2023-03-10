@@ -8,9 +8,9 @@
 #source('../../RgenericAll.R');
 
 print.stderr = function(...) {
+	on.exit(sink())
 	sink(stderr());
-		r = print(table(l0));
-	sink();
+	r = print(...);
 	return(r);
 }
 
@@ -146,7 +146,7 @@ pipeRmethod = function(input, output, variableFile, pedFile, writeAsTable = T, d
 		l1 = table(l0);
 		if (length(l1) > 2) {
 			Log('Irregular table produced.', 1);
-			print.stderr(table(l0));
+			print.stderr(l1);
 			if (!removeIrregularResults) {
 				Log('Irregular table: removeIrregularResults not in effect; no output written.', 1);
 				return();

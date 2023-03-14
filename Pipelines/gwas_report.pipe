@@ -18,9 +18,10 @@
 gwasReport:cmd_isTransform	1
 gwasReport:cmd_isSummary	0
 gwasReport:ENV_ADD_QSUB_OPTIONS	 --memory 16G
+gwasReport:Ntop		200
 
 # options to be passed to the script
-gwasReport:options	
+gwasReport:options	--Ntop gwasReport:Ntop
 
 # output extension for the output file
 gwasReport:outputExtension	

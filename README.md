@@ -18,7 +18,7 @@ Using the pipeline
 
 Log into shark.
 ```
-git clone https://git.lumc.nl/s.boehringer/ImputationPipeline.git pipeline --branch 1.0.0_shapeit
+git clone https://git.lumc.nl/s.boehringer/ImputationPipeline.git pipeline --branch 1.0.shapeit
 ```
 
 Add the following line to your ~/.bashrc and re-login.
@@ -34,6 +34,11 @@ pipeline.pl mypipeline.pipe
 ```
 Inspect the templates subfolder for example or get personal help.
 
+Often it is required to install ```Module::Load`` manually.
+
+```
+cpanm Module::Load
+```
 
 Getting Help
 --------------------

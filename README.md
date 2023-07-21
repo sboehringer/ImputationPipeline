@@ -38,5 +38,4 @@ Inspect the templates subfolder for example or get personal help.
 Getting Help
 --------------------
 
-For a GWAS project please contact Joris Deelen (j.deelen@lumc.nl).
-For technical help please contact Stefan Böhringer (s.boehringer@lumc.nl).
+The bug-tracker of the repository can be used for bug-reporting. No other regular support is offered at this moment.

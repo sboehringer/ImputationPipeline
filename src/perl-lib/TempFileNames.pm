@@ -3,7 +3,7 @@ require 5.000;
 require Exporter;
 
 @ISA       = qw(Exporter);
-@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &verbosityLevel &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &existsWithBase &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &qs2 &uqs &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix &slurpToTemp &slurpPipeToTemp &pathInter &pathUnInter);
+@EXPORT    = qw(&tempFileName &removeTempFiles &readCommand &readFile &writeFile &scanDir &copyTree &searchOrphanedFiles &removeEmptySubdirs &dirList &dirListPattern &dirListDeep &fileList &FileList &searchOutputPattern &normalizedPath &relativePath &quoteRegex &uniqFileName &readStdin &restoreRedirect &redirectInOut &germ2ascii &appendStringToPath &pipeStringToCommand &pipeStringToCommandSystem &mergeDictToString &mapTr &mapS $DONT_REMOVE_TEMP_FILES &readFileHandle &trimmStr &deepTrimmStr &removeWS &fileLength &processList &pidsForWordsPresentAbsent &initLog &verbosityLevel &Log &cmdNm &splitPath &resourcePath &resourcePathesOfType &splitPathDict &progressPrint &percentagePrint &firstFile &firstFileLocation &readFileFirstLocation &allowUniqueProgramInstanceOnly &allowUniqueProgramInstanceOnly &write2Command &ipAddress &packDir &unpackDir &System $YES $NO &interpolatedPlistFromPath &GetOptionsStandard &StartStandardScript &callTriggersFromOptions &doLogOnly &interpolatedPropertyFromString &existsOnHost &existsFile &existsWithBase &mergePdfs &SystemWithInputOutput &depthSearchDir &diskUsage &searchMissingFiles &whichFilesInTree &setLogOnly &readConfigFile &writeConfigFile &statDict &Stat &findDir &tempEdit &Mkpath &Mkdir &Rename &Rmdir &Unlink &Move &Symlink &removeBrokenLinks &testService &testIfMount &qs &qsQ &qs2 &qsN &uqs &prefix &dateReformat &formatTableComponents &formatTable &lcPrefix &prefix &postfix &circumfix &slurpToTemp &slurpPipeToTemp &pathInter &pathUnInter &findUnusedFile);
 
 #@EXPORT_OK = qw($sally @listabob %harry func3);
 
@@ -81,6 +81,15 @@ sub fileOperation { my ($local, $remote, $uri, @args) = @_;
 	return ($host ne '')? $remote->($path, $host, @args): $local->($uri, @args);
 }
 sub existsFile { return fileOperation(\&existsLocal, \&existsOnHost, @_);}
+
+# find non-existing file with almost same base, extension by appending pattern
+my %findUnusedFile = ( sep => '-', maxN => 100 );
+sub findUnusedFile { my ($path, %c) = @_;
+	%c = (%findUnusedFile, %c);
+	my ($base, $ext) = (@{splitPathDict($path)}{('basePath', 'extension')});
+	for (my $i = 1; $i <= $c{maxN} && -e $path; $i++) { $path = "$base$c{sep}$i.$ext"; }
+	return $path;
+}
 
 sub tempFileName { my ($prefix, $postfix, $onHost, $dontDelete, $digits) = @_;
 	my ($ret, $c);
@@ -305,6 +314,7 @@ sub readFile { my ($path, $host, $encodingFrom) = @_;
 
 	if (defined($host) && $host ne 'localhost') {
 		return undef if (!open($handle, "ssh $host cat '$path' |$filter"));
+		binmode($handle, ":encoding(UTF-8)") if ($c->{utf8});
 		$buffer = readFileHandle($handle);
 		close($handle);
 	} else {
@@ -314,11 +324,13 @@ sub readFile { my ($path, $host, $encodingFrom) = @_;
 			$l = Set::firstDef($c->{stdinLength}, 1e7); #handleLength($handle);
 		} else {
 			if ($filter ne '') { $filter = "cat '$path' | $filter"; } else { $filter = $path; }
-			return undef if ((! -e $path && !($path =~ m{[|<>]}o))
-			|| !open($handle, $filter));
+			return undef if (
+				(! -e $path && !($path =~ m{[|<>]}o))
+				|| !open($handle, $filter));
 			$l = fileLength($path);
 		}
 		#read($handle, $buffer, handleLength($handle), 0);
+		#binmode($handle, ":encoding(UTF-8)") if ($c->{utf8});
 		read($handle, $buffer, $l, 0);
 		close($handle) if (defined($path));
 	}
@@ -486,7 +498,8 @@ sub	depthSearchDirBranch { my($path, $c) = @_;
 		$c->{fullPath} = $npath;
 		next if (-d $npath && defined($c->{fBranch}) && !$c->{fBranch}->($p, $c));
 		depthSearchDirBranch($npath, $c)
-			if (-d $npath && !-l $npath && !defined(which($npath, $c->{exclusions})));
+			if (-d $npath && ($c->{followSymlinks} || !-l $npath)
+				&& !defined(which($npath, $c->{exclusions})));
 		depthSearchDirLeaf($npath, $c);
 	}
 	$c->{depth}--;
@@ -512,7 +525,7 @@ sub findDir { my ($path, $returnDirs) = @_;
 my @StatComps = ('dev', 'ino', 'mode' , 'nlink', 'uid', 'gid', 'rdev',
 	'size', 'atime', 'mtime', 'ctime', 'blksize', 'blocks');
 sub Stat { my ($path) = @_;
-	return makeHash(\@StatComps, [stat($path)]);
+	return Set::makeHash(\@StatComps, [stat($path)]);
 }
 
 sub statDict { my ($path) = @_;
@@ -966,16 +979,14 @@ sub System { my ($cmd, $loglevel, $doLogOnly, $c) = @_;
 	# <p> re-introduce descriptor redirections
 	$postfix .= ' '. $descriptorRedirections;
 	# <!> logging control via global variable
+	my $fcmd;
 	if (defined($c->{host})) {
-		my $fcmd = "${prefix}ssh $postfix $c->{host} ".
-			($cdcmd ne ''? "'$cdcmd ; ": "'"). "$cmd'";
-		Log($fcmd, $loglevel);
-		$exit = $c->{returnStdout}? `$fcmd`: system($fcmd) if (!$main::__doLogOnly && !$doLogOnly);
+		$fcmd = "${prefix}ssh $postfix $c->{host} ". ($cdcmd ne ''? "'$cdcmd ; ": "'"). "$cmd'";
 	} else {
-		my $fcmd = ($cdcmd ne ''? "$cdcmd ; ": ""). $prefix. $cmd. $postfix;
-		Log($fcmd, $loglevel);
-		$exit = $c->{returnStdout}? `$fcmd`: system($fcmd) if (!$main::__doLogOnly && !$doLogOnly);
+		$fcmd = ($cdcmd ne ''? "$cdcmd ; ": ""). $prefix. $cmd. $postfix;
 	}
+	Log($fcmd, $loglevel);
+	$exit = $c->{returnStdout}? `$fcmd`: system($fcmd) if (!$main::__doLogOnly && !$doLogOnly);
 	unlink($fifo) if (defined($fifo));
 
 	return {
@@ -1008,6 +1019,7 @@ sub SystemWithInputOutput { my ($cmd, $input, $loglevel, $doLogOnly, $c) = @_;
 sub GetOptionsStandard { my @options = @_;
 	eval("use Getopt::Long");
 	my ($logLevel, $result);
+	#use Data::Dumper; Log("Options in use: ". Dumper([@options]), 1);
 	if (ref($options[0]) eq 'HASH') {
 		my $h = $options[0];
 		$result = GetOptions(@options, 'help|h', 'logLevel=i', 'doLogOnly', 'config=s');
@@ -1074,7 +1086,7 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 	my $o = { %StartStandardScriptOptions, %$defaults, %sso };
 	# copy trigger definitions
 	my @triggers = grep { ref($o->{$_}) eq 'CODE' } keys %$o;
-	my $subs = makeHash([@triggers], [@{$defaults}{@triggers}]);
+	my $subs = Set::makeHash([@triggers], [@{$defaults}{@triggers}]);
 	# are any arguments present before calling GetOptionsStandard
 	my $noArgs = !@ARGV;
 	# get subroutine triggers (+options)
@@ -1097,7 +1109,13 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 	my $programName = cmdNm();
 
 	if ($o->{help} || !$result || ($noArgs && $o->{helpOnEmptyCall})) {
-		printf("USAGE: %s $main::usage\n$main::helpText", $programName);
+		if ($o->{helpWoLess}) {
+			printf("USAGE: %s $main::usage\n$main::helpText", $programName);
+		} else {
+			open(HELPOUT, '| less -S');
+			printf HELPOUT "USAGE: %s $main::usage\n$main::helpText", $programName;
+			close(HELPOUT);
+		}
 		exit(!$result);
 	}
 	my $c = {};
@@ -1110,7 +1128,9 @@ sub StartStandardScript { my ($defaults, $options, %sso) = @_;
 			'.this_cookie.'. $programName) || exit(0)
 	}
 	my $deepR = { o => $o, c => $c, cred => $cred, _triggers => $subs };
-	my $flatR = { %$od, %$c, %$os, %odt, %$cred, _triggers => $subs };
+	#my $flatR = { %$od, %$c, %$os, %odt, %$cred, _triggers => $subs };
+	# 18.1.2023
+	my $flatR = { %$o, %$c, %$os, %odt, %$cred, _triggers => $subs };
 	my $r = $o->{returnDeepStruct}? $deepR: $flatR;
 	# handle call triggers, triggering might be delayed
 	callTriggersFromOptions($r, @ARGV) if ($o->{callTriggers});
@@ -1283,6 +1303,9 @@ sub qs { my $p = $_[0];
 	$p = qsB($p);
 	$p =~ s{'}{'"'"'}sog;
 	return "'$p'";
+}
+sub qsN { my ($s) = @_;
+	return ($s =~ m{^[a-z0-9]*$})? $s: qs($s);
 }
 sub qs2 { my $p = $_[0];
 	$p = qsB($p);

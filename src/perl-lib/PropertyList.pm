@@ -369,7 +369,7 @@ sub propertyFromStringFastRaw { my ($tokens) = @_;
 		}
 		return $data;
 	} else {	# string
-		return ($token =~ m{^\"(.*)\"$}os)? $1: $token;
+		return dequoteBackslash(($token =~ m{^\"(.*)\"$}os)? $1: $token);
 	}
 	return undef;
 }
@@ -460,6 +460,7 @@ sub plistInterpolate { my ($plist, $i) = @_;
 
 sub propertyFromStringExt { my ($s, $c) = @_;
 	my $plRaw = splitExtendedPlist($s);
+	#use Data::Dumper; print(Dumper($plRaw)); print(Dumper({ input => $s, config => $c }));
 	return plistInterpolate(propertyFromStringFast($plRaw->{propertyList}), $plRaw->{interpolation});
 }
 

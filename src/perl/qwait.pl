@@ -28,6 +28,7 @@ sub waitForJids_SGE { my ($c, @ids) = @_;
 	System("qrsh $tmpcmd", 3);
 }
 
+
 my %typeMap = ( ogs => 'OGS', slurm => 'Slurm' );
 
 sub waitForJids { my ($c, @wids) = @_;

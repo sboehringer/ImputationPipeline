@@ -2,14 +2,16 @@
 #Wed Aug 13 18:03:31 MET DST 1997
 
 package	Set;
+use utf8;
 require	5.000;
 require	Exporter;
 
 @ISA		= qw(Exporter);
 
-@EXPORT		= qw(&intersection &minus &product &union &pair &substitute &productJoin &join2 &joinNE &makeHash &makeHashPairs &dictWithKeys &mergedHashFromHash &mergeDict2dict &arrayFromKeys &mergeDict2dictDeeply &deepCopy &valuesForKeys &readHeadedTable &readHeadedTableString &readHeadedTableHandle &readCsv &writeCsv &tableColumn &tableAddColumn &writeHeadedTable &productT &productTL &arrayIsEqualTo &stripWhiteSpaceForColumns &multiply &sum &max &min &Min &Max &scaleSetTo &dictFromDictArray &toList &definedArray &definedDict &firstDef &firstTrue &compareArrays &inverseMap &dictIsContainedInDict &keysOfDictLevel &sortTextNumber &readUnheadedTable &indexOf &mapDict &subDictFromKeys &dictPath &compareSets &arrayFromDictArrayWithKey &unique &cmpSets &unlist &any &all &dict2defined &instantiateHash &order &which &whichMax &which_indeces &hashSlice &hashMin &moddiv &modfloor &modround &changeSet &syncSets &hashPrune &readPrefixedTable &readPrefixedTableString &cumSum);
+@EXPORT		= qw(&intersection &minus &product &union &pair &substitute &productJoin &flattenJoin &join2 &joinNE &makeHash &makeHashPairs &dictWithKeys &mergedHashFromHash &mergeDict2dict &arrayFromKeys &mergeDict2dictDeeply &keyValue2dictConcat &deepCopy &valuesForKeys &readHeadedTable &readHeadedTableString &readHeadedTableHandle &readCsv &writeCsv &tableColumn &tableAddColumn &writeHeadedTable &productT &productTL &arrayIsEqualTo &stripWhiteSpaceForColumns &multiply &sum &max &min &Min &Max &scaleSetTo &dictFromDictArray &toList &definedArray &definedDict &firstDef &firstTrue &compareArrays &inverseMap &dictIsContainedInDict &keysOfDictLevel &sortTextNumber &readUnheadedTable &indexOf &mapDict &subDictFromKeys &dictPath &compareSets &arrayFromDictArrayWithKey &unique &cmpSets &unlist &any &all &dict2defined &instantiateHash &order &which &whichMax &which_indeces &hashSlice &hashMin &moddiv &modfloor &modround &changeSet &syncSets &hashPrune &readPrefixedTable &parseTablePrefix &readPrefixedTableString &writePrefixedTable &writePrefixedTableHandle &cumSum);
 
 use TempFileNames;
+use Module::Load;
 
 # return all keys from a dict and from dicts contained therein up to the level of $level
 
@@ -31,6 +33,17 @@ sub keysOfDictLevel { my ($d, $level) = @_;
 	}
 	return union($keys, [keys %{$d}]);
 }
+
+# accepct array of key-value pairs, concat duplcated keys using $sep
+sub keyValue2dictConcat { my ($kv, $sep) = @_;
+	my %d;
+	for $i (0..($#$kv/2)) {
+		my ($k, $v) = ($kv->[2 * $i], $kv->[2 * $i + 1]);
+		$d{$k} .= (defined($d{$k})? firstDef($sep, ' '): ''). $v;
+	}
+	return %d
+}
+
 
 sub valuesForKeys { my ($dict, $keys) = @_;
 	#return [${$dict}{@{$keys}}]; # does not work
@@ -243,6 +256,23 @@ sub substitute { my($arr1,$map)=@_;
 	foreach $i (@{$arr1}) { $i=$map->{$i} if (defined($map->{$i})); }
 	return $arr1;
 }
+
+sub flattenJoinInner { my ($l, $prefix, $sep) = @_;
+	$Prefix = defined($prefix)? $prefix. $sep: '';
+	return $Prefix. $l if (ref($l) eq '');
+	if (all(map { ref($_) ne 'ARRAY' } @$l) || all(map { ref($_) eq 'ARRAY' } @$l)) {
+		return map { flattenJoinInner($_, $prefix, $sep) } @$l;
+	} else {
+		return flattenJoinInner([@{$l}[1 .. $#$l]], $Prefix. $l->[0], $sep);
+	}
+	return undef;
+}
+
+sub flattenJoin { my ($l, $sep) = @_;
+	return([flattenJoinInner($l, undef, $sep)]);
+}
+
+
 
 # join together chunks of $cnt from @arr with $str1
 # join together the chunks with $str2
@@ -581,28 +611,27 @@ sub tableAddColumn { my ($t, $col) = @_;
 	}
 }
 
-sub readPrefixedTableString { my ($s, $c) = @_;
-	my $sep = firstDef($c->{metaSep}, '---');
-	my @lines = split(/\n/, $s);
+# Parse [mixed]
+# Version 1:key: value
+# Version 2: [key]\nmultiline value
+sub parseTablePrefix { my ($lines) = @_;
+	my @lines = @$lines;
 	my $meta = {};
-
-	# <p> read meta information
-	while (1) {
+	while (@lines > 0) {
 		my $l = shift @lines;
-		last if ($l eq $sep);
 		my ($k, $v) = ($l =~ m{^(\S+):\s+(.*)$}so);
-		my ($kIni) = ($l =~ m{^\[([^\]]*)\]}sog);
+		#my ($kIni) = ($l =~ m{^\[([^\]]*)\]}sog);
+		my ($kIni) = ($l =~ m{^\[(.*?)\]}sog);
 		#print("Colon key: $k; Ini Key: $kIni\n");
 		if (defined($k)) {
 			$meta->{$k} = $v;
 		} elsif (defined($kIni)) {
 			$v = '';
 			while (1) {
-				last if (($l = shift @lines) =~ m{(?:^\[([^\]]*)\])|(?:^$sep$)}so);
+				last if (@lines == 0 || ($lines[0] =~ m{(?:^\[([^\]]*)\])}so));
+				$l = shift @lines;
 				$v .= $l. "\n";
 			}
-			#print("Value: $v\n");
-			unshift(@lines, $l);
 			# pop empty line
 			$v = $1 if ($v =~ m{^(.*?)(?:\n{1,2})$}so);
 			$meta->{$kIni} = $v;
@@ -610,6 +639,16 @@ sub readPrefixedTableString { my ($s, $c) = @_;
 			die "No key value pair found in prefix [$l]";
 		}
 	}
+	return $meta;
+}
+
+sub readPrefixedTableString { my ($s, $c) = @_;
+	my $sep = firstDef($c->{metaSep}, '---');
+	my @lines = split(/\n/, $s);
+	my @prefix;
+	# <p> read meta information
+	push(@prefix, $_) while (($_ = shift @lines) ne $sep);
+	my $meta = parseTablePrefix([@prefix]);
 
 	# read table
 	#my $table = readHeadedTableString(join("\n", @lines), undef, $c)->{data};
@@ -620,6 +659,20 @@ sub readPrefixedTableString { my ($s, $c) = @_;
 }
 sub readPrefixedTable { my ($path, $c) = @_;
 	return readPrefixedTableString(TempFileNames::readFile($path), $c);
+}
+
+sub writePrefixedTableHandle { my ($h, $t, $cols, $c) = @_;
+	for my $k (keys %{$t->{meta}}) {
+		print $h "[$k]\n$t->{meta}{$k}\n\n";
+	}
+	print $h "---\n";
+	writeHeadedTableHandle($h, $t->{data}, $cols, $c);
+}
+sub writePrefixedTable { my ($path, $t, $cols, $c) = @_;
+	load('IO::File');
+	my $h = IO::File->new(">$path");
+	writePrefixedTableHandle($h, $t, $cols, $c);
+	$h->close();
 }
 
 sub readUnheadedTable { my ($path) = @_;

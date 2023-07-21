@@ -110,11 +110,11 @@ CMD
 		TEMPLATE => qq{#!/bin/sh
 #SBATCH --partition=%{QUEUE}
 #SBATCH --ntasks=1
-#SBATCH --core-spec=%{NCPU}
+#SBATCH --cpus-per-task=%{NCPU}
 ##SBATCH --cpu-bind=cores
 #SBATCH --output %{LOGOUTPUT}.stdout
 #SBATCH --error %{LOGOUTPUT}.stderr
-#SBATCH --nice=20
+##SBATCH --nice=20
 #SBATCH --oversubscribe
 #SBATCH --mem %{MEMORY}
 #SBATCH --dependency afterany:%{DEPENDON}
@@ -276,13 +276,13 @@ sub submitCommandFromTemplate { my ($cmd, $o, $template) = @_;
 	return $r
 }
 sub submitCommandSlurm { my ($cmd, $o, $t) = @_;
-	submitCommandFromTemplate($cmd, $o, $t->{TEMPLATE});
+	return submitCommandFromTemplate($cmd, $o, $t->{TEMPLATE});
 	
 }
 
 sub submitCommand { my ($cmd, $o) = @_;
 	my $f = 'submitCommand'. ucfirst($o->{type});
-	my $r;
+	my ($r, $retries) = (undef, $o->{retries});
 	for (my $i = 0; $i < $o->{retries}; $i++) {
 		sleep($o->{sleep}) if ($i);
 		$r = $f->($cmd, $o, $templates{$o->{type}});
